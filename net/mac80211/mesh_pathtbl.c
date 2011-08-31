@@ -288,7 +288,7 @@ static void mesh_path_move_to_queue(struct mesh_path *gate_mpath,
 				    struct mesh_path *from_mpath,
 				    bool copy)
 {
-	struct sk_buff *skb, *cp_skb;
+	struct sk_buff *skb, *cp_skb = NULL;
 	struct sk_buff_head gateq, failq;
 	unsigned long flags;
 	int num_skbs;
@@ -307,14 +307,14 @@ static void mesh_path_move_to_queue(struct mesh_path *gate_mpath,
 
 	while (num_skbs--) {
 		skb = __skb_dequeue(&failq);
-		if (copy)
+		if (copy) {
 			cp_skb = skb_copy(skb, GFP_ATOMIC);
+			if (cp_skb)
+				__skb_queue_tail(&failq, cp_skb);
+		}
 
 		prepare_for_gate(skb, gate_mpath->dst, gate_mpath);
 		__skb_queue_tail(&gateq, skb);
-
-		if (copy && cp_skb)
-			__skb_queue_tail(&failq, cp_skb);
 	}
 
 	spin_lock_irqsave(&gate_mpath->frame_queue.lock, flags);
@@ -711,6 +711,7 @@ int mpp_path_add(u8 *dst, u8 *mpp, struct ieee80211_sub_if_data *sdata)
 	new_mpath->flags = 0;
 	skb_queue_head_init(&new_mpath->frame_queue);
 	new_node->mpath = new_mpath;
+	init_timer(&new_mpath->timer);
 	new_mpath->exp_time = jiffies;
 	spin_lock_init(&new_mpath->state_lock);
 
@@ -843,8 +844,7 @@ static void mesh_path_node_reclaim(struct rcu_head *rp)
 	struct mpath_node *node = container_of(rp, struct mpath_node, rcu);
 	struct ieee80211_sub_if_data *sdata = node->mpath->sdata;
 
-	if (node->mpath->timer.function)
-		del_timer_sync(&node->mpath->timer);
+	del_timer_sync(&node->mpath->timer);
 	atomic_dec(&sdata->u.mesh.mpaths);
 	kfree(node->mpath);
 	kfree(node);
@@ -1046,8 +1046,7 @@ static void mesh_path_node_free(struct hlist_node *p, bool free_leafs)
 	mpath = node->mpath;
 	hlist_del_rcu(p);
 	if (free_leafs) {
-		if (mpath->timer.function)
-			del_timer_sync(&mpath->timer);
+		del_timer_sync(&mpath->timer);
 		kfree(mpath);
 	}
 	kfree(node);
@@ -1094,7 +1093,6 @@ int mesh_pathtbl_init(void)
 	tbl_mpp->free_node = &mesh_path_node_free;
 	tbl_mpp->copy_node = &mesh_path_node_copy;
 	tbl_mpp->mean_chain_len = MEAN_CHAIN_LEN;
-	/* XXX: not needed */
 	tbl_mpp->known_gates = kzalloc(sizeof(struct hlist_head), GFP_ATOMIC);
 	INIT_HLIST_HEAD(tbl_mpp->known_gates);
 

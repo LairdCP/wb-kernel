@@ -107,7 +107,7 @@ int b43_modparam_verbose = B43_VERBOSITY_DEFAULT;
 module_param_named(verbose, b43_modparam_verbose, int, 0644);
 MODULE_PARM_DESC(verbose, "Log message verbosity: 0=error, 1=warn, 2=info(default), 3=debug");
 
-static int b43_modparam_pio = B43_PIO_DEFAULT;
+static int b43_modparam_pio = 0;
 module_param_named(pio, b43_modparam_pio, int, 0644);
 MODULE_PARM_DESC(pio, "Use PIO accesses by default: 0=DMA, 1=PIO");
 
@@ -4131,10 +4131,13 @@ out_unlock:
  * because the core might be gone away while we unlocked the mutex. */
 static struct b43_wldev * b43_wireless_core_stop(struct b43_wldev *dev)
 {
-	struct b43_wl *wl = dev->wl;
+	struct b43_wl *wl;
 	struct b43_wldev *orig_dev;
 	u32 mask;
 
+	if (!dev)
+		return NULL;
+	wl = dev->wl;
 redo:
 	if (!dev || b43_status(dev) < B43_STAT_STARTED)
 		return dev;
