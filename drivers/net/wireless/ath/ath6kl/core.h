@@ -335,26 +335,13 @@ struct ath6kl_mbox_info {
 #define ATH6KL_KEY_RECV  0x02
 #define ATH6KL_KEY_DEFAULT   0x80	/* default xmit key */
 
-/*
- * WPA/RSN get/set key request.  Specify the key/cipher
- * type and whether the key is to be used for sending and/or
- * receiving.  The key index should be set only when working
- * with global keys (use IEEE80211_KEYIX_NONE for ``no index'').
- * Otherwise a unicast/pairwise key is specified by the bssid
- * (on a station) or mac address (on an ap).  They key length
- * must include any MIC key data; otherwise it should be no
- * more than ATH6KL_KEYBUF_SIZE.
- */
+/* Initial group key for AP mode */
 struct ath6kl_req_key {
-	u8 ik_type;	/* key/cipher type */
-	u8 ik_pad;
-	u16 ik_keyix;	/* key index */
-	u8 ik_keylen;	/* key length in bytes */
-	u8 ik_flags;
-	u8 ik_macaddr[ETH_ALEN];
-	u64 ik_keyrsc;	/* key receive sequence counter */
-	u64 ik_keytsc;	/* key transmit sequence counter */
-	u8 ik_keydata[ATH6KL_KEYBUF_SIZE + ATH6KL_MICBUF_SIZE];
+	bool valid;
+	u8 key_index;
+	int key_type;
+	u8 key[WLAN_MAX_KEY_LEN];
+	u8 key_len;
 };
 
 /* Flag info */
@@ -393,7 +380,7 @@ struct ath6kl {
 	u8 prwise_crypto;
 	u8 prwise_crypto_len;
 	u8 grp_crypto;
-	u8 grp_crpto_len;
+	u8 grp_crypto_len;
 	u8 def_txkey_index;
 	struct ath6kl_wep_key wep_key_list[WMI_MAX_KEY_INDEX + 1];
 	u8 bssid[ETH_ALEN];
@@ -468,6 +455,10 @@ struct ath6kl {
 
 	struct ath6kl_node_table scan_table;
 	struct dentry *debugfs_phy;
+
+	u32 send_action_id;
+	bool probe_req_report;
+	u16 next_chan;
 };
 
 static inline void *ath6kl_priv(struct net_device *dev)

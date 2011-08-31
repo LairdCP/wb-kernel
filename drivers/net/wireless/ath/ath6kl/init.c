@@ -85,7 +85,7 @@ void ath6kl_init_profile_info(struct ath6kl *ar)
 	ar->prwise_crypto = NONE_CRYPT;
 	ar->prwise_crypto_len = 0;
 	ar->grp_crypto = NONE_CRYPT;
-	ar->grp_crpto_len = 0;
+	ar->grp_crypto_len = 0;
 	memset(ar->wep_key_list, 0, sizeof(ar->wep_key_list));
 	memset(ar->req_bssid, 0, sizeof(ar->req_bssid));
 	memset(ar->bssid, 0, sizeof(ar->bssid));
@@ -417,6 +417,7 @@ void ath6kl_target_failure(struct ath6kl *ar)
 static int ath6kl_target_config_wlan_params(struct ath6kl *ar)
 {
 	int status = 0;
+	int ret;
 
 	/*
 	 * Configure the device for rx dot11 header rules. "0,0" are the
@@ -460,6 +461,22 @@ static int ath6kl_target_config_wlan_params(struct ath6kl *ar)
 			ath6kl_err("unable to set txop bursting\n");
 			status = -EIO;
 		}
+
+	ret = ath6kl_wmi_info_req_cmd(ar->wmi, P2P_FLAG_CAPABILITIES_REQ |
+				      P2P_FLAG_MACADDR_REQ |
+				      P2P_FLAG_HMODEL_REQ);
+	if (ret) {
+		ath6kl_dbg(ATH6KL_DBG_TRC, "failed to request P2P "
+			   "capabilities (%d) - assuming P2P not supported\n",
+			   ret);
+	}
+
+	/* Enable Probe Request reporting for P2P */
+	ret = ath6kl_wmi_probe_report_req_cmd(ar->wmi, true);
+	if (ret) {
+		ath6kl_dbg(ATH6KL_DBG_TRC, "failed to enable Probe Request "
+			   "reporting (%d)\n", ret);
+	}
 
 	return status;
 }

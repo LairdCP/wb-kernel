@@ -425,6 +425,201 @@ static int ath6kl_wmi_tx_complete_event_rx(u8 *datap, int len)
 	return 0;
 }
 
+static int ath6kl_wmi_remain_on_chnl_event_rx(struct wmi *wmi, u8 *datap,
+					      int len)
+{
+	struct wmi_remain_on_chnl_event *ev;
+	u32 freq;
+	u32 dur;
+	struct ieee80211_channel *chan;
+	struct ath6kl *ar = wmi->parent_dev;
+
+	if (len < sizeof(*ev))
+		return -EINVAL;
+
+	ev = (struct wmi_remain_on_chnl_event *) datap;
+	freq = le32_to_cpu(ev->freq);
+	dur = le32_to_cpu(ev->duration);
+	ath6kl_dbg(ATH6KL_DBG_WMI, "remain_on_chnl: freq=%u dur=%u\n",
+		   freq, dur);
+	chan = ieee80211_get_channel(ar->wdev->wiphy, freq);
+	if (!chan) {
+		ath6kl_dbg(ATH6KL_DBG_WMI, "remain_on_chnl: Unknown channel "
+			   "(freq=%u)\n", freq);
+		return -EINVAL;
+	}
+	cfg80211_ready_on_channel(ar->net_dev, 1, chan, NL80211_CHAN_NO_HT,
+				  dur, GFP_ATOMIC);
+
+	return 0;
+}
+
+static int ath6kl_wmi_cancel_remain_on_chnl_event_rx(struct wmi *wmi,
+						     u8 *datap, int len)
+{
+	struct wmi_cancel_remain_on_chnl_event *ev;
+	u32 freq;
+	u32 dur;
+	struct ieee80211_channel *chan;
+	struct ath6kl *ar = wmi->parent_dev;
+
+	if (len < sizeof(*ev))
+		return -EINVAL;
+
+	ev = (struct wmi_cancel_remain_on_chnl_event *) datap;
+	freq = le32_to_cpu(ev->freq);
+	dur = le32_to_cpu(ev->duration);
+	ath6kl_dbg(ATH6KL_DBG_WMI, "cancel_remain_on_chnl: freq=%u dur=%u "
+		   "status=%u\n", freq, dur, ev->status);
+	chan = ieee80211_get_channel(ar->wdev->wiphy, freq);
+	if (!chan) {
+		ath6kl_dbg(ATH6KL_DBG_WMI, "cancel_remain_on_chnl: Unknown "
+			   "channel (freq=%u)\n", freq);
+		return -EINVAL;
+	}
+	cfg80211_remain_on_channel_expired(ar->net_dev, 1, chan,
+					   NL80211_CHAN_NO_HT, GFP_ATOMIC);
+
+	return 0;
+}
+
+static int ath6kl_wmi_tx_status_event_rx(struct wmi *wmi, u8 *datap, int len)
+{
+	struct wmi_tx_status_event *ev;
+	u32 id;
+	struct ath6kl *ar = wmi->parent_dev;
+
+	if (len < sizeof(*ev))
+		return -EINVAL;
+
+	ev = (struct wmi_tx_status_event *) datap;
+	id = le32_to_cpu(ev->id);
+	ath6kl_dbg(ATH6KL_DBG_WMI, "tx_status: id=%x ack_status=%u\n",
+		   id, ev->ack_status);
+	if (wmi->last_mgmt_tx_frame) {
+		cfg80211_mgmt_tx_status(ar->net_dev, id,
+					wmi->last_mgmt_tx_frame,
+					wmi->last_mgmt_tx_frame_len,
+					!!ev->ack_status, GFP_ATOMIC);
+		kfree(wmi->last_mgmt_tx_frame);
+		wmi->last_mgmt_tx_frame = NULL;
+		wmi->last_mgmt_tx_frame_len = 0;
+	}
+
+	return 0;
+}
+
+static int ath6kl_wmi_rx_probe_req_event_rx(struct wmi *wmi, u8 *datap, int len)
+{
+	struct wmi_p2p_rx_probe_req_event *ev;
+	u32 freq;
+	u16 dlen;
+	struct ath6kl *ar = wmi->parent_dev;
+
+	if (len < sizeof(*ev))
+		return -EINVAL;
+
+	ev = (struct wmi_p2p_rx_probe_req_event *) datap;
+	freq = le32_to_cpu(ev->freq);
+	dlen = le16_to_cpu(ev->len);
+	if (datap + len < ev->data + dlen) {
+		ath6kl_err("invalid wmi_p2p_rx_probe_req_event: "
+			   "len=%d dlen=%u\n", len, dlen);
+		return -EINVAL;
+	}
+	ath6kl_dbg(ATH6KL_DBG_WMI, "rx_probe_req: len=%u freq=%u "
+		   "probe_req_report=%d\n",
+		   dlen, freq, ar->probe_req_report);
+
+	if (ar->probe_req_report || ar->nw_type == AP_NETWORK)
+		cfg80211_rx_mgmt(ar->net_dev, freq, ev->data, dlen, GFP_ATOMIC);
+
+	return 0;
+}
+
+static int ath6kl_wmi_p2p_capabilities_event_rx(u8 *datap, int len)
+{
+	struct wmi_p2p_capabilities_event *ev;
+	u16 dlen;
+
+	if (len < sizeof(*ev))
+		return -EINVAL;
+
+	ev = (struct wmi_p2p_capabilities_event *) datap;
+	dlen = le16_to_cpu(ev->len);
+	ath6kl_dbg(ATH6KL_DBG_WMI, "p2p_capab: len=%u\n", dlen);
+
+	return 0;
+}
+
+static int ath6kl_wmi_rx_action_event_rx(struct wmi *wmi, u8 *datap, int len)
+{
+	struct wmi_rx_action_event *ev;
+	u32 freq;
+	u16 dlen;
+	struct ath6kl *ar = wmi->parent_dev;
+
+	if (len < sizeof(*ev))
+		return -EINVAL;
+
+	ev = (struct wmi_rx_action_event *) datap;
+	freq = le32_to_cpu(ev->freq);
+	dlen = le16_to_cpu(ev->len);
+	if (datap + len < ev->data + dlen) {
+		ath6kl_err("invalid wmi_rx_action_event: "
+			   "len=%d dlen=%u\n", len, dlen);
+		return -EINVAL;
+	}
+	ath6kl_dbg(ATH6KL_DBG_WMI, "rx_action: len=%u freq=%u\n", dlen, freq);
+	cfg80211_rx_mgmt(ar->net_dev, freq, ev->data, dlen, GFP_ATOMIC);
+
+	return 0;
+}
+
+static int ath6kl_wmi_p2p_info_event_rx(u8 *datap, int len)
+{
+	struct wmi_p2p_info_event *ev;
+	u32 flags;
+	u16 dlen;
+
+	if (len < sizeof(*ev))
+		return -EINVAL;
+
+	ev = (struct wmi_p2p_info_event *) datap;
+	flags = le32_to_cpu(ev->info_req_flags);
+	dlen = le16_to_cpu(ev->len);
+	ath6kl_dbg(ATH6KL_DBG_WMI, "p2p_info: flags=%x len=%d\n", flags, dlen);
+
+	if (flags & P2P_FLAG_CAPABILITIES_REQ) {
+		struct wmi_p2p_capabilities *cap;
+		if (dlen < sizeof(*cap))
+			return -EINVAL;
+		cap = (struct wmi_p2p_capabilities *) ev->data;
+		ath6kl_dbg(ATH6KL_DBG_WMI, "p2p_info: GO Power Save = %d\n",
+			   cap->go_power_save);
+	}
+
+	if (flags & P2P_FLAG_MACADDR_REQ) {
+		struct wmi_p2p_macaddr *mac;
+		if (dlen < sizeof(*mac))
+			return -EINVAL;
+		mac = (struct wmi_p2p_macaddr *) ev->data;
+		ath6kl_dbg(ATH6KL_DBG_WMI, "p2p_info: MAC Address = %pM\n",
+			   mac->mac_addr);
+	}
+
+	if (flags & P2P_FLAG_HMODEL_REQ) {
+		struct wmi_p2p_hmodel *mod;
+		if (dlen < sizeof(*mod))
+			return -EINVAL;
+		mod = (struct wmi_p2p_hmodel *) ev->data;
+		ath6kl_dbg(ATH6KL_DBG_WMI, "p2p_info: P2P Model = %d (%s)\n",
+			   mod->p2p_model,
+			   mod->p2p_model ? "host" : "firmware");
+	}
+	return 0;
+}
+
 static inline struct sk_buff *ath6kl_wmi_get_new_buf(u32 size)
 {
 	struct sk_buff *skb;
@@ -1399,6 +1594,8 @@ int ath6kl_wmi_cmd_send(struct wmi *wmi, struct sk_buff *skb,
 	enum htc_endpoint_id ep_id = wmi->ep_id;
 	int ret;
 
+	ath6kl_dbg(ATH6KL_DBG_WMI, "%s: cmd_id=%d\n", __func__, cmd_id);
+
 	if (WARN_ON(skb == NULL))
 		return -EINVAL;
 
@@ -1543,7 +1740,7 @@ int ath6kl_wmi_startscan_cmd(struct wmi *wmi, enum wmi_scan_type scan_type,
 	struct sk_buff *skb;
 	struct wmi_start_scan_cmd *sc;
 	s8 size;
-	int ret;
+	int i, ret;
 
 	size = sizeof(struct wmi_start_scan_cmd);
 
@@ -1568,8 +1765,8 @@ int ath6kl_wmi_startscan_cmd(struct wmi *wmi, enum wmi_scan_type scan_type,
 	sc->force_scan_intvl = cpu_to_le32(force_scan_interval);
 	sc->num_ch = num_chan;
 
-	if (num_chan)
-		memcpy(sc->ch_list, ch_list, num_chan * sizeof(u16));
+	for (i = 0; i < num_chan; i++)
+		sc->ch_list[i] = cpu_to_le16(ch_list[i]);
 
 	ret = ath6kl_wmi_cmd_send(wmi, skb, WMI_START_SCAN_CMDID,
 				  NO_SYNC_WMIFLAG);
@@ -1761,6 +1958,10 @@ int ath6kl_wmi_addkey_cmd(struct wmi *wmi, u8 key_index,
 	struct sk_buff *skb;
 	struct wmi_add_cipher_key_cmd *cmd;
 	int ret;
+
+	ath6kl_dbg(ATH6KL_DBG_WMI, "addkey cmd: key_index=%u key_type=%d "
+		   "key_usage=%d key_len=%d key_op_ctrl=%d\n",
+		   key_index, key_type, key_usage, key_len, key_op_ctrl);
 
 	if ((key_index > WMI_MAX_KEY_INDEX) || (key_len > WMI_MAX_KEY_LEN) ||
 	    (key_material == NULL))
@@ -2392,6 +2593,47 @@ static int ath6kl_wmi_delba_req_event_rx(struct wmi *wmi, u8 *datap, int len)
 }
 
 /*  AP mode functions */
+
+int ath6kl_wmi_ap_profile_commit(struct wmi *wmip, struct wmi_connect_cmd *p)
+{
+	struct sk_buff *skb;
+	struct wmi_connect_cmd *cm;
+	int res;
+
+	skb = ath6kl_wmi_get_new_buf(sizeof(*cm));
+	if (!skb)
+		return -ENOMEM;
+
+	cm = (struct wmi_connect_cmd *) skb->data;
+	memcpy(cm, p, sizeof(*cm));
+
+	res = ath6kl_wmi_cmd_send(wmip, skb, WMI_AP_CONFIG_COMMIT_CMDID,
+				  NO_SYNC_WMIFLAG);
+	ath6kl_dbg(ATH6KL_DBG_WMI, "%s: nw_type=%u auth_mode=%u ch=%u "
+		   "ctrl_flags=0x%x-> res=%d\n",
+		   __func__, p->nw_type, p->auth_mode, le16_to_cpu(p->ch),
+		   le32_to_cpu(p->ctrl_flags), res);
+	return res;
+}
+
+int ath6kl_wmi_ap_set_mlme(struct wmi *wmip, u8 cmd, const u8 *mac, u16 reason)
+{
+	struct sk_buff *skb;
+	struct wmi_ap_set_mlme_cmd *cm;
+
+	skb = ath6kl_wmi_get_new_buf(sizeof(*cm));
+	if (!skb)
+		return -ENOMEM;
+
+	cm = (struct wmi_ap_set_mlme_cmd *) skb->data;
+	memcpy(cm->mac, mac, ETH_ALEN);
+	cm->reason = cpu_to_le16(reason);
+	cm->cmd = cmd;
+
+	return ath6kl_wmi_cmd_send(wmip, skb, WMI_AP_SET_MLME_CMDID,
+				   NO_SYNC_WMIFLAG);
+}
+
 static int ath6kl_wmi_pspoll_event_rx(struct wmi *wmi, u8 *datap, int len)
 {
 	struct wmi_pspoll_event *ev;
@@ -2454,6 +2696,160 @@ int ath6kl_wmi_set_rx_frame_format_cmd(struct wmi *wmi, u8 rx_meta_ver,
 				  NO_SYNC_WMIFLAG);
 
 	return ret;
+}
+
+int ath6kl_wmi_set_appie_cmd(struct wmi *wmi, u8 mgmt_frm_type, const u8 *ie,
+			     u8 ie_len)
+{
+	struct sk_buff *skb;
+	struct wmi_set_appie_cmd *p;
+
+	skb = ath6kl_wmi_get_new_buf(sizeof(*p) + ie_len);
+	if (!skb)
+		return -ENOMEM;
+
+	ath6kl_dbg(ATH6KL_DBG_WMI, "set_appie_cmd: mgmt_frm_type=%u "
+		   "ie_len=%u\n", mgmt_frm_type, ie_len);
+	p = (struct wmi_set_appie_cmd *) skb->data;
+	p->mgmt_frm_type = mgmt_frm_type;
+	p->ie_len = ie_len;
+	memcpy(p->ie_info, ie, ie_len);
+	return ath6kl_wmi_cmd_send(wmi, skb, WMI_SET_APPIE_CMDID,
+				   NO_SYNC_WMIFLAG);
+}
+
+int ath6kl_wmi_disable_11b_rates_cmd(struct wmi *wmi, bool disable)
+{
+	struct sk_buff *skb;
+	struct wmi_disable_11b_rates_cmd *cmd;
+
+	skb = ath6kl_wmi_get_new_buf(sizeof(*cmd));
+	if (!skb)
+		return -ENOMEM;
+
+	ath6kl_dbg(ATH6KL_DBG_WMI, "disable_11b_rates_cmd: disable=%u\n",
+		   disable);
+	cmd = (struct wmi_disable_11b_rates_cmd *) skb->data;
+	cmd->disable = disable ? 1 : 0;
+
+	return ath6kl_wmi_cmd_send(wmi, skb, WMI_DISABLE_11B_RATES_CMDID,
+				   NO_SYNC_WMIFLAG);
+}
+
+int ath6kl_wmi_remain_on_chnl_cmd(struct wmi *wmi, u32 freq, u32 dur)
+{
+	struct sk_buff *skb;
+	struct wmi_remain_on_chnl_cmd *p;
+
+	skb = ath6kl_wmi_get_new_buf(sizeof(*p));
+	if (!skb)
+		return -ENOMEM;
+
+	ath6kl_dbg(ATH6KL_DBG_WMI, "remain_on_chnl_cmd: freq=%u dur=%u\n",
+		   freq, dur);
+	p = (struct wmi_remain_on_chnl_cmd *) skb->data;
+	p->freq = cpu_to_le32(freq);
+	p->duration = cpu_to_le32(dur);
+	return ath6kl_wmi_cmd_send(wmi, skb, WMI_REMAIN_ON_CHNL_CMDID,
+				   NO_SYNC_WMIFLAG);
+}
+
+int ath6kl_wmi_send_action_cmd(struct wmi *wmi, u32 id, u32 freq, u32 wait,
+			       const u8 *data, u16 data_len)
+{
+	struct sk_buff *skb;
+	struct wmi_send_action_cmd *p;
+	u8 *buf;
+
+	if (wait)
+		return -EINVAL; /* Offload for wait not supported */
+
+	buf = kmalloc(data_len, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+
+	skb = ath6kl_wmi_get_new_buf(sizeof(*p) + data_len);
+	if (!skb) {
+		kfree(buf);
+		return -ENOMEM;
+	}
+
+	kfree(wmi->last_mgmt_tx_frame);
+	wmi->last_mgmt_tx_frame = buf;
+	wmi->last_mgmt_tx_frame_len = data_len;
+
+	ath6kl_dbg(ATH6KL_DBG_WMI, "send_action_cmd: id=%u freq=%u wait=%u "
+		   "len=%u\n", id, freq, wait, data_len);
+	p = (struct wmi_send_action_cmd *) skb->data;
+	p->id = cpu_to_le32(id);
+	p->freq = cpu_to_le32(freq);
+	p->wait = cpu_to_le32(wait);
+	p->len = cpu_to_le16(data_len);
+	memcpy(p->data, data, data_len);
+	return ath6kl_wmi_cmd_send(wmi, skb, WMI_SEND_ACTION_CMDID,
+				   NO_SYNC_WMIFLAG);
+}
+
+int ath6kl_wmi_send_probe_response_cmd(struct wmi *wmi, u32 freq,
+				       const u8 *dst,
+				       const u8 *data, u16 data_len)
+{
+	struct sk_buff *skb;
+	struct wmi_p2p_probe_response_cmd *p;
+
+	skb = ath6kl_wmi_get_new_buf(sizeof(*p) + data_len);
+	if (!skb)
+		return -ENOMEM;
+
+	ath6kl_dbg(ATH6KL_DBG_WMI, "send_probe_response_cmd: freq=%u dst=%pM "
+		   "len=%u\n", freq, dst, data_len);
+	p = (struct wmi_p2p_probe_response_cmd *) skb->data;
+	p->freq = cpu_to_le32(freq);
+	memcpy(p->destination_addr, dst, ETH_ALEN);
+	p->len = cpu_to_le16(data_len);
+	memcpy(p->data, data, data_len);
+	return ath6kl_wmi_cmd_send(wmi, skb, WMI_SEND_PROBE_RESPONSE_CMDID,
+				   NO_SYNC_WMIFLAG);
+}
+
+int ath6kl_wmi_probe_report_req_cmd(struct wmi *wmi, bool enable)
+{
+	struct sk_buff *skb;
+	struct wmi_probe_req_report_cmd *p;
+
+	skb = ath6kl_wmi_get_new_buf(sizeof(*p));
+	if (!skb)
+		return -ENOMEM;
+
+	ath6kl_dbg(ATH6KL_DBG_WMI, "probe_report_req_cmd: enable=%u\n",
+		   enable);
+	p = (struct wmi_probe_req_report_cmd *) skb->data;
+	p->enable = enable ? 1 : 0;
+	return ath6kl_wmi_cmd_send(wmi, skb, WMI_PROBE_REQ_REPORT_CMDID,
+				   NO_SYNC_WMIFLAG);
+}
+
+int ath6kl_wmi_info_req_cmd(struct wmi *wmi, u32 info_req_flags)
+{
+	struct sk_buff *skb;
+	struct wmi_get_p2p_info *p;
+
+	skb = ath6kl_wmi_get_new_buf(sizeof(*p));
+	if (!skb)
+		return -ENOMEM;
+
+	ath6kl_dbg(ATH6KL_DBG_WMI, "info_req_cmd: flags=%x\n",
+		   info_req_flags);
+	p = (struct wmi_get_p2p_info *) skb->data;
+	p->info_req_flags = cpu_to_le32(info_req_flags);
+	return ath6kl_wmi_cmd_send(wmi, skb, WMI_GET_P2P_INFO_CMDID,
+				   NO_SYNC_WMIFLAG);
+}
+
+int ath6kl_wmi_cancel_remain_on_chnl_cmd(struct wmi *wmi)
+{
+	ath6kl_dbg(ATH6KL_DBG_WMI, "cancel_remain_on_chnl_cmd\n");
+	return ath6kl_wmi_simple_cmd(wmi, WMI_CANCEL_REMAIN_ON_CHNL_CMDID);
 }
 
 static int ath6kl_wmi_control_rx_xtnd(struct wmi *wmi, struct sk_buff *skb)
@@ -2675,6 +3071,36 @@ int ath6kl_wmi_control_rx(struct wmi *wmi, struct sk_buff *skb)
 		ath6kl_dbg(ATH6KL_DBG_WMI, "WMI_TX_COMPLETE_EVENTID\n");
 		ret = ath6kl_wmi_tx_complete_event_rx(datap, len);
 		break;
+	case WMI_REMAIN_ON_CHNL_EVENTID:
+		ath6kl_dbg(ATH6KL_DBG_WMI, "WMI_REMAIN_ON_CHNL_EVENTID\n");
+		ret = ath6kl_wmi_remain_on_chnl_event_rx(wmi, datap, len);
+		break;
+	case WMI_CANCEL_REMAIN_ON_CHNL_EVENTID:
+		ath6kl_dbg(ATH6KL_DBG_WMI,
+			   "WMI_CANCEL_REMAIN_ON_CHNL_EVENTID\n");
+		ret = ath6kl_wmi_cancel_remain_on_chnl_event_rx(wmi, datap,
+								len);
+		break;
+	case WMI_TX_STATUS_EVENTID:
+		ath6kl_dbg(ATH6KL_DBG_WMI, "WMI_TX_STATUS_EVENTID\n");
+		ret = ath6kl_wmi_tx_status_event_rx(wmi, datap, len);
+		break;
+	case WMI_RX_PROBE_REQ_EVENTID:
+		ath6kl_dbg(ATH6KL_DBG_WMI, "WMI_RX_PROBE_REQ_EVENTID\n");
+		ret = ath6kl_wmi_rx_probe_req_event_rx(wmi, datap, len);
+		break;
+	case WMI_P2P_CAPABILITIES_EVENTID:
+		ath6kl_dbg(ATH6KL_DBG_WMI, "WMI_P2P_CAPABILITIES_EVENTID\n");
+		ret = ath6kl_wmi_p2p_capabilities_event_rx(datap, len);
+		break;
+	case WMI_RX_ACTION_EVENTID:
+		ath6kl_dbg(ATH6KL_DBG_WMI, "WMI_RX_ACTION_EVENTID\n");
+		ret = ath6kl_wmi_rx_action_event_rx(wmi, datap, len);
+		break;
+	case WMI_P2P_INFO_EVENTID:
+		ath6kl_dbg(ATH6KL_DBG_WMI, "WMI_P2P_INFO_EVENTID\n");
+		ret = ath6kl_wmi_p2p_info_event_rx(datap, len);
+		break;
 	default:
 		ath6kl_dbg(ATH6KL_DBG_WMI, "unknown cmd id 0x%x\n", id);
 		wmi->stat.cmd_id_err++;
@@ -2731,5 +3157,6 @@ void ath6kl_wmi_shutdown(struct wmi *wmi)
 	if (!wmi)
 		return;
 
+	kfree(wmi->last_mgmt_tx_frame);
 	kfree(wmi);
 }

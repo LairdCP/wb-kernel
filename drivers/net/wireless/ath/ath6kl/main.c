@@ -61,7 +61,8 @@ static void ath6kl_add_new_sta(struct ath6kl *ar, u8 *mac, u16 aid, u8 *wpaie,
 
 	sta = &ar->sta_list[free_slot];
 	memcpy(sta->mac, mac, ETH_ALEN);
-	memcpy(sta->wpa_ie, wpaie, ielen);
+	if (ielen <= ATH6KL_MAX_IE)
+		memcpy(sta->wpa_ie, wpaie, ielen);
 	sta->aid = aid;
 	sta->keymgmt = keymgmt;
 	sta->ucipher = ucipher;
@@ -429,15 +430,21 @@ static void ath6kl_install_static_wep_keys(struct ath6kl *ar)
 
 static void ath6kl_connect_ap_mode(struct ath6kl *ar, u16 channel, u8 *bssid,
 				   u16 listen_int, u16 beacon_int,
-				   u8 assoc_resp_len, u8 *assoc_info)
+				   u8 assoc_req_len, u8 *assoc_info)
 {
 	struct net_device *dev = ar->net_dev;
+	u8 *ies = NULL, *wpa_ie = NULL, *pos;
+	size_t ies_len = 0;
 	struct station_info sinfo;
 	struct ath6kl_req_key *ik;
-	enum crypto_type keyType = NONE_CRYPT;
+	int res;
+	u8 key_rsc[ATH6KL_KEY_SEQ_LEN];
 
 	if (memcmp(dev->dev_addr, bssid, ETH_ALEN) == 0) {
 		ik = &ar->ap_mode_bkey;
+
+		ath6kl_dbg(ATH6KL_DBG_WLAN_CFG, "AP mode started on %u MHz\n",
+			   channel);
 
 		switch (ar->auth_mode) {
 		case NONE_AUTH:
@@ -447,33 +454,69 @@ static void ath6kl_connect_ap_mode(struct ath6kl *ar, u16 channel, u8 *bssid,
 		case WPA_PSK_AUTH:
 		case WPA2_PSK_AUTH:
 		case (WPA_PSK_AUTH|WPA2_PSK_AUTH):
-			switch (ik->ik_type) {
-			case ATH6KL_CIPHER_TKIP:
-				keyType = TKIP_CRYPT;
+			if (!ik->valid)
 				break;
-			case ATH6KL_CIPHER_AES_CCM:
-				keyType = AES_CRYPT;
-				break;
-			default:
-				goto skip_key;
+
+			ath6kl_dbg(ATH6KL_DBG_WLAN_CFG, "Delayed addkey for "
+				   "the initial group key for AP mode\n");
+			memset(key_rsc, 0, sizeof(key_rsc));
+			res = ath6kl_wmi_addkey_cmd(
+				ar->wmi, ik->key_index, ik->key_type,
+				GROUP_USAGE, ik->key_len, key_rsc, ik->key,
+				KEY_OP_INIT_VAL, NULL, SYNC_BOTH_WMIFLAG);
+			if (res) {
+				ath6kl_dbg(ATH6KL_DBG_WLAN_CFG, "Delayed "
+					   "addkey failed: %d\n", res);
 			}
-			ath6kl_wmi_addkey_cmd(ar->wmi, ik->ik_keyix, keyType,
-					      GROUP_USAGE, ik->ik_keylen,
-					      (u8 *)&ik->ik_keyrsc,
-					      ik->ik_keydata,
-					      KEY_OP_INIT_VAL, ik->ik_macaddr,
-					      SYNC_BOTH_WMIFLAG);
 			break;
 		}
-skip_key:
+
+		ath6kl_wmi_bssfilter_cmd(ar->wmi, NONE_BSS_FILTER, 0);
 		set_bit(CONNECTED, &ar->flag);
+		netif_carrier_on(ar->net_dev);
 		return;
 	}
 
 	ath6kl_dbg(ATH6KL_DBG_TRC, "new station %pM aid=%d\n",
 		   bssid, channel);
 
-	ath6kl_add_new_sta(ar, bssid, channel, assoc_info, assoc_resp_len,
+	if (assoc_req_len > sizeof(struct ieee80211_hdr_3addr)) {
+		struct ieee80211_mgmt *mgmt =
+			(struct ieee80211_mgmt *) assoc_info;
+		if (ieee80211_is_assoc_req(mgmt->frame_control) &&
+		    assoc_req_len >= sizeof(struct ieee80211_hdr_3addr) +
+		    sizeof(mgmt->u.assoc_req)) {
+			ies = mgmt->u.assoc_req.variable;
+			ies_len = assoc_info + assoc_req_len - ies;
+		} else if (ieee80211_is_reassoc_req(mgmt->frame_control) &&
+			   assoc_req_len >= sizeof(struct ieee80211_hdr_3addr)
+			   + sizeof(mgmt->u.reassoc_req)) {
+			ies = mgmt->u.reassoc_req.variable;
+			ies_len = assoc_info + assoc_req_len - ies;
+		}
+	}
+
+	pos = ies;
+	while (pos && pos + 1 < ies + ies_len) {
+		if (pos + 2 + pos[1] > ies + ies_len)
+			break;
+		if (pos[0] == WLAN_EID_RSN)
+			wpa_ie = pos; /* RSN IE */
+		else if (pos[0] == WLAN_EID_VENDOR_SPECIFIC &&
+			 pos[1] >= 4 &&
+			 pos[2] == 0x00 && pos[3] == 0x50 && pos[4] == 0xf2) {
+			if (pos[5] == 0x01)
+				wpa_ie = pos; /* WPA IE */
+			else if (pos[5] == 0x04) {
+				wpa_ie = pos; /* WPS IE */
+				break; /* overrides WPA/RSN IE */
+			}
+		}
+		pos += 2 + pos[1];
+	}
+
+	ath6kl_add_new_sta(ar, bssid, channel, wpa_ie,
+			   wpa_ie ? 2 + wpa_ie[1] : 0,
 			   listen_int & 0xFF, beacon_int,
 			   (listen_int >> 8) & 0xFF);
 
@@ -481,9 +524,11 @@ skip_key:
 	memset(&sinfo, 0, sizeof(sinfo));
 
 	/* TODO: sinfo.generation */
-	/* TODO: need to deliver (Re)AssocReq IEs somehow.. change in
-	 * cfg80211 needed, e.g., by adding those into sinfo
-	 */
+
+	sinfo.assoc_req_ies = ies;
+	sinfo.assoc_req_ies_len = ies_len;
+	sinfo.filled |= STATION_INFO_ASSOC_REQ_IES;
+
 	cfg80211_new_sta(ar->net_dev, bssid, &sinfo, GFP_KERNEL);
 
 	netif_wake_queue(ar->net_dev);
@@ -895,8 +940,8 @@ void ath6kl_connect_event(struct ath6kl *ar, u16 channel, u8 *bssid,
 
 	if (ar->nw_type == AP_NETWORK) {
 		ath6kl_connect_ap_mode(ar, channel, bssid, listen_int,
-				       beacon_int, assoc_resp_len,
-				       assoc_info);
+				       beacon_int, assoc_req_len,
+				       assoc_info + beacon_ie_len);
 		return;
 	}
 
@@ -1239,7 +1284,8 @@ void ath6kl_disconnect_event(struct ath6kl *ar, u8 reason, u8 *bssid,
 			cfg80211_del_sta(ar->net_dev, bssid, GFP_KERNEL);
 		}
 
-		clear_bit(CONNECTED, &ar->flag);
+		if (memcmp(ar->net_dev->dev_addr, bssid, ETH_ALEN) == 0)
+			clear_bit(CONNECTED, &ar->flag);
 		return;
 	}
 
