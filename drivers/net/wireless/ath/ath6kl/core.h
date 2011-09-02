@@ -21,10 +21,12 @@
 #include <linux/rtnetlink.h>
 #include <linux/firmware.h>
 #include <linux/sched.h>
+#include <linux/circ_buf.h>
 #include <net/cfg80211.h>
 #include "htc.h"
 #include "wmi.h"
 #include "bmi.h"
+#include "target.h"
 
 #define MAX_ATH6KL                        1
 #define ATH6KL_MAX_RX_BUFFERS             16
@@ -392,6 +394,7 @@ struct ath6kl {
 	u16 bss_ch;
 	u16 listen_intvl_b;
 	u16 listen_intvl_t;
+	u8 lrssi_roam_threshold;
 	struct ath6kl_version version;
 	u32 target_type;
 	u8 tx_pwr;
@@ -467,6 +470,16 @@ struct ath6kl {
 	u32 send_action_id;
 	bool probe_req_report;
 	u16 next_chan;
+
+#ifdef CONFIG_ATH6KL_DEBUG
+	struct {
+		struct circ_buf fwlog_buf;
+		spinlock_t fwlog_lock;
+		void *fwlog_tmp;
+		u32 fwlog_mask;
+		unsigned int dbgfs_diag_reg;
+	} debug;
+#endif /* CONFIG_ATH6KL_DEBUG */
 };
 
 static inline void *ath6kl_priv(struct net_device *dev)
@@ -484,6 +497,19 @@ static inline void ath6kl_deposit_credit_to_ep(struct htc_credit_state_info
 	cred_info->cur_free_credits -= credits;
 }
 
+static inline u32 ath6kl_get_hi_item_addr(struct ath6kl *ar,
+					  u32 item_offset)
+{
+	u32 addr = 0;
+
+	if (ar->target_type == TARGET_TYPE_AR6003)
+		addr = ATH6KL_AR6003_HI_START_ADDR + item_offset;
+	else if (ar->target_type == TARGET_TYPE_AR6004)
+		addr = ATH6KL_AR6004_HI_START_ADDR + item_offset;
+
+	return addr;
+}
+
 void ath6kl_destroy(struct net_device *dev, unsigned int unregister);
 int ath6kl_configure_target(struct ath6kl *ar);
 void ath6kl_detect_error(unsigned long ptr);
@@ -497,9 +523,10 @@ enum htc_send_full_action ath6kl_tx_queue_full(struct htc_target *target,
 					       struct htc_packet *packet);
 void ath6kl_stop_txrx(struct ath6kl *ar);
 void ath6kl_cleanup_amsdu_rxbufs(struct ath6kl *ar);
-int ath6kl_access_datadiag(struct ath6kl *ar, u32 address,
-			   u8 *data, u32 length, bool read);
-int ath6kl_read_reg_diag(struct ath6kl *ar, u32 *address, u32 *data);
+int ath6kl_diag_write(struct ath6kl *ar, u32 address, void *data, u32 length);
+int ath6kl_diag_read32(struct ath6kl *ar, u32 address, u32 *value);
+int ath6kl_diag_read(struct ath6kl *ar, u32 address, void *data, u32 length);
+int ath6kl_read_fwlogs(struct ath6kl *ar);
 void ath6kl_init_profile_info(struct ath6kl *ar);
 void ath6kl_tx_data_cleanup(struct ath6kl *ar);
 void ath6kl_stop_endpoint(struct net_device *dev, bool keep_profile,

@@ -340,4 +340,21 @@ struct host_interest {
 #define AR6004_REV1_BOARD_DATA_ADDRESS          0x435400
 #define AR6004_REV1_BOARD_EXT_DATA_ADDRESS      0x437000
 #define AR6004_REV1_RAM_RESERVE_SIZE            11264
+
+#define ATH6KL_FWLOG_PAYLOAD_SIZE		1500
+
+struct ath6kl_dbglog_buf {
+	__le32 next;
+	__le32 buffer_addr;
+	__le32 bufsize;
+	__le32 length;
+	__le32 count;
+	__le32 free;
+} __packed;
+
+struct ath6kl_dbglog_hdr {
+	__le32 dbuf_addr;
+	__le32 dropped;
+} __packed;
+
 #endif

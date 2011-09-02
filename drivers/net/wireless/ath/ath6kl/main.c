@@ -178,8 +178,8 @@ void ath6kl_free_cookie(struct ath6kl *ar, struct ath6kl_cookie *cookie)
 static int ath6kl_set_addrwin_reg(struct ath6kl *ar, u32 reg_addr, u32 addr)
 {
 	int status;
-	u8 addr_val[4];
 	s32 i;
+	__le32 addr_val;
 
 	/*
 	 * Write bytes 1,2,3 of the register to set the upper address bytes,
@@ -189,16 +189,18 @@ static int ath6kl_set_addrwin_reg(struct ath6kl *ar, u32 reg_addr, u32 addr)
 	for (i = 1; i <= 3; i++) {
 		/*
 		 * Fill the buffer with the address byte value we want to
-		 * hit 4 times.
+		 * hit 4 times. No need to worry about endianness as the
+		 * same byte is copied to all four bytes of addr_val at
+		 * any time.
 		 */
-		memset(addr_val, ((u8 *)&addr)[i], 4);
+		memset((u8 *)&addr_val, ((u8 *)&addr)[i], 4);
 
 		/*
 		 * Hit each byte of the register address with a 4-byte
 		 * write operation to the same address, this is a harmless
 		 * operation.
 		 */
-		status = hif_read_write_sync(ar, reg_addr + i, addr_val,
+		status = hif_read_write_sync(ar, reg_addr + i, (u8 *)&addr_val,
 					     4, HIF_WR_SYNC_BYTE_FIX);
 		if (status)
 			break;
@@ -216,7 +218,9 @@ static int ath6kl_set_addrwin_reg(struct ath6kl *ar, u32 reg_addr, u32 addr)
 	 * cycle to start, the extra 3 byte write to bytes 1,2,3 has no
 	 * effect since we are writing the same values again
 	 */
-	status = hif_read_write_sync(ar, reg_addr, (u8 *)(&addr),
+	addr_val = cpu_to_le32(addr);
+	status = hif_read_write_sync(ar, reg_addr,
+				     (u8 *)&(addr_val),
 				     4, HIF_WR_SYNC_BYTE_INC);
 
 	if (status) {
@@ -229,74 +233,159 @@ static int ath6kl_set_addrwin_reg(struct ath6kl *ar, u32 reg_addr, u32 addr)
 }
 
 /*
- * Read from the ATH6KL through its diagnostic window. No cooperation from
- * the Target is required for this.
+ * Read from the hardware through its diagnostic window. No cooperation
+ * from the firmware is required for this.
  */
-int ath6kl_read_reg_diag(struct ath6kl *ar, u32 *address, u32 *data)
+int ath6kl_diag_read32(struct ath6kl *ar, u32 address, u32 *value)
 {
-	int status;
+	int ret;
 
 	/* set window register to start read cycle */
-	status = ath6kl_set_addrwin_reg(ar, WINDOW_READ_ADDR_ADDRESS,
-					*address);
-
-	if (status)
-		return status;
+	ret = ath6kl_set_addrwin_reg(ar, WINDOW_READ_ADDR_ADDRESS, address);
+	if (ret)
+		return ret;
 
 	/* read the data */
-	status = hif_read_write_sync(ar, WINDOW_DATA_ADDRESS, (u8 *)data,
-				     sizeof(u32), HIF_RD_SYNC_BYTE_INC);
-	if (status) {
-		ath6kl_err("failed to read from window data addr\n");
-		return status;
+	ret = hif_read_write_sync(ar, WINDOW_DATA_ADDRESS, (u8 *) value,
+				  sizeof(*value), HIF_RD_SYNC_BYTE_INC);
+	if (ret) {
+		ath6kl_warn("failed to read32 through diagnose window: %d\n",
+			    ret);
+		return ret;
 	}
 
-	return status;
+	return 0;
 }
-
 
 /*
  * Write to the ATH6KL through its diagnostic window. No cooperation from
  * the Target is required for this.
  */
-static int ath6kl_write_reg_diag(struct ath6kl *ar, u32 *address, u32 *data)
+static int ath6kl_diag_write32(struct ath6kl *ar, u32 address, u32 value)
 {
-	int status;
+	int ret;
 
 	/* set write data */
-	status = hif_read_write_sync(ar, WINDOW_DATA_ADDRESS, (u8 *)data,
-				     sizeof(u32), HIF_WR_SYNC_BYTE_INC);
-	if (status) {
-		ath6kl_err("failed to write 0x%x to window data addr\n", *data);
-		return status;
+	ret = hif_read_write_sync(ar, WINDOW_DATA_ADDRESS, (u8 *) &value,
+				  sizeof(value), HIF_WR_SYNC_BYTE_INC);
+	if (ret) {
+		ath6kl_err("failed to write 0x%x during diagnose window to 0x%d\n",
+			   address, value);
+		return ret;
 	}
 
 	/* set window register, which starts the write cycle */
 	return ath6kl_set_addrwin_reg(ar, WINDOW_WRITE_ADDR_ADDRESS,
-				      *address);
+				      address);
 }
 
-int ath6kl_access_datadiag(struct ath6kl *ar, u32 address,
-			   u8 *data, u32 length, bool read)
+int ath6kl_diag_read(struct ath6kl *ar, u32 address, void *data, u32 length)
 {
-	u32 count;
-	int status = 0;
+	u32 count, *buf = data;
+	int ret;
 
-	for (count = 0; count < length; count += 4, address += 4) {
-		if (read) {
-			status = ath6kl_read_reg_diag(ar, &address,
-						      (u32 *) &data[count]);
-			if (status)
-				break;
-		} else {
-			status = ath6kl_write_reg_diag(ar, &address,
-						       (u32 *) &data[count]);
-			if (status)
-				break;
-		}
+	if (WARN_ON(length % 4))
+		return -EINVAL;
+
+	for (count = 0; count < length / 4; count++, address += 4) {
+		ret = ath6kl_diag_read32(ar, address, &buf[count]);
+		if (ret)
+			return ret;
 	}
 
-	return status;
+	return 0;
+}
+
+int ath6kl_diag_write(struct ath6kl *ar, u32 address, void *data, u32 length)
+{
+	u32 count, *buf = data;
+	int ret;
+
+	if (WARN_ON(length % 4))
+		return -EINVAL;
+
+	for (count = 0; count < length / 4; count++, address += 4) {
+		ret = ath6kl_diag_write32(ar, address, buf[count]);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+
+int ath6kl_read_fwlogs(struct ath6kl *ar)
+{
+	struct ath6kl_dbglog_hdr debug_hdr;
+	struct ath6kl_dbglog_buf debug_buf;
+	u32 address, length, dropped, firstbuf, debug_hdr_addr;
+	int ret = 0, loop;
+	u8 *buf;
+
+	buf = kmalloc(ATH6KL_FWLOG_PAYLOAD_SIZE, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+
+	address = TARG_VTOP(ar->target_type,
+			    ath6kl_get_hi_item_addr(ar,
+						    HI_ITEM(hi_dbglog_hdr)));
+
+	ret = ath6kl_diag_read32(ar, address, &debug_hdr_addr);
+	if (ret)
+		goto out;
+
+	/* Get the contents of the ring buffer */
+	if (debug_hdr_addr == 0) {
+		ath6kl_warn("Invalid address for debug_hdr_addr\n");
+		ret = -EINVAL;
+		goto out;
+	}
+
+	address = TARG_VTOP(ar->target_type, debug_hdr_addr);
+	ath6kl_diag_read(ar, address, &debug_hdr, sizeof(debug_hdr));
+
+	address = TARG_VTOP(ar->target_type,
+			    le32_to_cpu(debug_hdr.dbuf_addr));
+	firstbuf = address;
+	dropped = le32_to_cpu(debug_hdr.dropped);
+	ath6kl_diag_read(ar, address, &debug_buf, sizeof(debug_buf));
+
+	loop = 100;
+
+	do {
+		address = TARG_VTOP(ar->target_type,
+				    le32_to_cpu(debug_buf.buffer_addr));
+		length = le32_to_cpu(debug_buf.length);
+
+		if (length != 0 && (le32_to_cpu(debug_buf.length) <=
+				    le32_to_cpu(debug_buf.bufsize))) {
+			length = ALIGN(length, 4);
+
+			ret = ath6kl_diag_read(ar, address,
+					       buf, length);
+			if (ret)
+				goto out;
+
+			ath6kl_debug_fwlog_event(ar, buf, length);
+		}
+
+		address = TARG_VTOP(ar->target_type,
+				    le32_to_cpu(debug_buf.next));
+		ath6kl_diag_read(ar, address, &debug_buf, sizeof(debug_buf));
+		if (ret)
+			goto out;
+
+		loop--;
+
+		if (WARN_ON(loop == 0)) {
+			ret = -ETIMEDOUT;
+			goto out;
+		}
+	} while (address != firstbuf);
+
+out:
+	kfree(buf);
+
+	return ret;
 }
 
 /* FIXME: move to a better place, target.h? */
@@ -328,7 +417,7 @@ static void ath6kl_reset_device(struct ath6kl *ar, u32 target_type,
 		break;
 	}
 
-	status = ath6kl_write_reg_diag(ar, &address, &data);
+	status = ath6kl_diag_write32(ar, address, data);
 
 	if (status)
 		ath6kl_err("failed to reset target\n");

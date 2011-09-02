@@ -666,6 +666,35 @@ static int ath6kl_wmi_ready_event_rx(struct wmi *wmi, u8 *datap, int len)
 	return 0;
 }
 
+/*
+ * Mechanism to modify the roaming behavior in the firmware. The lower rssi
+ * at which the station has to roam can be passed with
+ * WMI_SET_LRSSI_SCAN_PARAMS. Subtract 96 from RSSI to get the signal level
+ * in dBm.
+ */
+int ath6kl_wmi_set_roam_lrssi_cmd(struct wmi *wmi, u8 lrssi)
+{
+	struct sk_buff *skb;
+	struct roam_ctrl_cmd *cmd;
+
+	skb = ath6kl_wmi_get_new_buf(sizeof(*cmd));
+	if (!skb)
+		return -ENOMEM;
+
+	cmd = (struct roam_ctrl_cmd *) skb->data;
+
+	cmd->info.params.lrssi_scan_period = cpu_to_le16(DEF_LRSSI_SCAN_PERIOD);
+	cmd->info.params.lrssi_scan_threshold = a_cpu_to_sle16(lrssi +
+						       DEF_SCAN_FOR_ROAM_INTVL);
+	cmd->info.params.lrssi_roam_threshold = a_cpu_to_sle16(lrssi);
+	cmd->info.params.roam_rssi_floor = DEF_LRSSI_ROAM_FLOOR;
+	cmd->roam_ctrl = WMI_SET_LRSSI_SCAN_PARAMS;
+
+	ath6kl_wmi_cmd_send(wmi, skb, WMI_SET_ROAM_CTRL_CMDID, NO_SYNC_WMIFLAG);
+
+	return 0;
+}
+
 static int ath6kl_wmi_connect_event_rx(struct wmi *wmi, u8 *datap, int len)
 {
 	struct wmi_connect_event *ev;
@@ -2412,6 +2441,25 @@ int ath6kl_wmi_get_challenge_resp_cmd(struct wmi *wmi, u32 cookie, u32 source)
 	return ret;
 }
 
+int ath6kl_wmi_config_debug_module_cmd(struct wmi *wmi, u32 valid, u32 config)
+{
+	struct ath6kl_wmix_dbglog_cfg_module_cmd *cmd;
+	struct sk_buff *skb;
+	int ret;
+
+	skb = ath6kl_wmi_get_new_buf(sizeof(*cmd));
+	if (!skb)
+		return -ENOMEM;
+
+	cmd = (struct ath6kl_wmix_dbglog_cfg_module_cmd *) skb->data;
+	cmd->valid = cpu_to_le32(valid);
+	cmd->config = cpu_to_le32(config);
+
+	ret = ath6kl_wmi_cmd_send_xtnd(wmi, skb, WMIX_DBGLOG_CFG_MODULE_CMDID,
+				       NO_SYNC_WMIFLAG);
+	return ret;
+}
+
 int ath6kl_wmi_get_stats_cmd(struct wmi *wmi)
 {
 	return ath6kl_wmi_simple_cmd(wmi, WMI_GET_STATISTICS_CMDID);
@@ -2903,6 +2951,7 @@ static int ath6kl_wmi_control_rx_xtnd(struct wmi *wmi, struct sk_buff *skb)
 	case WMIX_HB_CHALLENGE_RESP_EVENTID:
 		break;
 	case WMIX_DBGLOG_EVENTID:
+		ath6kl_debug_fwlog_event(wmi->parent_dev, datap, len);
 		break;
 	default:
 		ath6kl_err("unknown cmd id 0x%x\n", id);
