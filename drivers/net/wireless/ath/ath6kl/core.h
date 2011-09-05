@@ -478,6 +478,8 @@ struct ath6kl {
 		void *fwlog_tmp;
 		u32 fwlog_mask;
 		unsigned int dbgfs_diag_reg;
+		u32 diag_reg_addr_wr;
+		u32 diag_reg_val_wr;
 	} debug;
 #endif /* CONFIG_ATH6KL_DEBUG */
 };
@@ -523,6 +525,7 @@ enum htc_send_full_action ath6kl_tx_queue_full(struct htc_target *target,
 					       struct htc_packet *packet);
 void ath6kl_stop_txrx(struct ath6kl *ar);
 void ath6kl_cleanup_amsdu_rxbufs(struct ath6kl *ar);
+int ath6kl_diag_write32(struct ath6kl *ar, u32 address, __le32 value);
 int ath6kl_diag_write(struct ath6kl *ar, u32 address, void *data, u32 length);
 int ath6kl_diag_read32(struct ath6kl *ar, u32 address, u32 *value);
 int ath6kl_diag_read(struct ath6kl *ar, u32 address, void *data, u32 length);
