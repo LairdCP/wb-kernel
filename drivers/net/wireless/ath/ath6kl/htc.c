@@ -22,7 +22,7 @@
 
 #define CALC_TXRX_PADDED_LEN(dev, len)  (__ALIGN_MASK((len), (dev)->block_mask))
 
-static void ath6kl_htc_buf_align(u8 **buf, unsigned long len)
+static void ath6kl_htc_tx_buf_align(u8 **buf, unsigned long len)
 {
 	u8 *align_addr;
 
@@ -33,8 +33,8 @@ static void ath6kl_htc_buf_align(u8 **buf, unsigned long len)
 	}
 }
 
-static void htc_prep_send_pkt(struct htc_packet *packet, u8 flags, int ctrl0,
-			      int ctrl1)
+static void ath6kl_htc_tx_prep_pkt(struct htc_packet *packet, u8 flags,
+				   int ctrl0, int ctrl1)
 {
 	struct htc_frame_hdr *hdr;
 
@@ -178,7 +178,8 @@ static void htc_async_tx_scat_complete(struct htc_target *target,
 	htc_tx_complete(endpoint, &tx_compq);
 }
 
-static int htc_issue_send(struct htc_target *target, struct htc_packet *packet)
+static int ath6kl_htc_tx_issue(struct htc_target *target,
+			       struct htc_packet *packet)
 {
 	int status;
 	bool sync = false;
@@ -276,9 +277,9 @@ static int htc_check_credits(struct htc_target *target,
 	return 0;
 }
 
-static void htc_tx_pkts_get(struct htc_target *target,
-			    struct htc_endpoint *endpoint,
-			    struct list_head *queue)
+static void ath6kl_htc_tx_pkts_get(struct htc_target *target,
+				   struct htc_endpoint *endpoint,
+				   struct list_head *queue)
 {
 	int req_cred;
 	u8 flags;
@@ -357,11 +358,11 @@ static int htc_get_credit_padding(unsigned int cred_sz, int *len,
 	return cred_pad;
 }
 
-static int htc_setup_send_scat_list(struct htc_target *target,
-				    struct htc_endpoint *endpoint,
-				    struct hif_scatter_req *scat_req,
-				    int n_scat,
-				    struct list_head *queue)
+static int ath6kl_htc_tx_setup_scat_list(struct htc_target *target,
+					 struct htc_endpoint *endpoint,
+					 struct hif_scatter_req *scat_req,
+					 int n_scat,
+					 struct list_head *queue)
 {
 	struct htc_packet *packet;
 	int i, len, rem_scat, cred_pad;
@@ -393,12 +394,12 @@ static int htc_setup_send_scat_list(struct htc_target *target,
 
 		scat_req->scat_list[i].packet = packet;
 		/* prepare packet and flag message as part of a send bundle */
-		htc_prep_send_pkt(packet,
+		ath6kl_htc_tx_prep_pkt(packet,
 				packet->info.tx.flags | HTC_FLAGS_SEND_BUNDLE,
 				cred_pad, packet->info.tx.seqno);
 		/* Make sure the buffer is 4-byte aligned */
-		ath6kl_htc_buf_align(&packet->buf,
-				     packet->act_len + HTC_HDR_LENGTH);
+		ath6kl_htc_tx_buf_align(&packet->buf,
+					packet->act_len + HTC_HDR_LENGTH);
 		scat_req->scat_list[i].buf = packet->buf;
 		scat_req->scat_list[i].len = len;
 
@@ -425,18 +426,17 @@ static int htc_setup_send_scat_list(struct htc_target *target,
 }
 
 /*
- * htc_issue_send_bundle: drain a queue and send as bundles
- * this function may return without fully draining the queue
- * when
+ * Drain a queue and send as bundles this function may return without fully
+ * draining the queue when
  *
  *    1. scatter resources are exhausted
  *    2. a message that will consume a partial credit will stop the
  *    bundling process early
  *    3. we drop below the minimum number of messages for a bundle
  */
-static void htc_issue_send_bundle(struct htc_endpoint *endpoint,
-				  struct list_head *queue,
-				  int *sent_bundle, int *n_bundle_pkts)
+static void ath6kl_htc_tx_bundle(struct htc_endpoint *endpoint,
+				 struct list_head *queue,
+				 int *sent_bundle, int *n_bundle_pkts)
 {
 	struct htc_target *target = endpoint->target;
 	struct hif_scatter_req *scat_req = NULL;
@@ -467,8 +467,9 @@ static void htc_issue_send_bundle(struct htc_endpoint *endpoint,
 		scat_req->len = 0;
 		scat_req->scat_entries = 0;
 
-		status = htc_setup_send_scat_list(target, endpoint,
-						  scat_req, n_scat, queue);
+		status = ath6kl_htc_tx_setup_scat_list(target, endpoint,
+						       scat_req, n_scat,
+						       queue);
 		if (status == -EAGAIN) {
 			hif_scatter_req_add(target->dev->ar, scat_req);
 			break;
@@ -490,14 +491,14 @@ static void htc_issue_send_bundle(struct htc_endpoint *endpoint,
 
 	*sent_bundle = n_sent_bundle;
 	*n_bundle_pkts = tot_pkts_bundle;
-	ath6kl_dbg(ATH6KL_DBG_HTC_SEND, "htc_issue_send_bundle (sent:%d)\n",
-		   n_sent_bundle);
+	ath6kl_dbg(ATH6KL_DBG_HTC_SEND, "%s (sent:%d)\n",
+		   __func__, n_sent_bundle);
 
 	return;
 }
 
-static void htc_tx_from_ep_txq(struct htc_target *target,
-			       struct htc_endpoint *endpoint)
+static void ath6kl_htc_tx_from_queue(struct htc_target *target,
+				     struct htc_endpoint *endpoint)
 {
 	struct list_head txq;
 	struct htc_packet *packet;
@@ -525,7 +526,7 @@ static void htc_tx_from_ep_txq(struct htc_target *target,
 		if (list_empty(&endpoint->txq))
 			break;
 
-		htc_tx_pkts_get(target, endpoint, &txq);
+		ath6kl_htc_tx_pkts_get(target, endpoint, &txq);
 
 		if (list_empty(&txq))
 			break;
@@ -542,8 +543,8 @@ static void htc_tx_from_ep_txq(struct htc_target *target,
 			    HTC_MIN_HTC_MSGS_TO_BUNDLE)) {
 				int temp1 = 0, temp2 = 0;
 
-				htc_issue_send_bundle(endpoint, &txq,
-						      &temp1, &temp2);
+				ath6kl_htc_tx_bundle(endpoint, &txq,
+						     &temp1, &temp2);
 				bundle_sent += temp1;
 				n_pkts_bundle += temp2;
 			}
@@ -555,9 +556,9 @@ static void htc_tx_from_ep_txq(struct htc_target *target,
 						  list);
 			list_del(&packet->list);
 
-			htc_prep_send_pkt(packet, packet->info.tx.flags,
-					  0, packet->info.tx.seqno);
-			htc_issue_send(target, packet);
+			ath6kl_htc_tx_prep_pkt(packet, packet->info.tx.flags,
+					       0, packet->info.tx.seqno);
+			ath6kl_htc_tx_issue(target, packet);
 		}
 
 		spin_lock_bh(&target->tx_lock);
@@ -570,9 +571,9 @@ static void htc_tx_from_ep_txq(struct htc_target *target,
 	spin_unlock_bh(&target->tx_lock);
 }
 
-static bool htc_try_send(struct htc_target *target,
-			 struct htc_endpoint *endpoint,
-			 struct htc_packet *tx_pkt)
+static bool ath6kl_htc_tx_try(struct htc_target *target,
+			      struct htc_endpoint *endpoint,
+			      struct htc_packet *tx_pkt)
 {
 	struct htc_ep_callbacks ep_cb;
 	int txq_depth;
@@ -608,7 +609,7 @@ static bool htc_try_send(struct htc_target *target,
 	list_add_tail(&tx_pkt->list, &endpoint->txq);
 	spin_unlock_bh(&target->tx_lock);
 
-	htc_tx_from_ep_txq(target, endpoint);
+	ath6kl_htc_tx_from_queue(target, endpoint);
 
 	return true;
 }
@@ -642,7 +643,7 @@ static void htc_chk_ep_txq(struct htc_target *target)
 			 * chance to reclaim credits from lower priority
 			 * ones.
 			 */
-			htc_tx_from_ep_txq(target, endpoint);
+			ath6kl_htc_tx_from_queue(target, endpoint);
 			spin_lock_bh(&target->tx_lock);
 		}
 		spin_unlock_bh(&target->tx_lock);
@@ -694,8 +695,8 @@ static int htc_setup_tx_complete(struct htc_target *target)
 
 	/* we want synchronous operation */
 	send_pkt->completion = NULL;
-	htc_prep_send_pkt(send_pkt, 0, 0, 0);
-	status = htc_issue_send(target, send_pkt);
+	ath6kl_htc_tx_prep_pkt(send_pkt, 0, 0, 0);
+	status = ath6kl_htc_tx_issue(target, send_pkt);
 
 	if (send_pkt != NULL)
 		htc_reclaim_txctrl_buf(target, send_pkt);
@@ -747,7 +748,7 @@ int ath6kl_htc_tx(struct htc_target *target, struct htc_packet *packet)
 
 	endpoint = &target->endpoint[packet->endpoint];
 
-	if (!htc_try_send(target, endpoint, packet)) {
+	if (!ath6kl_htc_tx_try(target, endpoint, packet)) {
 		packet->status = (target->htc_flags & HTC_OP_STATE_STOPPING) ?
 				 -ECANCELED : -ENOSPC;
 		INIT_LIST_HEAD(&queue);
@@ -860,8 +861,8 @@ void ath6kl_htc_indicate_activity_change(struct htc_target *target,
 
 /* HTC Rx */
 
-static inline void htc_update_rx_stats(struct htc_endpoint *endpoint,
-				       int n_look_ahds)
+static inline void ath6kl_htc_rx_update_stats(struct htc_endpoint *endpoint,
+					      int n_look_ahds)
 {
 	endpoint->ep_st.rx_pkts++;
 	if (n_look_ahds == 1)
@@ -908,8 +909,9 @@ static void reclaim_rx_ctrl_buf(struct htc_target *target,
 	spin_unlock_bh(&target->htc_lock);
 }
 
-static int dev_rx_pkt(struct htc_target *target, struct htc_packet *packet,
-		      u32 rx_len)
+static int ath6kl_htc_rx_packet(struct htc_target *target,
+				struct htc_packet *packet,
+				u32 rx_len)
 {
 	struct ath6kl_device *dev = target->dev;
 	u32 padded_len;
@@ -943,9 +945,9 @@ static int dev_rx_pkt(struct htc_target *target, struct htc_packet *packet,
  * "hint" that there are more  single-packets to fetch
  * on this endpoint.
  */
-static void set_rxpkt_indication_flag(u32 lk_ahd,
-				      struct htc_endpoint *endpoint,
-				      struct htc_packet *packet)
+static void ath6kl_htc_rx_set_indicate(u32 lk_ahd,
+				       struct htc_endpoint *endpoint,
+				       struct htc_packet *packet)
 {
 	struct htc_frame_hdr *htc_hdr = (struct htc_frame_hdr *)&lk_ahd;
 
@@ -956,7 +958,7 @@ static void set_rxpkt_indication_flag(u32 lk_ahd,
 	}
 }
 
-static void chk_rx_water_mark(struct htc_endpoint *endpoint)
+static void ath6kl_htc_rx_chk_water_mark(struct htc_endpoint *endpoint)
 {
 	struct htc_ep_callbacks ep_cb = endpoint->ep_cb;
 
@@ -973,8 +975,9 @@ static void chk_rx_water_mark(struct htc_endpoint *endpoint)
 }
 
 /* This function is called with rx_lock held */
-static int htc_setup_rxpkts(struct htc_target *target, struct htc_endpoint *ep,
-			    u32 *lk_ahds, struct list_head *queue, int n_msg)
+static int ath6kl_htc_rx_setup(struct htc_target *target,
+			       struct htc_endpoint *ep,
+			       u32 *lk_ahds, struct list_head *queue, int n_msg)
 {
 	struct htc_packet *packet;
 	/* FIXME: type of lk_ahds can't be right */
@@ -1074,10 +1077,10 @@ static int htc_setup_rxpkts(struct htc_target *target, struct htc_endpoint *ep,
 	return status;
 }
 
-static int alloc_and_prep_rxpkts(struct htc_target *target,
-				 u32 lk_ahds[], int msg,
-				 struct htc_endpoint *endpoint,
-				 struct list_head *queue)
+static int ath6kl_htc_rx_alloc(struct htc_target *target,
+			       u32 lk_ahds[], int msg,
+			       struct htc_endpoint *endpoint,
+			       struct list_head *queue)
 {
 	int status = 0;
 	struct htc_packet *packet, *tmp_pkt;
@@ -1143,8 +1146,8 @@ static int alloc_and_prep_rxpkts(struct htc_target *target,
 			n_msg = 1;
 
 		/* Setup packet buffers for each message */
-		status = htc_setup_rxpkts(target, endpoint, &lk_ahds[i], queue,
-					  n_msg);
+		status = ath6kl_htc_rx_setup(target, endpoint, &lk_ahds[i],
+					     queue, n_msg);
 
 		/*
 		 * This is due to unavailabilty of buffers to rx entire data.
@@ -1421,9 +1424,9 @@ static int htc_proc_trailer(struct htc_target *target,
 	return status;
 }
 
-static int htc_proc_rxhdr(struct htc_target *target,
-			  struct htc_packet *packet,
-			  u32 *next_lkahds, int *n_lkahds)
+static int ath6kl_htc_rx_process_hdr(struct htc_target *target,
+				     struct htc_packet *packet,
+				     u32 *next_lkahds, int *n_lkahds)
 {
 	int status = 0;
 	u16 payload_len;
@@ -1475,8 +1478,8 @@ static int htc_proc_rxhdr(struct htc_target *target,
 	}
 
 	if (lk_ahd != packet->info.rx.exp_hdr) {
-		ath6kl_err("htc_proc_rxhdr, lk_ahd mismatch! (pPkt:0x%p flags:0x%X)\n",
-			   packet, packet->info.rx.rx_flags);
+		ath6kl_err("%s(): lk_ahd mismatch! (pPkt:0x%p flags:0x%X)\n",
+			   __func__, packet, packet->info.rx.rx_flags);
 		ath6kl_dbg_dump(ATH6KL_DBG_RAW_BYTES, "Expected Message lk_ahd",
 				&packet->info.rx.exp_hdr, 4);
 		ath6kl_dbg_dump(ATH6KL_DBG_RAW_BYTES, "Current Frame Header",
@@ -1488,8 +1491,8 @@ static int htc_proc_rxhdr(struct htc_target *target,
 	if (htc_hdr->flags & HTC_FLG_RX_TRAILER) {
 		if (htc_hdr->ctrl[0] < sizeof(struct htc_record_hdr) ||
 		    htc_hdr->ctrl[0] > payload_len) {
-			ath6kl_err("htc_proc_rxhdr, invalid hdr (payload len should be :%d, CB[0] is:%d)\n",
-				   payload_len, htc_hdr->ctrl[0]);
+			ath6kl_err("%s(): invalid hdr (payload len should be :%d, CB[0] is:%d)\n",
+				   __func__, payload_len, htc_hdr->ctrl[0]);
 			status = -ENOMEM;
 			goto fail_rx;
 		}
@@ -1528,8 +1531,8 @@ fail_rx:
 	return status;
 }
 
-static void do_rx_completion(struct htc_endpoint *endpoint,
-			     struct htc_packet *packet)
+static void ath6kl_htc_rx_complete(struct htc_endpoint *endpoint,
+				   struct htc_packet *packet)
 {
 		ath6kl_dbg(ATH6KL_DBG_HTC_RECV,
 			   "htc calling ep %d recv callback on packet 0x%p\n",
@@ -1537,10 +1540,10 @@ static void do_rx_completion(struct htc_endpoint *endpoint,
 		endpoint->ep_cb.rx(endpoint->target, packet);
 }
 
-static int htc_issue_rxpkt_bundle(struct htc_target *target,
-				  struct list_head *rxq,
-				  struct list_head *sync_compq,
-				  int *n_pkt_fetched, bool part_bundle)
+static int ath6kl_htc_rx_bundle(struct htc_target *target,
+				struct list_head *rxq,
+				struct list_head *sync_compq,
+				int *n_pkt_fetched, bool part_bundle)
 {
 	struct hif_scatter_req *scat_req;
 	struct htc_packet *packet;
@@ -1562,15 +1565,15 @@ static int htc_issue_rxpkt_bundle(struct htc_target *target,
 		 * This would only happen if the target ignored our max
 		 * bundle limit.
 		 */
-		ath6kl_warn("htc_issue_rxpkt_bundle : partial bundle detected num:%d , %d\n",
-			    get_queue_depth(rxq), n_scat_pkt);
+		ath6kl_warn("%s(): partial bundle detected num:%d , %d\n",
+			    __func__, get_queue_depth(rxq), n_scat_pkt);
 	}
 
 	len = 0;
 
 	ath6kl_dbg(ATH6KL_DBG_HTC_RECV,
-		"htc_issue_rxpkt_bundle (numpackets: %d , actual : %d)\n",
-		get_queue_depth(rxq), n_scat_pkt);
+		   "%s(): (numpackets: %d , actual : %d)\n",
+		   __func__, get_queue_depth(rxq), n_scat_pkt);
 
 	scat_req = hif_scatter_req_get(target->dev->ar);
 
@@ -1630,9 +1633,10 @@ fail_rx_pkt:
 	return status;
 }
 
-static int htc_proc_fetched_rxpkts(struct htc_target *target,
-				   struct list_head *comp_pktq, u32 lk_ahds[],
-				   int *n_lk_ahd)
+static int ath6kl_htc_rx_process_packets(struct htc_target *target,
+					 struct list_head *comp_pktq,
+					 u32 lk_ahds[],
+					 int *n_lk_ahd)
 {
 	struct htc_packet *packet, *tmp_pkt;
 	struct htc_endpoint *ep;
@@ -1643,7 +1647,8 @@ static int htc_proc_fetched_rxpkts(struct htc_target *target,
 		ep = &target->endpoint[packet->endpoint];
 
 		/* process header for each of the recv packet */
-		status = htc_proc_rxhdr(target, packet, lk_ahds, n_lk_ahd);
+		status = ath6kl_htc_rx_process_hdr(target, packet, lk_ahds,
+						   n_lk_ahd);
 		if (status)
 			return status;
 
@@ -1653,8 +1658,8 @@ static int htc_proc_fetched_rxpkts(struct htc_target *target,
 			 * based on the lookahead.
 			 */
 			if (*n_lk_ahd > 0)
-				set_rxpkt_indication_flag(lk_ahds[0],
-							  ep, packet);
+				ath6kl_htc_rx_set_indicate(lk_ahds[0],
+							   ep, packet);
 		} else
 			/*
 			 * Packets in a bundle automatically have
@@ -1663,20 +1668,20 @@ static int htc_proc_fetched_rxpkts(struct htc_target *target,
 			packet->info.rx.indicat_flags |=
 				HTC_RX_FLAGS_INDICATE_MORE_PKTS;
 
-		htc_update_rx_stats(ep, *n_lk_ahd);
+		ath6kl_htc_rx_update_stats(ep, *n_lk_ahd);
 
 		if (packet->info.rx.rx_flags & HTC_RX_PKT_PART_OF_BUNDLE)
 			ep->ep_st.rx_bundl += 1;
 
-		do_rx_completion(ep, packet);
+		ath6kl_htc_rx_complete(ep, packet);
 	}
 
 	return status;
 }
 
-static int htc_fetch_rxpkts(struct htc_target *target,
-			    struct list_head *rx_pktq,
-			    struct list_head *comp_pktq)
+static int ath6kl_htc_rx_fetch(struct htc_target *target,
+			       struct list_head *rx_pktq,
+			       struct list_head *comp_pktq)
 {
 	int fetched_pkts;
 	bool part_bundle = false;
@@ -1692,10 +1697,10 @@ static int htc_fetch_rxpkts(struct htc_target *target,
 			 * bundle transfer and recv bundling is
 			 * allowed.
 			 */
-			status = htc_issue_rxpkt_bundle(target, rx_pktq,
-							comp_pktq,
-							&fetched_pkts,
-							part_bundle);
+			status = ath6kl_htc_rx_bundle(target, rx_pktq,
+						      comp_pktq,
+						      &fetched_pkts,
+						      part_bundle);
 			if (status)
 				return status;
 
@@ -1724,7 +1729,8 @@ static int htc_fetch_rxpkts(struct htc_target *target,
 					HTC_RX_PKT_IGNORE_LOOKAHEAD;
 
 			/* go fetch the packet */
-			status = dev_rx_pkt(target, packet, packet->act_len);
+			status = ath6kl_htc_rx_packet(target, packet,
+						      packet->act_len);
 			if (status)
 				return status;
 
@@ -1778,9 +1784,9 @@ int ath6kl_htc_rxmsg_pending_handler(struct htc_target *target,
 		 * Try to allocate as many HTC RX packets indicated by the
 		 * look_aheads.
 		 */
-		status = alloc_and_prep_rxpkts(target, look_aheads,
-					       num_look_ahead, endpoint,
-					       &rx_pktq);
+		status = ath6kl_htc_rx_alloc(target, look_aheads,
+					     num_look_ahead, endpoint,
+					     &rx_pktq);
 		if (status)
 			break;
 
@@ -1795,14 +1801,15 @@ int ath6kl_htc_rxmsg_pending_handler(struct htc_target *target,
 
 		num_look_ahead = 0;
 
-		status = htc_fetch_rxpkts(target, &rx_pktq, &comp_pktq);
+		status = ath6kl_htc_rx_fetch(target, &rx_pktq, &comp_pktq);
 
 		if (!status)
-			chk_rx_water_mark(endpoint);
+			ath6kl_htc_rx_chk_water_mark(endpoint);
 
 		/* Process fetched packets */
-		status = htc_proc_fetched_rxpkts(target, &comp_pktq,
-						 look_aheads, &num_look_ahead);
+		status = ath6kl_htc_rx_process_packets(target, &comp_pktq,
+						       look_aheads,
+						       &num_look_ahead);
 
 		if (!num_look_ahead || status)
 			break;
@@ -1895,14 +1902,14 @@ static struct htc_packet *htc_wait_for_ctrl_msg(struct htc_target *target)
 	packet->completion = NULL;
 
 	/* get the message from the device, this will block */
-	if (dev_rx_pkt(target, packet, packet->act_len))
+	if (ath6kl_htc_rx_packet(target, packet, packet->act_len))
 		goto fail_ctrl_rx;
 
 	/* process receive header */
-	packet->status = htc_proc_rxhdr(target, packet, NULL, NULL);
+	packet->status = ath6kl_htc_rx_process_hdr(target, packet, NULL, NULL);
 
 	if (packet->status) {
-		ath6kl_err("htc_wait_for_ctrl_msg, htc_proc_rxhdr failed (status = %d)\n",
+		ath6kl_err("htc_wait_for_ctrl_msg, ath6kl_htc_rx_process_hdr failed (status = %d)\n",
 			   packet->status);
 		goto fail_ctrl_rx;
 	}
@@ -1949,7 +1956,7 @@ int ath6kl_htc_add_rxbuf_multiple(struct htc_target *target,
 		list_for_each_entry_safe(packet, tmp_pkt, pkt_queue, list) {
 			packet->status = -ECANCELED;
 			list_del(&packet->list);
-			do_rx_completion(endpoint, packet);
+			ath6kl_htc_rx_complete(endpoint, packet);
 		}
 
 		return status;
@@ -2048,8 +2055,8 @@ int ath6kl_htc_conn_service(struct htc_target *target,
 
 		/* we want synchronous operation */
 		tx_pkt->completion = NULL;
-		htc_prep_send_pkt(tx_pkt, 0, 0, 0);
-		status = htc_issue_send(target, tx_pkt);
+		ath6kl_htc_tx_prep_pkt(tx_pkt, 0, 0, 0);
+		status = ath6kl_htc_tx_issue(target, tx_pkt);
 
 		if (status)
 			goto fail_tx;
