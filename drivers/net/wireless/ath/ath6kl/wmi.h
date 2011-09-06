@@ -1275,11 +1275,30 @@ struct wmi_ready_event_2 {
 
 /* Connect Event */
 struct wmi_connect_event {
-	__le16 ch;
-	u8 bssid[ETH_ALEN];
-	__le16 listen_intvl;
-	__le16 beacon_intvl;
-	__le32 nw_type;
+	union {
+		struct {
+			__le16 ch;
+			u8 bssid[ETH_ALEN];
+			__le16 listen_intvl;
+			__le16 beacon_intvl;
+			__le32 nw_type;
+		} sta;
+		struct {
+			u8 phymode;
+			u8 aid;
+			u8 mac_addr[ETH_ALEN];
+			u8 auth;
+			u8 keymgmt;
+			__le16 cipher;
+			u8 apsd_info;
+			u8 unused[3];
+		} ap_sta;
+		struct {
+			__le16 ch;
+			u8 bssid[ETH_ALEN];
+			u8 unused[8];
+		} ap_bss;
+	} u;
 	u8 beacon_ie_len;
 	u8 assoc_req_len;
 	u8 assoc_resp_len;
@@ -1304,6 +1323,12 @@ enum wmi_disconnect_reason {
 	PROFILE_MISMATCH = 0x0c,
 	CONNECTION_EVICTED = 0x0d,
 	IBSS_MERGE = 0xe,
+};
+
+#define ATH6KL_COUNTRY_RD_SHIFT        16
+
+struct ath6kl_wmi_regdomain {
+	__le32 reg_code;
 };
 
 struct wmi_disconnect_event {
@@ -1922,6 +1947,7 @@ struct wmi_ap_set_mlme_cmd {
 
 struct wmi_ap_set_pvb_cmd {
 	__le32 flag;
+	__le16 rsvd;
 	__le16 aid;
 } __packed;
 

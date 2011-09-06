@@ -18,6 +18,8 @@
 #include "core.h"
 #include "debug.h"
 #include "testmode.h"
+#include "../regd.h"
+#include "../regd_common.h"
 
 static int ath6kl_wmi_sync_point(struct wmi *wmi);
 
@@ -699,14 +701,47 @@ static int ath6kl_wmi_connect_event_rx(struct wmi *wmi, u8 *datap, int len)
 {
 	struct wmi_connect_event *ev;
 	u8 *pie, *peie;
+	struct ath6kl *ar = wmi->parent_dev;
 
 	if (len < sizeof(struct wmi_connect_event))
 		return -EINVAL;
 
 	ev = (struct wmi_connect_event *) datap;
 
+	if (ar->nw_type == AP_NETWORK) {
+		/* AP mode start/STA connected event */
+		struct net_device *dev = ar->net_dev;
+		if (memcmp(dev->dev_addr, ev->u.ap_bss.bssid, ETH_ALEN) == 0) {
+			ath6kl_dbg(ATH6KL_DBG_WMI, "%s: freq %d bssid %pM "
+				   "(AP started)\n",
+				   __func__, le16_to_cpu(ev->u.ap_bss.ch),
+				   ev->u.ap_bss.bssid);
+			ath6kl_connect_ap_mode_bss(
+				ar, le16_to_cpu(ev->u.ap_bss.ch));
+		} else {
+			ath6kl_dbg(ATH6KL_DBG_WMI, "%s: aid %u mac_addr %pM "
+				   "auth=%u keymgmt=%u cipher=%u apsd_info=%u "
+				   "(STA connected)\n",
+				   __func__, ev->u.ap_sta.aid,
+				   ev->u.ap_sta.mac_addr,
+				   ev->u.ap_sta.auth,
+				   ev->u.ap_sta.keymgmt,
+				   le16_to_cpu(ev->u.ap_sta.cipher),
+				   ev->u.ap_sta.apsd_info);
+			ath6kl_connect_ap_mode_sta(
+				ar, ev->u.ap_sta.aid, ev->u.ap_sta.mac_addr,
+				ev->u.ap_sta.keymgmt,
+				le16_to_cpu(ev->u.ap_sta.cipher),
+				ev->u.ap_sta.auth, ev->assoc_req_len,
+				ev->assoc_info + ev->beacon_ie_len);
+		}
+		return 0;
+	}
+
+	/* STA/IBSS mode connection event */
+
 	ath6kl_dbg(ATH6KL_DBG_WMI, "%s: freq %d bssid %pM\n",
-		   __func__, ev->ch, ev->bssid);
+		   __func__, le16_to_cpu(ev->u.sta.ch), ev->u.sta.bssid);
 
 	/* Start of assoc rsp IEs */
 	pie = ev->assoc_info + ev->beacon_ie_len +
@@ -735,14 +770,90 @@ static int ath6kl_wmi_connect_event_rx(struct wmi *wmi, u8 *datap, int len)
 		pie += pie[1] + 2;
 	}
 
-	ath6kl_connect_event(wmi->parent_dev, le16_to_cpu(ev->ch), ev->bssid,
-			     le16_to_cpu(ev->listen_intvl),
-			     le16_to_cpu(ev->beacon_intvl),
-			     le32_to_cpu(ev->nw_type),
+	ath6kl_connect_event(wmi->parent_dev, le16_to_cpu(ev->u.sta.ch),
+			     ev->u.sta.bssid,
+			     le16_to_cpu(ev->u.sta.listen_intvl),
+			     le16_to_cpu(ev->u.sta.beacon_intvl),
+			     le32_to_cpu(ev->u.sta.nw_type),
 			     ev->beacon_ie_len, ev->assoc_req_len,
 			     ev->assoc_resp_len, ev->assoc_info);
 
 	return 0;
+}
+
+static struct country_code_to_enum_rd *
+ath6kl_regd_find_country(u16 countryCode)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(allCountries); i++) {
+		if (allCountries[i].countryCode == countryCode)
+			return &allCountries[i];
+	}
+
+	return NULL;
+}
+
+static struct reg_dmn_pair_mapping *
+ath6kl_get_regpair(u16 regdmn)
+{
+	int i;
+
+	if (regdmn == NO_ENUMRD)
+		return NULL;
+
+	for (i = 0; i < ARRAY_SIZE(regDomainPairs); i++) {
+		if (regDomainPairs[i].regDmnEnum == regdmn)
+			return &regDomainPairs[i];
+	}
+
+	return NULL;
+}
+
+static struct country_code_to_enum_rd *
+ath6kl_regd_find_country_by_rd(u16 regdmn)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(allCountries); i++) {
+		if (allCountries[i].regDmnEnum == regdmn)
+			return &allCountries[i];
+	}
+
+	return NULL;
+}
+
+static void ath6kl_wmi_regdomain_event(struct wmi *wmi, u8 *datap, int len)
+{
+
+	struct ath6kl_wmi_regdomain *ev;
+	struct country_code_to_enum_rd *country = NULL;
+	struct reg_dmn_pair_mapping *regpair = NULL;
+	char alpha2[2];
+	u32 reg_code;
+
+	ev = (struct ath6kl_wmi_regdomain *) datap;
+	reg_code = le32_to_cpu(ev->reg_code);
+
+	if ((reg_code >> ATH6KL_COUNTRY_RD_SHIFT) & COUNTRY_ERD_FLAG)
+		country = ath6kl_regd_find_country((u16) reg_code);
+	else if (!(((u16) reg_code & WORLD_SKU_MASK) == WORLD_SKU_PREFIX)) {
+
+		regpair = ath6kl_get_regpair((u16) reg_code);
+		country = ath6kl_regd_find_country_by_rd((u16) reg_code);
+		ath6kl_dbg(ATH6KL_DBG_WMI, "ath6kl: Regpair used: 0x%0x\n",
+				regpair->regDmnEnum);
+	}
+
+	if (country) {
+		alpha2[0] = country->isoName[0];
+		alpha2[1] = country->isoName[1];
+
+		regulatory_hint(wmi->parent_dev->wdev->wiphy, alpha2);
+
+		ath6kl_dbg(ATH6KL_DBG_WMI, "ath6kl: Country alpha2 being used: %c%c\n",
+				alpha2[0], alpha2[1]);
+	}
 }
 
 static int ath6kl_wmi_disconnect_event_rx(struct wmi *wmi, u8 *datap, int len)
@@ -2740,6 +2851,7 @@ int ath6kl_wmi_set_pvb_cmd(struct wmi *wmi, u16 aid, bool flag)
 
 	cmd = (struct wmi_ap_set_pvb_cmd *) skb->data;
 	cmd->aid = cpu_to_le16(aid);
+	cmd->rsvd = cpu_to_le16(0);
 	cmd->flag = cpu_to_le32(flag);
 
 	ret = ath6kl_wmi_cmd_send(wmi, skb, WMI_AP_SET_PVB_CMDID,
@@ -3033,6 +3145,7 @@ int ath6kl_wmi_control_rx(struct wmi *wmi, struct sk_buff *skb)
 		break;
 	case WMI_REGDOMAIN_EVENTID:
 		ath6kl_dbg(ATH6KL_DBG_WMI, "WMI_REGDOMAIN_EVENTID\n");
+		ath6kl_wmi_regdomain_event(wmi, datap, len);
 		break;
 	case WMI_PSTREAM_TIMEOUT_EVENTID:
 		ath6kl_dbg(ATH6KL_DBG_WMI, "WMI_PSTREAM_TIMEOUT_EVENTID\n");
