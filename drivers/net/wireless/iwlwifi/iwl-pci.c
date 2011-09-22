@@ -481,8 +481,7 @@ out_no_pci:
 
 static void __devexit iwl_pci_remove(struct pci_dev *pdev)
 {
-	struct iwl_shared *shrd = pci_get_drvdata(pdev);
-	struct iwl_bus *bus = shrd->bus;
+	struct iwl_bus *bus = pci_get_drvdata(pdev);
 	struct iwl_pci_bus *pci_bus = IWL_BUS_GET_PCI_BUS(bus);
 	struct pci_dev *pci_dev = IWL_BUS_GET_PCI_DEV(bus);
 	struct iwl_shared *shrd = bus->shrd;
