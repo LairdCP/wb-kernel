@@ -1393,33 +1393,14 @@ struct roam_ctrl_cmd {
 	u8 roam_ctrl;
 } __packed;
 
-struct wmi_bss_info_hdr {
-	__le16 ch;
-
-	/* see, enum wmi_bi_ftype */
-	u8 frame_type;
-
-	u8 snr;
-	a_sle16 rssi;
-	u8 bssid[ETH_ALEN];
-	__le32 ie_mask;
-} __packed;
-
-/*
- * BSS INFO HDR version 2.0
- * With 6 bytes HTC header and 6 bytes of WMI header
- * WMI_BSS_INFO_HDR cannot be accommodated in the removed 802.11 management
- * header space.
- * - Reduce the ie_mask to 2 bytes as only two bit flags are used
- * - Remove rssi and compute it on the host. rssi = snr - 95
- */
+/* BSS INFO HDR version 2.0 */
 struct wmi_bss_info_hdr2 {
-	__le16 ch;
+	__le16 ch; /* frequency in MHz */
 
 	/* see, enum wmi_bi_ftype */
 	u8 frame_type;
 
-	u8 snr;
+	u8 snr; /* note: rssi = snr - 95 dBm */
 	u8 bssid[ETH_ALEN];
 	__le16 ie_mask;
 } __packed;
@@ -1457,6 +1438,16 @@ enum wmi_bss_flags {
 	WMI_PREAUTH_CAPABLE_BSS = 0x01,
 	WMI_PMKID_VALID_BSS = 0x02,
 };
+
+struct wmi_neighbor_info {
+	u8 bssid[ETH_ALEN];
+	u8 bss_flags; /* enum wmi_bss_flags */
+} __packed;
+
+struct wmi_neighbor_report_event {
+	u8 num_neighbors;
+	struct wmi_neighbor_info neighbor[0];
+} __packed;
 
 /* TKIP MIC Error Event */
 struct wmi_tkip_micerr_event {
@@ -2181,8 +2172,6 @@ int ath6kl_wmi_implicit_create_pstream(struct wmi *wmi, struct sk_buff *skb,
 				       u8 *ac);
 
 int ath6kl_wmi_control_rx(struct wmi *wmi, struct sk_buff *skb);
-struct bss *ath6kl_wmi_find_node(struct wmi *wmi, const u8 *mac_addr);
-void ath6kl_wmi_node_free(struct wmi *wmi, const u8 *mac_addr);
 
 int ath6kl_wmi_cmd_send(struct wmi *wmi, struct sk_buff *skb,
 			enum wmi_cmd_id cmd_id, enum wmi_sync_flag sync_flag);
@@ -2252,12 +2241,6 @@ s32 ath6kl_wmi_get_rate(s8 rate_index);
 
 int ath6kl_wmi_set_ip_cmd(struct wmi *wmi, struct wmi_set_ip_cmd *ip_cmd);
 int ath6kl_wmi_set_roam_lrssi_cmd(struct wmi *wmi, u8 lrssi);
-
-struct bss *ath6kl_wmi_find_ssid_node(struct wmi *wmi, u8 *ssid,
-				      u32 ssid_len, bool is_wpa2,
-				      bool match_ssid);
-
-void ath6kl_wmi_node_return(struct wmi *wmi, struct bss *bss);
 
 /* AP mode */
 int ath6kl_wmi_ap_profile_commit(struct wmi *wmip, struct wmi_connect_cmd *p);

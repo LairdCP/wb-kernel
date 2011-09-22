@@ -394,6 +394,8 @@ struct ath6kl_req_key {
 #define SKIP_SCAN	     11
 #define WLAN_ENABLED	     12
 #define TESTMODE	     13
+#define CLEAR_BSSFILTER_ON_BEACON 14
+#define DTIM_PERIOD_AVAIL    15
 
 struct ath6kl {
 	struct device *dev;
@@ -503,7 +505,6 @@ struct ath6kl {
 
 	struct workqueue_struct *ath6kl_wq;
 
-	struct ath6kl_node_table scan_table;
 	struct dentry *debugfs_phy;
 
 	u32 send_action_id;
@@ -511,6 +512,8 @@ struct ath6kl {
 	u16 next_chan;
 
 	bool p2p;
+	u16 assoc_bss_beacon_int;
+	u8 assoc_bss_dtim_period;
 
 #ifdef CONFIG_ATH6KL_DEBUG
 	struct {
@@ -626,5 +629,4 @@ void aggr_recv_addba_req_evt(struct ath6kl *ar, u8 tid, u16 seq_no,
 void ath6kl_wakeup_event(void *dev);
 void ath6kl_target_failure(struct ath6kl *ar);
 
-void ath6kl_cfg80211_scan_node(struct wiphy *wiphy, struct bss *ni);
 #endif /* CORE_H */

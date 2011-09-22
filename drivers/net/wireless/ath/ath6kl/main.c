@@ -1011,8 +1011,10 @@ void ath6kl_scan_complete_evt(struct ath6kl *ar, int status)
 {
 	ath6kl_cfg80211_scan_complete_event(ar, status);
 
-	if (!ar->usr_bss_filter)
+	if (!ar->usr_bss_filter) {
+		clear_bit(CLEAR_BSSFILTER_ON_BEACON, &ar->flag);
 		ath6kl_wmi_bssfilter_cmd(ar->wmi, NONE_BSS_FILTER, 0);
+	}
 
 	ath6kl_dbg(ATH6KL_DBG_WLAN_SCAN, "scan complete: %d\n", status);
 }
@@ -1056,8 +1058,10 @@ void ath6kl_connect_event(struct ath6kl *ar, u16 channel, u8 *bssid,
 		ar->next_ep_id = ENDPOINT_2;
 	}
 
-	if (!ar->usr_bss_filter)
-		ath6kl_wmi_bssfilter_cmd(ar->wmi, NONE_BSS_FILTER, 0);
+	if (!ar->usr_bss_filter) {
+		set_bit(CLEAR_BSSFILTER_ON_BEACON, &ar->flag);
+		ath6kl_wmi_bssfilter_cmd(ar->wmi, CURRENT_BSS_FILTER, 0);
+	}
 }
 
 void ath6kl_tkip_micerr_event(struct ath6kl *ar, u8 keyid, bool ismcast)
@@ -1091,25 +1095,10 @@ static void ath6kl_update_target_stats(struct ath6kl *ar, u8 *ptr, u32 len)
 		(struct wmi_target_stats *) ptr;
 	struct target_stats *stats = &ar->target_stats;
 	struct tkip_ccmp_stats *ccmp_stats;
-	struct bss *conn_bss = NULL;
-	struct cserv_stats *c_stats;
 	u8 ac;
 
 	if (len < sizeof(*tgt_stats))
 		return;
-
-	/* update the RSSI of the connected bss */
-	if (test_bit(CONNECTED, &ar->flag)) {
-		conn_bss = ath6kl_wmi_find_node(ar->wmi, ar->bssid);
-		if (conn_bss) {
-			c_stats = &tgt_stats->cserv_stats;
-			conn_bss->ni_rssi =
-				a_sle16_to_cpu(c_stats->cs_ave_beacon_rssi);
-			conn_bss->ni_snr =
-				tgt_stats->cserv_stats.cs_ave_beacon_snr;
-			ath6kl_wmi_node_return(ar->wmi, conn_bss);
-		}
-	}
 
 	ath6kl_dbg(ATH6KL_DBG_TRC, "updating target stats\n");
 
@@ -1341,7 +1330,6 @@ void ath6kl_disconnect_event(struct ath6kl *ar, u8 reason, u8 *bssid,
 			     u8 assoc_resp_len, u8 *assoc_info,
 			     u16 prot_reason_status)
 {
-	struct bss *wmi_ssid_node = NULL;
 	unsigned long flags;
 
 	if (ar->nw_type == AP_NETWORK) {
@@ -1399,33 +1387,6 @@ void ath6kl_disconnect_event(struct ath6kl *ar, u8 reason, u8 *bssid,
 			set_bit(CONNECTED, &ar->flag);
 			return;
 		}
-	}
-
-	if ((reason == NO_NETWORK_AVAIL) && test_bit(WMI_READY, &ar->flag))  {
-		ath6kl_wmi_node_free(ar->wmi, bssid);
-
-		/*
-		 * In case any other same SSID nodes are present remove it,
-		 * since those nodes also not available now.
-		 */
-		do {
-			/*
-			 * Find the nodes based on SSID and remove it
-			 *
-			 * Note: This case will not work out for
-			 * Hidden-SSID
-			 */
-			wmi_ssid_node = ath6kl_wmi_find_ssid_node(ar->wmi,
-								  ar->ssid,
-								  ar->ssid_len,
-								  false,
-								  true);
-
-			if (wmi_ssid_node)
-				ath6kl_wmi_node_free(ar->wmi,
-						     wmi_ssid_node->ni_macaddr);
-
-		} while (wmi_ssid_node);
 	}
 
 	/* update connect & link status atomically */

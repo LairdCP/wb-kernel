@@ -381,25 +381,6 @@ int ath6kl_wmi_dot3_2_dix(struct sk_buff *skb)
 	return 0;
 }
 
-static void ath6kl_wmi_convert_bssinfo_hdr2_to_hdr(struct sk_buff *skb,
-						   u8 *datap)
-{
-	struct wmi_bss_info_hdr2 bih2;
-	struct wmi_bss_info_hdr *bih;
-
-	memcpy(&bih2, datap, sizeof(struct wmi_bss_info_hdr2));
-
-	skb_push(skb, 4);
-	bih = (struct wmi_bss_info_hdr *) skb->data;
-
-	bih->ch = bih2.ch;
-	bih->frame_type = bih2.frame_type;
-	bih->snr = bih2.snr;
-	bih->rssi = a_cpu_to_sle16(bih2.snr - 95);
-	bih->ie_mask = cpu_to_le32(le16_to_cpu(bih2.ie_mask));
-	memcpy(bih->bssid, bih2.bssid, ETH_ALEN);
-}
-
 static int ath6kl_wmi_tx_complete_event_rx(u8 *datap, int len)
 {
 	struct tx_complete_msg_v1 *msg_v1;
@@ -910,315 +891,92 @@ static int ath6kl_wmi_tkip_micerr_event_rx(struct wmi *wmi, u8 *datap, int len)
 	return 0;
 }
 
-static int ath6kl_wlan_parse_beacon(u8 *buf, int frame_len,
-				    struct ath6kl_common_ie *cie)
-{
-	u8 *frm, *efrm;
-	u8 elemid_ssid = false;
-
-	frm = buf;
-	efrm = (u8 *) (frm + frame_len);
-
-	/*
-	 * beacon/probe response frame format
-	 *  [8] time stamp
-	 *  [2] beacon interval
-	 *  [2] capability information
-	 *  [tlv] ssid
-	 *  [tlv] supported rates
-	 *  [tlv] country information
-	 *  [tlv] parameter set (FH/DS)
-	 *  [tlv] erp information
-	 *  [tlv] extended supported rates
-	 *  [tlv] WMM
-	 *  [tlv] WPA or RSN
-	 *  [tlv] Atheros Advanced Capabilities
-	 */
-	if ((efrm - frm) < 12)
-		return -EINVAL;
-
-	memset(cie, 0, sizeof(*cie));
-
-	cie->ie_tstamp = frm;
-	frm += 8;
-	cie->ie_beaconInt = *(u16 *) frm;
-	frm += 2;
-	cie->ie_capInfo = *(u16 *) frm;
-	frm += 2;
-	cie->ie_chan = 0;
-
-	while (frm < efrm) {
-		switch (*frm) {
-		case WLAN_EID_SSID:
-			if (!elemid_ssid) {
-				cie->ie_ssid = frm;
-				elemid_ssid = true;
-			}
-			break;
-		case WLAN_EID_SUPP_RATES:
-			cie->ie_rates = frm;
-			break;
-		case WLAN_EID_COUNTRY:
-			cie->ie_country = frm;
-			break;
-		case WLAN_EID_FH_PARAMS:
-			break;
-		case WLAN_EID_DS_PARAMS:
-			cie->ie_chan = frm[2];
-			break;
-		case WLAN_EID_TIM:
-			cie->ie_tim = frm;
-			break;
-		case WLAN_EID_IBSS_PARAMS:
-			break;
-		case WLAN_EID_EXT_SUPP_RATES:
-			cie->ie_xrates = frm;
-			break;
-		case WLAN_EID_ERP_INFO:
-			if (frm[1] != 1)
-				return -EINVAL;
-
-			cie->ie_erp = frm[2];
-			break;
-		case WLAN_EID_RSN:
-			cie->ie_rsn = frm;
-			break;
-		case WLAN_EID_HT_CAPABILITY:
-			cie->ie_htcap = frm;
-			break;
-		case WLAN_EID_HT_INFORMATION:
-			cie->ie_htop = frm;
-			break;
-		case WLAN_EID_VENDOR_SPECIFIC:
-			if (frm[1] > 3 && frm[2] == 0x00 && frm[3] == 0x50 &&
-			    frm[4] == 0xf2) {
-				/* OUT Type (00:50:F2) */
-
-				if (frm[5] == WPA_OUI_TYPE) {
-					/* WPA OUT */
-					cie->ie_wpa = frm;
-				} else if (frm[5] == WMM_OUI_TYPE) {
-					/* WMM OUT */
-					cie->ie_wmm = frm;
-				} else if (frm[5] == WSC_OUT_TYPE) {
-					/* WSC OUT */
-					cie->ie_wsc = frm;
-				}
-
-			} else if (frm[1] > 3 && frm[2] == 0x00
-				   && frm[3] == 0x03 && frm[4] == 0x7f
-				   && frm[5] == ATH_OUI_TYPE) {
-				/* Atheros OUI (00:03:7f) */
-				cie->ie_ath = frm;
-			}
-			break;
-		default:
-			break;
-		}
-		frm += frm[1] + 2;
-	}
-
-	if ((cie->ie_rates == NULL)
-	    || (cie->ie_rates[1] > ATH6KL_RATE_MAXSIZE))
-		return -EINVAL;
-
-	if ((cie->ie_ssid == NULL)
-	    || (cie->ie_ssid[1] > IEEE80211_MAX_SSID_LEN))
-		return -EINVAL;
-
-	return 0;
-}
-
 static int ath6kl_wmi_bssinfo_event_rx(struct wmi *wmi, u8 *datap, int len)
 {
-	struct bss *bss = NULL;
-	struct wmi_bss_info_hdr *bih;
-	u8 cached_ssid_len = 0;
-	u8 cached_ssid[IEEE80211_MAX_SSID_LEN] = { 0 };
-	u8 beacon_ssid_len = 0;
-	u8 *buf, *ie_ssid;
-	u8 *ni_buf;
-	int buf_len;
+	struct wmi_bss_info_hdr2 *bih;
+	u8 *buf;
+	struct ieee80211_channel *channel;
+	struct ath6kl *ar = wmi->parent_dev;
+	struct ieee80211_mgmt *mgmt;
+	struct cfg80211_bss *bss;
 
-	int ret;
-
-	if (len <= sizeof(struct wmi_bss_info_hdr))
+	if (len <= sizeof(struct wmi_bss_info_hdr2))
 		return -EINVAL;
 
-	bih = (struct wmi_bss_info_hdr *) datap;
-	bss = wlan_find_node(&wmi->parent_dev->scan_table, bih->bssid);
-
-	if (a_sle16_to_cpu(bih->rssi) > 0) {
-		if (bss == NULL)
-			return 0;
-		else
-			bih->rssi = a_cpu_to_sle16(bss->ni_rssi);
-	}
-
-	buf = datap + sizeof(struct wmi_bss_info_hdr);
-	len -= sizeof(struct wmi_bss_info_hdr);
+	bih = (struct wmi_bss_info_hdr2 *) datap;
+	buf = datap + sizeof(struct wmi_bss_info_hdr2);
+	len -= sizeof(struct wmi_bss_info_hdr2);
 
 	ath6kl_dbg(ATH6KL_DBG_WMI,
-		   "bss info evt - ch %u, rssi %02x, bssid \"%pM\"\n",
-		   bih->ch, a_sle16_to_cpu(bih->rssi), bih->bssid);
+		   "bss info evt - ch %u, snr %d, rssi %d, bssid \"%pM\" "
+		   "frame_type=%d\n",
+		   bih->ch, bih->snr, bih->snr - 95, bih->bssid,
+		   bih->frame_type);
 
-	if (bss != NULL) {
-		/*
-		 * Free up the node. We are about to allocate a new node.
-		 * In case of hidden AP, beacon will not have ssid,
-		 * but a directed probe response will have it,
-		 * so cache the probe-resp-ssid if already present.
-		 */
-		if (wmi->is_probe_ssid && (bih->frame_type == BEACON_FTYPE)) {
-			ie_ssid = bss->ni_cie.ie_ssid;
-			if (ie_ssid && (ie_ssid[1] <= IEEE80211_MAX_SSID_LEN) &&
-			    (ie_ssid[2] != 0)) {
-				cached_ssid_len = ie_ssid[1];
-				memcpy(cached_ssid, ie_ssid + 2,
-				       cached_ssid_len);
-			}
+	if (bih->frame_type != BEACON_FTYPE &&
+	    bih->frame_type != PROBERESP_FTYPE)
+		return 0; /* Only update BSS table for now */
+
+	if (bih->frame_type == BEACON_FTYPE &&
+	    test_bit(CLEAR_BSSFILTER_ON_BEACON, &ar->flag)) {
+		clear_bit(CLEAR_BSSFILTER_ON_BEACON, &ar->flag);
+		ath6kl_wmi_bssfilter_cmd(ar->wmi, NONE_BSS_FILTER, 0);
+	}
+
+	channel = ieee80211_get_channel(ar->wdev->wiphy, le16_to_cpu(bih->ch));
+	if (channel == NULL)
+		return -EINVAL;
+
+	if (len < 8 + 2 + 2)
+		return -EINVAL;
+
+	if (bih->frame_type == BEACON_FTYPE && test_bit(CONNECTED, &ar->flag) &&
+	    memcmp(bih->bssid, ar->bssid, ETH_ALEN) == 0) {
+		const u8 *tim;
+		tim = cfg80211_find_ie(WLAN_EID_TIM, buf + 8 + 2 + 2,
+				       len - 8 - 2 - 2);
+		if (tim && tim[1] >= 2) {
+			ar->assoc_bss_dtim_period = tim[3];
+			set_bit(DTIM_PERIOD_AVAIL, &ar->flag);
 		}
-
-		/*
-		 * Use the current average rssi of associated AP base on
-		 * assumption
-		 *   1. Most os with GUI will update RSSI by
-		 *      ath6kl_wmi_get_stats_cmd() periodically.
-		 *   2. ath6kl_wmi_get_stats_cmd(..) will be called when calling
-		 *      ath6kl_wmi_startscan_cmd(...)
-		 * The average value of RSSI give end-user better feeling for
-		 * instance value of scan result. It also sync up RSSI info
-		 * in GUI between scan result and RSSI signal icon.
-		 */
-		if (memcmp(wmi->parent_dev->bssid, bih->bssid, ETH_ALEN) == 0) {
-			bih->rssi = a_cpu_to_sle16(bss->ni_rssi);
-			bih->snr = bss->ni_snr;
-		}
-
-		wlan_node_reclaim(&wmi->parent_dev->scan_table, bss);
 	}
 
 	/*
-	 * beacon/probe response frame format
-	 *  [8] time stamp
-	 *  [2] beacon interval
-	 *  [2] capability information
-	 *  [tlv] ssid
+	 * In theory, use of cfg80211_inform_bss() would be more natural here
+	 * since we do not have the full frame. However, at least for now,
+	 * cfg80211 can only distinguish Beacon and Probe Response frames from
+	 * each other when using cfg80211_inform_bss_frame(), so let's build a
+	 * fake IEEE 802.11 header to be able to take benefit of this.
 	 */
-	beacon_ssid_len = buf[SSID_IE_LEN_INDEX];
+	mgmt = kmalloc(24 + len, GFP_ATOMIC);
+	if (mgmt == NULL)
+		return -EINVAL;
 
-	/*
-	 * If ssid is cached for this hidden AP, then change
-	 * buffer len accordingly.
-	 */
-	if (wmi->is_probe_ssid && (bih->frame_type == BEACON_FTYPE) &&
-	    (cached_ssid_len != 0) &&
-	    (beacon_ssid_len == 0 || (cached_ssid_len > beacon_ssid_len &&
-				      buf[SSID_IE_LEN_INDEX + 1] == 0))) {
+	if (bih->frame_type == BEACON_FTYPE) {
+		mgmt->frame_control = cpu_to_le16(IEEE80211_FTYPE_MGMT |
+						  IEEE80211_STYPE_BEACON);
+		memset(mgmt->da, 0xff, ETH_ALEN);
+	} else {
+		struct net_device *dev = ar->net_dev;
 
-		len += (cached_ssid_len - beacon_ssid_len);
+		mgmt->frame_control = cpu_to_le16(IEEE80211_FTYPE_MGMT |
+						  IEEE80211_STYPE_PROBE_RESP);
+		memcpy(mgmt->da, dev->dev_addr, ETH_ALEN);
 	}
+	mgmt->duration = cpu_to_le16(0);
+	memcpy(mgmt->sa, bih->bssid, ETH_ALEN);
+	memcpy(mgmt->bssid, bih->bssid, ETH_ALEN);
+	mgmt->seq_ctrl = cpu_to_le16(0);
 
-	bss = wlan_node_alloc(len);
-	if (!bss)
+	memcpy(&mgmt->u.beacon, buf, len);
+
+	bss = cfg80211_inform_bss_frame(ar->wdev->wiphy, channel, mgmt,
+					24 + len, (bih->snr - 95) * 100,
+					GFP_ATOMIC);
+	kfree(mgmt);
+	if (bss == NULL)
 		return -ENOMEM;
-
-	bss->ni_snr = bih->snr;
-	bss->ni_rssi = a_sle16_to_cpu(bih->rssi);
-
-	if (WARN_ON(!bss->ni_buf))
-		return -EINVAL;
-
-	/*
-	 * In case of hidden AP, beacon will not have ssid,
-	 * but a directed probe response will have it,
-	 * so place the cached-ssid(probe-resp) in the bss info.
-	 */
-	if (wmi->is_probe_ssid && (bih->frame_type == BEACON_FTYPE) &&
-	    (cached_ssid_len != 0) &&
-	    (beacon_ssid_len == 0 || (beacon_ssid_len &&
-				      buf[SSID_IE_LEN_INDEX + 1] == 0))) {
-		ni_buf = bss->ni_buf;
-		buf_len = len;
-
-		/*
-		 * Copy the first 14 bytes:
-		 * time-stamp(8), beacon-interval(2),
-		 * cap-info(2), ssid-id(1), ssid-len(1).
-		 */
-		memcpy(ni_buf, buf, SSID_IE_LEN_INDEX + 1);
-
-		ni_buf[SSID_IE_LEN_INDEX] = cached_ssid_len;
-		ni_buf += (SSID_IE_LEN_INDEX + 1);
-
-		buf += (SSID_IE_LEN_INDEX + 1);
-		buf_len -= (SSID_IE_LEN_INDEX + 1);
-
-		memcpy(ni_buf, cached_ssid, cached_ssid_len);
-		ni_buf += cached_ssid_len;
-
-		buf += beacon_ssid_len;
-		buf_len -= beacon_ssid_len;
-
-		if (cached_ssid_len > beacon_ssid_len)
-			buf_len -= (cached_ssid_len - beacon_ssid_len);
-
-		memcpy(ni_buf, buf, buf_len);
-	} else
-		memcpy(bss->ni_buf, buf, len);
-
-	bss->ni_framelen = len;
-
-	ret = ath6kl_wlan_parse_beacon(bss->ni_buf, len, &bss->ni_cie);
-	if (ret) {
-		wlan_node_free(bss);
-		return -EINVAL;
-	}
-
-	/*
-	 * Update the frequency in ie_chan, overwriting of channel number
-	 * which is done in ath6kl_wlan_parse_beacon
-	 */
-	bss->ni_cie.ie_chan = le16_to_cpu(bih->ch);
-	wlan_setup_node(&wmi->parent_dev->scan_table, bss, bih->bssid);
-
-	return 0;
-}
-
-static int ath6kl_wmi_opt_frame_event_rx(struct wmi *wmi, u8 *datap, int len)
-{
-	struct bss *bss;
-	struct wmi_opt_rx_info_hdr *bih;
-	u8 *buf;
-
-	if (len <= sizeof(struct wmi_opt_rx_info_hdr))
-		return -EINVAL;
-
-	bih = (struct wmi_opt_rx_info_hdr *) datap;
-	buf = datap + sizeof(struct wmi_opt_rx_info_hdr);
-	len -= sizeof(struct wmi_opt_rx_info_hdr);
-
-	ath6kl_dbg(ATH6KL_DBG_WMI, "opt frame event %2.2x:%2.2x\n",
-		   bih->bssid[4], bih->bssid[5]);
-
-	bss = wlan_find_node(&wmi->parent_dev->scan_table, bih->bssid);
-	if (bss != NULL) {
-		/* Free up the node. We are about to allocate a new node. */
-		wlan_node_reclaim(&wmi->parent_dev->scan_table, bss);
-	}
-
-	bss = wlan_node_alloc(len);
-	if (!bss)
-		return -ENOMEM;
-
-	bss->ni_snr = bih->snr;
-	bss->ni_cie.ie_chan = le16_to_cpu(bih->ch);
-
-	if (WARN_ON(!bss->ni_buf))
-		return -EINVAL;
-
-	memcpy(bss->ni_buf, buf, len);
-	wlan_setup_node(&wmi->parent_dev->scan_table, bss, bih->bssid);
+	cfg80211_put_bss(bss);
 
 	return 0;
 }
@@ -1333,11 +1091,37 @@ static int ath6kl_wmi_scan_complete_rx(struct wmi *wmi, u8 *datap, int len)
 
 	ev = (struct wmi_scan_complete_event *) datap;
 
-	if (a_sle32_to_cpu(ev->status) == 0)
-		wlan_refresh_inactive_nodes(wmi->parent_dev);
-
 	ath6kl_scan_complete_evt(wmi->parent_dev, a_sle32_to_cpu(ev->status));
 	wmi->is_probe_ssid = false;
+
+	return 0;
+}
+
+static int ath6kl_wmi_neighbor_report_event_rx(struct wmi *wmi, u8 *datap,
+					       int len)
+{
+	struct wmi_neighbor_report_event *ev;
+	u8 i;
+
+	if (len < sizeof(*ev))
+		return -EINVAL;
+	ev = (struct wmi_neighbor_report_event *) datap;
+	if (sizeof(*ev) + ev->num_neighbors * sizeof(struct wmi_neighbor_info)
+	    > len) {
+		ath6kl_dbg(ATH6KL_DBG_WMI, "truncated neighbor event "
+			   "(num=%d len=%d)\n", ev->num_neighbors, len);
+		return -EINVAL;
+	}
+	for (i = 0; i < ev->num_neighbors; i++) {
+		ath6kl_dbg(ATH6KL_DBG_WMI, "neighbor %d/%d - %pM 0x%x\n",
+			   i + 1, ev->num_neighbors, ev->neighbor[i].bssid,
+			   ev->neighbor[i].bss_flags);
+		cfg80211_pmksa_candidate_notify(wmi->parent_dev->net_dev, i,
+						ev->neighbor[i].bssid,
+						!!(ev->neighbor[i].bss_flags &
+						   WMI_PREAUTH_CAPABLE_BSS),
+						GFP_ATOMIC);
+	}
 
 	return 0;
 }
@@ -2701,43 +2485,6 @@ s32 ath6kl_wmi_get_rate(s8 rate_index)
 	return wmi_rate_tbl[(u32) rate_index][0];
 }
 
-void ath6kl_wmi_node_return(struct wmi *wmi, struct bss *bss)
-{
-	if (bss)
-		wlan_node_return(&wmi->parent_dev->scan_table, bss);
-}
-
-struct bss *ath6kl_wmi_find_ssid_node(struct wmi *wmi, u8 * ssid,
-				      u32 ssid_len, bool is_wpa2,
-				      bool match_ssid)
-{
-	struct bss *node = NULL;
-
-	node = wlan_find_ssid_node(&wmi->parent_dev->scan_table, ssid,
-				  ssid_len, is_wpa2, match_ssid);
-	return node;
-}
-
-struct bss *ath6kl_wmi_find_node(struct wmi *wmi, const u8 * mac_addr)
-{
-	struct bss *ni = NULL;
-
-	ni = wlan_find_node(&wmi->parent_dev->scan_table, mac_addr);
-
-	return ni;
-}
-
-void ath6kl_wmi_node_free(struct wmi *wmi, const u8 * mac_addr)
-{
-	struct bss *ni = NULL;
-
-	ni = wlan_find_node(&wmi->parent_dev->scan_table, mac_addr);
-	if (ni != NULL)
-		wlan_node_reclaim(&wmi->parent_dev->scan_table, ni);
-
-	return;
-}
-
 static int ath6kl_wmi_get_pmkid_list_event_rx(struct wmi *wmi, u8 *datap,
 					      u32 len)
 {
@@ -3140,8 +2887,7 @@ int ath6kl_wmi_control_rx(struct wmi *wmi, struct sk_buff *skb)
 		break;
 	case WMI_BSSINFO_EVENTID:
 		ath6kl_dbg(ATH6KL_DBG_WMI, "WMI_BSSINFO_EVENTID\n");
-		ath6kl_wmi_convert_bssinfo_hdr2_to_hdr(skb, datap);
-		ret = ath6kl_wmi_bssinfo_event_rx(wmi, skb->data, skb->len);
+		ret = ath6kl_wmi_bssinfo_event_rx(wmi, datap, len);
 		break;
 	case WMI_REGDOMAIN_EVENTID:
 		ath6kl_dbg(ATH6KL_DBG_WMI, "WMI_REGDOMAIN_EVENTID\n");
@@ -3153,6 +2899,7 @@ int ath6kl_wmi_control_rx(struct wmi *wmi, struct sk_buff *skb)
 		break;
 	case WMI_NEIGHBOR_REPORT_EVENTID:
 		ath6kl_dbg(ATH6KL_DBG_WMI, "WMI_NEIGHBOR_REPORT_EVENTID\n");
+		ret = ath6kl_wmi_neighbor_report_event_rx(wmi, datap, len);
 		break;
 	case WMI_SCAN_COMPLETE_EVENTID:
 		ath6kl_dbg(ATH6KL_DBG_WMI, "WMI_SCAN_COMPLETE_EVENTID\n");
@@ -3175,7 +2922,7 @@ int ath6kl_wmi_control_rx(struct wmi *wmi, struct sk_buff *skb)
 		break;
 	case WMI_OPT_RX_FRAME_EVENTID:
 		ath6kl_dbg(ATH6KL_DBG_WMI, "WMI_OPT_RX_FRAME_EVENTID\n");
-		ret = ath6kl_wmi_opt_frame_event_rx(wmi, datap, len);
+		/* this event has been deprecated */
 		break;
 	case WMI_REPORT_ROAM_TBL_EVENTID:
 		ath6kl_dbg(ATH6KL_DBG_WMI, "WMI_REPORT_ROAM_TBL_EVENTID\n");
