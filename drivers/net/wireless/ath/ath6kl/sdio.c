@@ -21,7 +21,7 @@
 #include <linux/mmc/sdio_ids.h>
 #include <linux/mmc/sdio.h>
 #include <linux/mmc/sd.h>
-#include "htc_hif.h"
+#include "hif.h"
 #include "hif-ops.h"
 #include "target.h"
 #include "debug.h"
@@ -420,7 +420,7 @@ static void __ath6kl_sdio_write_async(struct ath6kl_sdio *ar_sdio,
 						     req->request);
 		context = req->packet;
 		ath6kl_sdio_free_bus_req(ar_sdio, req);
-		ath6kldev_rw_comp_handler(context, status);
+		ath6kl_hif_rw_comp_handler(context, status);
 	}
 }
 
@@ -457,7 +457,7 @@ static void ath6kl_sdio_irq_handler(struct sdio_func *func)
 	 */
 	sdio_release_host(ar_sdio->func);
 
-	status = ath6kldev_intr_bh_handler(ar_sdio->ar);
+	status = ath6kl_hif_intr_bh_handler(ar_sdio->ar);
 	sdio_claim_host(ar_sdio->func);
 	atomic_set(&ar_sdio->irq_handling, 0);
 	WARN_ON(status && status != -ECANCELED);
@@ -743,6 +743,18 @@ static int ath6kl_sdio_suspend(struct ath6kl *ar)
 	return 0;
 }
 
+static int ath6kl_sdio_resume(struct ath6kl *ar)
+{
+	if (ar->wmi->pwr_mode != ar->wmi->saved_pwr_mode) {
+		if (ath6kl_wmi_powermode_cmd(ar->wmi,
+			ar->wmi->saved_pwr_mode) != 0)
+			ath6kl_warn("ath6kl_sdio_resume: "
+				"wmi_powermode_cmd failed\n");
+	}
+
+	return 0;
+}
+
 static const struct ath6kl_hif_ops ath6kl_sdio_ops = {
 	.read_write_sync = ath6kl_sdio_read_write_sync,
 	.write_async = ath6kl_sdio_write_async,
@@ -754,6 +766,7 @@ static const struct ath6kl_hif_ops ath6kl_sdio_ops = {
 	.scat_req_rw = ath6kl_sdio_async_rw_scatter,
 	.cleanup_scatter = ath6kl_sdio_cleanup_scatter,
 	.suspend = ath6kl_sdio_suspend,
+	.resume = ath6kl_sdio_resume,
 };
 
 static int ath6kl_sdio_probe(struct sdio_func *func,
