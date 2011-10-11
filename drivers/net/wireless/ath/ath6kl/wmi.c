@@ -682,6 +682,46 @@ int ath6kl_wmi_set_roam_lrssi_cmd(struct wmi *wmi, u8 lrssi)
 	return 0;
 }
 
+int ath6kl_wmi_force_roam_cmd(struct wmi *wmi, const u8 *bssid)
+{
+	struct sk_buff *skb;
+	struct roam_ctrl_cmd *cmd;
+
+	skb = ath6kl_wmi_get_new_buf(sizeof(*cmd));
+	if (!skb)
+		return -ENOMEM;
+
+	cmd = (struct roam_ctrl_cmd *) skb->data;
+	memset(cmd, 0, sizeof(*cmd));
+
+	memcpy(cmd->info.bssid, bssid, ETH_ALEN);
+	cmd->roam_ctrl = WMI_FORCE_ROAM;
+
+	ath6kl_dbg(ATH6KL_DBG_WMI, "force roam to %pM\n", bssid);
+	return ath6kl_wmi_cmd_send(wmi, skb, WMI_SET_ROAM_CTRL_CMDID,
+				   NO_SYNC_WMIFLAG);
+}
+
+int ath6kl_wmi_set_roam_mode_cmd(struct wmi *wmi, enum wmi_roam_mode mode)
+{
+	struct sk_buff *skb;
+	struct roam_ctrl_cmd *cmd;
+
+	skb = ath6kl_wmi_get_new_buf(sizeof(*cmd));
+	if (!skb)
+		return -ENOMEM;
+
+	cmd = (struct roam_ctrl_cmd *) skb->data;
+	memset(cmd, 0, sizeof(*cmd));
+
+	cmd->info.roam_mode = mode;
+	cmd->roam_ctrl = WMI_SET_ROAM_MODE;
+
+	ath6kl_dbg(ATH6KL_DBG_WMI, "set roam mode %d\n", mode);
+	return ath6kl_wmi_cmd_send(wmi, skb, WMI_SET_ROAM_CTRL_CMDID,
+				   NO_SYNC_WMIFLAG);
+}
+
 static int ath6kl_wmi_connect_event_rx(struct wmi *wmi, u8 *datap, int len)
 {
 	struct wmi_connect_event *ev;
@@ -1900,6 +1940,8 @@ int ath6kl_wmi_disctimeout_cmd(struct wmi *wmi, u8 timeout)
 
 	ret = ath6kl_wmi_cmd_send(wmi, skb, WMI_SET_DISC_TIMEOUT_CMDID,
 				  NO_SYNC_WMIFLAG);
+	if (ret == 0)
+		ath6kl_debug_set_disconnect_timeout(wmi->parent_dev, timeout);
 	return ret;
 }
 
@@ -2407,6 +2449,11 @@ int ath6kl_wmi_get_tx_pwr_cmd(struct wmi *wmi)
 	return ath6kl_wmi_simple_cmd(wmi, WMI_GET_TX_PWR_CMDID);
 }
 
+int ath6kl_wmi_get_roam_tbl_cmd(struct wmi *wmi)
+{
+	return ath6kl_wmi_simple_cmd(wmi, WMI_GET_ROAM_TBL_CMDID);
+}
+
 int ath6kl_wmi_set_lpreamble_cmd(struct wmi *wmi, u8 status, u8 preamble_policy)
 {
 	struct sk_buff *skb;
@@ -2479,6 +2526,8 @@ int ath6kl_wmi_set_keepalive_cmd(struct wmi *wmi, u8 keep_alive_intvl)
 
 	ret = ath6kl_wmi_cmd_send(wmi, skb, WMI_SET_KEEPALIVE_CMDID,
 				  NO_SYNC_WMIFLAG);
+	if (ret == 0)
+		ath6kl_debug_set_keepalive(wmi->parent_dev, keep_alive_intvl);
 	return ret;
 }
 
@@ -2844,6 +2893,11 @@ static int ath6kl_wmi_control_rx_xtnd(struct wmi *wmi, struct sk_buff *skb)
 	return ret;
 }
 
+static int ath6kl_wmi_roam_tbl_event_rx(struct wmi *wmi, u8 *datap, int len)
+{
+	return ath6kl_debug_roam_tbl_event(wmi->parent_dev, datap, len);
+}
+
 /* Control Path */
 int ath6kl_wmi_control_rx(struct wmi *wmi, struct sk_buff *skb)
 {
@@ -2948,6 +3002,7 @@ int ath6kl_wmi_control_rx(struct wmi *wmi, struct sk_buff *skb)
 		break;
 	case WMI_REPORT_ROAM_TBL_EVENTID:
 		ath6kl_dbg(ATH6KL_DBG_WMI, "WMI_REPORT_ROAM_TBL_EVENTID\n");
+		ret = ath6kl_wmi_roam_tbl_event_rx(wmi, datap, len);
 		break;
 	case WMI_EXTENSION_EVENTID:
 		ath6kl_dbg(ATH6KL_DBG_WMI, "WMI_EXTENSION_EVENTID\n");
