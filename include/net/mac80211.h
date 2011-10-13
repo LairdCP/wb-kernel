@@ -349,8 +349,6 @@ struct ieee80211_bss_conf {
  * @IEEE80211_TX_INTFL_RETRANSMISSION: This frame is being retransmitted
  *	after TX status because the destination was asleep, it must not
  *	be modified again (no seqno assignment, crypto, etc.)
- * @IEEE80211_TX_INTFL_HAS_RADIOTAP: This frame was injected and still
- *	has a radiotap header at skb->data.
  * @IEEE80211_TX_INTFL_NL80211_FRAME_TX: Frame was requested through nl80211
  *	MLME command (internal to mac80211 to figure out whether to send TX
  *	status to user space)
@@ -372,6 +370,12 @@ struct ieee80211_bss_conf {
  *	an SP that mac80211 transmits, it is already set; for driver frames
  *	the driver may set this flag. It is also used to do the same for
  *	PS-Poll responses.
+ * @IEEE80211_TX_CTL_USE_MINRATE: This frame will be sent at lowest rate.
+ *	This flag is used to send nullfunc frame at minimum rate when
+ *	the nullfunc is used for connection monitoring purpose.
+ * @IEEE80211_TX_CTL_DONTFRAG: Don't fragment this packet even if it
+ *	would be fragmented by size (this is optional, only used for
+ *	monitor injection).
  *
  * Note: If you have to add new flags to the enumeration, then don't
  *	 forget to update %IEEE80211_TX_TEMPORARY_FLAGS when necessary.
@@ -396,7 +400,7 @@ enum mac80211_tx_control_flags {
 	IEEE80211_TX_CTL_POLL_RESPONSE		= BIT(17),
 	IEEE80211_TX_CTL_MORE_FRAMES		= BIT(18),
 	IEEE80211_TX_INTFL_RETRANSMISSION	= BIT(19),
-	IEEE80211_TX_INTFL_HAS_RADIOTAP		= BIT(20),
+	/* hole at 20, use later */
 	IEEE80211_TX_INTFL_NL80211_FRAME_TX	= BIT(21),
 	IEEE80211_TX_CTL_LDPC			= BIT(22),
 	IEEE80211_TX_CTL_STBC			= BIT(23) | BIT(24),
@@ -404,6 +408,8 @@ enum mac80211_tx_control_flags {
 	IEEE80211_TX_INTFL_TKIP_MIC_FAILURE	= BIT(26),
 	IEEE80211_TX_CTL_NO_CCK_RATE		= BIT(27),
 	IEEE80211_TX_STATUS_EOSP		= BIT(28),
+	IEEE80211_TX_CTL_USE_MINRATE		= BIT(29),
+	IEEE80211_TX_CTL_DONTFRAG		= BIT(30),
 };
 
 #define IEEE80211_TX_CTL_STBC_SHIFT		23
@@ -2148,7 +2154,8 @@ struct ieee80211_ops {
 			  struct ieee80211_sta *sta);
 	void (*sta_notify)(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 			enum sta_notify_cmd, struct ieee80211_sta *sta);
-	int (*conf_tx)(struct ieee80211_hw *hw, u16 queue,
+	int (*conf_tx)(struct ieee80211_hw *hw,
+		       struct ieee80211_vif *vif, u16 queue,
 		       const struct ieee80211_tx_queue_params *params);
 	u64 (*get_tsf)(struct ieee80211_hw *hw, struct ieee80211_vif *vif);
 	void (*set_tsf)(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
