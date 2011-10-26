@@ -99,6 +99,32 @@ u8 lbs_data_rate_to_fw_index(u32 rate)
 	return 0;
 }
 
+int lbs_set_iface_type(struct lbs_private *priv, enum nl80211_iftype type)
+{
+	int ret = 0;
+
+	switch (type) {
+	case NL80211_IFTYPE_MONITOR:
+		ret = lbs_set_monitor_mode(priv, 1);
+		break;
+	case NL80211_IFTYPE_STATION:
+		if (priv->wdev->iftype == NL80211_IFTYPE_MONITOR)
+			ret = lbs_set_monitor_mode(priv, 0);
+		if (!ret)
+			ret = lbs_set_snmp_mib(priv, SNMP_MIB_OID_BSS_TYPE, 1);
+		break;
+	case NL80211_IFTYPE_ADHOC:
+		if (priv->wdev->iftype == NL80211_IFTYPE_MONITOR)
+			ret = lbs_set_monitor_mode(priv, 0);
+		if (!ret)
+			ret = lbs_set_snmp_mib(priv, SNMP_MIB_OID_BSS_TYPE, 2);
+		break;
+	default:
+		ret = -ENOTSUPP;
+	}
+	return ret;
+}
+
 int lbs_start_iface(struct lbs_private *priv)
 {
 	struct cmd_ds_802_11_mac_address cmd;
@@ -117,6 +143,12 @@ int lbs_start_iface(struct lbs_private *priv)
 	ret = lbs_cmd_with_response(priv, CMD_802_11_MAC_ADDRESS, &cmd);
 	if (ret) {
 		lbs_deb_net("set MAC address failed\n");
+		goto err;
+	}
+
+	ret = lbs_set_iface_type(priv, priv->wdev->iftype);
+	if (ret) {
+		lbs_deb_net("set iface type failed\n");
 		goto err;
 	}
 
@@ -188,6 +220,7 @@ int lbs_stop_iface(struct lbs_private *priv)
 	spin_unlock_irqrestore(&priv->driver_lock, flags);
 
 	cancel_work_sync(&priv->mcast_work);
+	del_timer_sync(&priv->tx_lockup_timer);
 
 	/* Disable command processing, and wait for all commands to complete */
 	lbs_deb_main("waiting for commands to complete\n");
@@ -243,6 +276,7 @@ void lbs_host_to_card_done(struct lbs_private *priv)
 	lbs_deb_enter(LBS_DEB_THREAD);
 
 	spin_lock_irqsave(&priv->driver_lock, flags);
+	del_timer(&priv->tx_lockup_timer);
 
 	priv->dnld_sent = DNLD_RES_RECEIVED;
 
@@ -585,6 +619,9 @@ static int lbs_thread(void *data)
 			if (ret) {
 				lbs_deb_tx("host_to_card failed %d\n", ret);
 				priv->dnld_sent = DNLD_RES_RECEIVED;
+			} else {
+				mod_timer(&priv->tx_lockup_timer,
+					  jiffies + (HZ * 5));
 			}
 			priv->tx_pending_len = 0;
 			if (!priv->currenttxskb) {
@@ -601,6 +638,7 @@ static int lbs_thread(void *data)
 	}
 
 	del_timer(&priv->command_timer);
+	del_timer(&priv->tx_lockup_timer);
 	del_timer(&priv->auto_deepsleep_timer);
 
 	lbs_deb_leave(LBS_DEB_THREAD);
@@ -735,6 +773,32 @@ out:
 }
 
 /**
+ * lbs_tx_lockup_handler - handles the timeout of the passing of TX frames
+ * to the hardware. This is known to frequently happen with SD8686 when
+ * waking up after a Wake-on-WLAN-triggered resume.
+ *
+ * @data: &struct lbs_private pointer
+ */
+static void lbs_tx_lockup_handler(unsigned long data)
+{
+	struct lbs_private *priv = (struct lbs_private *)data;
+	unsigned long flags;
+
+	lbs_deb_enter(LBS_DEB_TX);
+	spin_lock_irqsave(&priv->driver_lock, flags);
+
+	netdev_info(priv->dev, "TX lockup detected\n");
+	if (priv->reset_card)
+		priv->reset_card(priv);
+
+	priv->dnld_sent = DNLD_RES_RECEIVED;
+	wake_up_interruptible(&priv->waitq);
+
+	spin_unlock_irqrestore(&priv->driver_lock, flags);
+	lbs_deb_leave(LBS_DEB_TX);
+}
+
+/**
  * auto_deepsleep_timer_fn - put the device back to deep sleep mode when
  * timer expires and no activity (command, event, data etc.) is detected.
  * @data:	&struct lbs_private pointer
@@ -820,6 +884,8 @@ static int lbs_init_adapter(struct lbs_private *priv)
 
 	setup_timer(&priv->command_timer, lbs_cmd_timeout_handler,
 		(unsigned long)priv);
+	setup_timer(&priv->tx_lockup_timer, lbs_tx_lockup_handler,
+		(unsigned long)priv);
 	setup_timer(&priv->auto_deepsleep_timer, auto_deepsleep_timer_fn,
 			(unsigned long)priv);
 
@@ -857,6 +923,7 @@ static void lbs_free_adapter(struct lbs_private *priv)
 	lbs_free_cmd_buffer(priv);
 	kfifo_free(&priv->event_fifo);
 	del_timer(&priv->command_timer);
+	del_timer(&priv->tx_lockup_timer);
 	del_timer(&priv->auto_deepsleep_timer);
 
 	lbs_deb_leave(LBS_DEB_MAIN);

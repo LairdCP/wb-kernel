@@ -138,7 +138,7 @@ extern u32 wl12xx_debug_level;
 #define WL1271_DEFAULT_DTIM_PERIOD 1
 
 #define WL12XX_MAX_ROLES           4
-#define WL12XX_MAX_LINKS           8
+#define WL12XX_MAX_LINKS           12
 #define WL12XX_INVALID_ROLE_ID     0xff
 #define WL12XX_INVALID_LINK_ID     0xff
 
@@ -279,7 +279,7 @@ struct wl12xx_fw_status {
 
 	/* Cumulative counter of released Voice memory blocks */
 	u8 tx_voice_released_blks;
-	u8 padding_1[7];
+	u8 padding_1[3];
 	__le32 log_start_addr;
 } __packed;
 
@@ -348,6 +348,7 @@ enum wl12xx_flags {
 	WL1271_FLAG_SOFT_GEMINI,
 	WL1271_FLAG_RX_STREAMING_STARTED,
 	WL1271_FLAG_RECOVERY_IN_PROGRESS,
+	WL1271_FLAG_CS_PROGRESS,
 };
 
 struct wl1271_link {
@@ -526,6 +527,7 @@ struct wl1271 {
 	u32 basic_rate_set;
 	u32 basic_rate;
 	u32 rate_set;
+	u32 bitrate_masks[IEEE80211_NUM_BANDS];
 
 	/* The current band */
 	enum ieee80211_band band;
@@ -669,12 +671,6 @@ size_t wl12xx_copy_fwlog(struct wl1271 *wl, u8 *memblock, size_t maxlen);
 
 /* WL128X requires aggregated packets to be aligned to the SDIO block size */
 #define WL12XX_QUIRK_BLOCKSIZE_ALIGNMENT	BIT(2)
-
-/*
- * WL127X AP mode requires Low Power DRPw (LPD) enable to reduce power
- * consumption
- */
-#define WL12XX_QUIRK_LPD_MODE                   BIT(3)
 
 /* Older firmwares did not implement the FW logger over bus feature */
 #define WL12XX_QUIRK_FWLOG_NOT_IMPLEMENTED	BIT(4)

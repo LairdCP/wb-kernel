@@ -450,6 +450,7 @@ enum rtl_var_map {
 	EFUSE_HWSET_MAX_SIZE,
 	EFUSE_MAX_SECTION_MAP,
 	EFUSE_REAL_CONTENT_SIZE,
+	EFUSE_OOB_PROTECT_BYTES_LEN,
 
 	/*CAM map */
 	RWCAM,
@@ -942,16 +943,12 @@ struct rtl_io {
 	unsigned long pci_base_addr;	/*device I/O address */
 
 	void (*write8_async) (struct rtl_priv *rtlpriv, u32 addr, u8 val);
-	void (*write16_async) (struct rtl_priv *rtlpriv, u32 addr, u16 val);
-	void (*write32_async) (struct rtl_priv *rtlpriv, u32 addr, u32 val);
-	int (*writeN_async) (struct rtl_priv *rtlpriv, u32 addr, u16 len,
-			     u8 *pdata);
+	void (*write16_async) (struct rtl_priv *rtlpriv, u32 addr, __le16 val);
+	void (*write32_async) (struct rtl_priv *rtlpriv, u32 addr, __le32 val);
 
 	u8(*read8_sync) (struct rtl_priv *rtlpriv, u32 addr);
 	u16(*read16_sync) (struct rtl_priv *rtlpriv, u32 addr);
 	u32(*read32_sync) (struct rtl_priv *rtlpriv, u32 addr);
-	int (*readN_sync) (struct rtl_priv *rtlpriv, u32 addr, u16 len,
-			    u8 *pdata);
 
 };
 
@@ -1328,6 +1325,7 @@ struct rtl_stats {
 	s8 rx_mimo_signalquality[2];
 	bool packet_matchbssid;
 	bool is_cck;
+	bool is_ht;
 	bool packet_toself;
 	bool packet_beacon;	/*for rssi */
 	char cck_adc_pwdb[4];	/*for rx path selection */
@@ -1488,6 +1486,9 @@ struct rtl_intf_ops {
 struct rtl_mod_params {
 	/* default: 0 = using hardware encryption */
 	int sw_crypto;
+
+	/* default: 0 = DBG_EMERG (0)*/
+	int debug;
 
 	/* default: 1 = using no linked power save */
 	bool inactiveps;

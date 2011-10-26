@@ -64,6 +64,7 @@
 #define __iwl_core_h__
 
 #include "iwl-dev.h"
+#include "iwl-io.h"
 
 /************************
  * forward declarations *
@@ -108,7 +109,6 @@ struct iwl_lib_ops {
  *	radio tuning when there is a high receiving plcp error rate
  * @chain_noise_scale: default chain noise scale used for gain computation
  * @wd_timeout: TX queues watchdog timeout
- * @temperature_kelvin: temperature report by uCode in kelvin
  * @max_event_log_size: size of event log buffer size for ucode event logging
  * @shadow_reg_enable: HW shadhow register bit
  * @no_idle_support: do not support idle mode
@@ -130,7 +130,6 @@ struct iwl_base_params {
 	u8 plcp_delta_threshold;
 	s32 chain_noise_scale;
 	unsigned int wd_timeout;
-	bool temperature_kelvin;
 	u32 max_event_log_size;
 	const bool shadow_reg_enable;
 	const bool no_idle_support;
@@ -238,9 +237,10 @@ struct iwl_cfg {
  *   L i b                 *
  ***************************/
 
-int iwl_mac_conf_tx(struct ieee80211_hw *hw, u16 queue,
+int iwlagn_mac_conf_tx(struct ieee80211_hw *hw,
+		    struct ieee80211_vif *vif, u16 queue,
 		    const struct ieee80211_tx_queue_params *params);
-int iwl_mac_tx_last_beacon(struct ieee80211_hw *hw);
+int iwlagn_mac_tx_last_beacon(struct ieee80211_hw *hw);
 void iwl_set_rxon_hwcrypto(struct iwl_priv *priv, struct iwl_rxon_context *ctx,
 			   int hw_decrypt);
 int iwl_check_rxon_cmd(struct iwl_priv *priv, struct iwl_rxon_context *ctx);
@@ -260,13 +260,14 @@ bool iwl_is_ht40_tx_allowed(struct iwl_priv *priv,
 void iwl_connection_init_rx_config(struct iwl_priv *priv,
 				   struct iwl_rxon_context *ctx);
 void iwl_set_rate(struct iwl_priv *priv);
-int iwl_mac_add_interface(struct ieee80211_hw *hw,
+int iwlagn_mac_add_interface(struct ieee80211_hw *hw,
 			  struct ieee80211_vif *vif);
-void iwl_mac_remove_interface(struct ieee80211_hw *hw,
+void iwlagn_mac_remove_interface(struct ieee80211_hw *hw,
 			      struct ieee80211_vif *vif);
-int iwl_mac_change_interface(struct ieee80211_hw *hw,
+int iwlagn_mac_change_interface(struct ieee80211_hw *hw,
 			     struct ieee80211_vif *vif,
 			     enum nl80211_iftype newtype, bool newp2p);
+int iwl_cmd_echo_test(struct iwl_priv *priv);
 #ifdef CONFIG_IWLWIFI_DEBUGFS
 int iwl_alloc_traffic_mem(struct iwl_priv *priv);
 void iwl_free_traffic_mem(struct iwl_priv *priv);
@@ -320,9 +321,9 @@ int iwl_set_tx_power(struct iwl_priv *priv, s8 tx_power, bool force);
  ******************************************************************************/
 void iwl_init_scan_params(struct iwl_priv *priv);
 int iwl_scan_cancel(struct iwl_priv *priv);
-int iwl_scan_cancel_timeout(struct iwl_priv *priv, unsigned long ms);
+void iwl_scan_cancel_timeout(struct iwl_priv *priv, unsigned long ms);
 void iwl_force_scan_end(struct iwl_priv *priv);
-int iwl_mac_hw_scan(struct ieee80211_hw *hw,
+int iwlagn_mac_hw_scan(struct ieee80211_hw *hw,
 		    struct ieee80211_vif *vif,
 		    struct cfg80211_scan_request *req);
 void iwl_internal_short_hw_scan(struct iwl_priv *priv);
@@ -380,6 +381,12 @@ static inline bool iwl_advanced_bt_coexist(struct iwl_priv *priv)
 {
 	return priv->cfg->bt_params &&
 	       priv->cfg->bt_params->advanced_bt_coexist;
+}
+
+static inline void iwl_enable_rfkill_int(struct iwl_priv *priv)
+{
+	IWL_DEBUG_ISR(priv, "Enabling rfkill interrupt\n");
+	iwl_write32(bus(priv), CSR_INT_MASK, CSR_INT_BIT_RF_KILL);
 }
 
 extern bool bt_siso_mode;

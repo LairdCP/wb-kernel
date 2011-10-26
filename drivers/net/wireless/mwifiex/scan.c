@@ -172,29 +172,6 @@ mwifiex_ssid_cmp(struct mwifiex_802_11_ssid *ssid1,
 }
 
 /*
- * Sends IOCTL request to start a scan with user configurations.
- *
- * This function allocates the IOCTL request buffer, fills it
- * with requisite parameters and calls the IOCTL handler.
- *
- * Upon completion, it also generates a wireless event to notify
- * applications.
- */
-int mwifiex_set_user_scan_ioctl(struct mwifiex_private *priv,
-				struct mwifiex_user_scan_cfg *scan_req)
-{
-	int status;
-
-	priv->adapter->cmd_wait_q.condition = false;
-
-	status = mwifiex_scan_networks(priv, scan_req);
-	if (!status)
-		status = mwifiex_wait_queue_complete(priv->adapter);
-
-	return status;
-}
-
-/*
  * This function checks if wapi is enabled in driver and scanned network is
  * compatible with it.
  */
@@ -532,7 +509,7 @@ mwifiex_scan_create_channel_list(struct mwifiex_private *priv,
 
 		sband = priv->wdev->wiphy->bands[band];
 
-		for (i = 0; (i < sband->n_channels) ; i++, chan_idx++) {
+		for (i = 0; (i < sband->n_channels) ; i++) {
 			ch = &sband->channels[i];
 			if (ch->flags & IEEE80211_CHAN_DISABLED)
 				continue;
@@ -563,6 +540,7 @@ mwifiex_scan_create_channel_list(struct mwifiex_private *priv,
 				scan_chan_list[chan_idx].chan_scan_mode_bitmap
 					|= MWIFIEX_DISABLE_CHAN_FILT;
 			}
+			chan_idx++;
 		}
 
 	}
@@ -1315,8 +1293,8 @@ mwifiex_radio_type_to_band(u8 radio_type)
  * order to send the appropriate scan commands to firmware to populate or
  * update the internal driver scan table.
  */
-int mwifiex_scan_networks(struct mwifiex_private *priv,
-			  const struct mwifiex_user_scan_cfg *user_scan_in)
+static int mwifiex_scan_networks(struct mwifiex_private *priv,
+		const struct mwifiex_user_scan_cfg *user_scan_in)
 {
 	int ret = 0;
 	struct mwifiex_adapter *adapter = priv->adapter;
@@ -1379,6 +1357,7 @@ int mwifiex_scan_networks(struct mwifiex_private *priv,
 			list_del(&cmd_node->list);
 			spin_unlock_irqrestore(&adapter->scan_pending_q_lock,
 									flags);
+			adapter->cmd_queued = cmd_node;
 			mwifiex_insert_cmd_to_pending_q(adapter, cmd_node,
 							true);
 		} else {
@@ -1394,6 +1373,29 @@ int mwifiex_scan_networks(struct mwifiex_private *priv,
 	kfree(scan_cfg_out);
 	kfree(scan_chan_list);
 	return ret;
+}
+
+/*
+ * Sends IOCTL request to start a scan with user configurations.
+ *
+ * This function allocates the IOCTL request buffer, fills it
+ * with requisite parameters and calls the IOCTL handler.
+ *
+ * Upon completion, it also generates a wireless event to notify
+ * applications.
+ */
+int mwifiex_set_user_scan_ioctl(struct mwifiex_private *priv,
+				struct mwifiex_user_scan_cfg *scan_req)
+{
+	int status;
+
+	priv->adapter->scan_wait_q_woken = false;
+
+	status = mwifiex_scan_networks(priv, scan_req);
+	if (!status)
+		status = mwifiex_wait_queue_complete(priv->adapter);
+
+	return status;
 }
 
 /*
@@ -1463,9 +1465,9 @@ int mwifiex_check_network_compatibility(struct mwifiex_private *priv,
 }
 
 static int
-mwifiex_update_curr_bss_params(struct mwifiex_private *priv,
-			u8 *bssid, s32 rssi, const u8 *ie_buf,
-			size_t ie_len, u16 beacon_period, u16 cap_info_bitmap)
+mwifiex_update_curr_bss_params(struct mwifiex_private *priv, u8 *bssid,
+			       s32 rssi, const u8 *ie_buf, size_t ie_len,
+			       u16 beacon_period, u16 cap_info_bitmap, u8 band)
 {
 	struct mwifiex_bssdescriptor *bss_desc = NULL;
 	int ret;
@@ -1488,7 +1490,7 @@ mwifiex_update_curr_bss_params(struct mwifiex_private *priv,
 
 	ret = mwifiex_fill_new_bss_desc(priv, bssid, rssi, beacon_ie,
 					ie_len, beacon_period,
-					cap_info_bitmap, bss_desc);
+					cap_info_bitmap, band, bss_desc);
 	if (ret)
 		goto done;
 
@@ -1532,6 +1534,11 @@ done:
 	return 0;
 }
 
+static void mwifiex_free_bss_priv(struct cfg80211_bss *bss)
+{
+	kfree(bss->priv);
+}
+
 /*
  * This function handles the command response of scan.
  *
@@ -1570,6 +1577,7 @@ int mwifiex_ret_802_11_scan(struct mwifiex_private *priv,
 	struct chan_band_param_set *chan_band;
 	u8 is_bgscan_resp;
 	unsigned long flags;
+	struct cfg80211_bss *bss;
 
 	is_bgscan_resp = (le16_to_cpu(resp->command)
 		== HostCmd_CMD_802_11_BG_SCAN_QUERY);
@@ -1751,10 +1759,12 @@ int mwifiex_ret_802_11_scan(struct mwifiex_private *priv,
 			chan = ieee80211_get_channel(priv->wdev->wiphy, freq);
 
 			if (chan && !(chan->flags & IEEE80211_CHAN_DISABLED)) {
-				cfg80211_inform_bss(priv->wdev->wiphy, chan,
-					bssid, network_tsf, cap_info_bitmap,
-					beacon_period, ie_buf, ie_len, rssi,
-					GFP_KERNEL);
+				bss = cfg80211_inform_bss(priv->wdev->wiphy,
+					      chan, bssid, network_tsf,
+					      cap_info_bitmap, beacon_period,
+					      ie_buf, ie_len, rssi, GFP_KERNEL);
+				*(u8 *)bss->priv = band;
+				bss->free_priv = mwifiex_free_bss_priv;
 
 				if (priv->media_connected && !memcmp(bssid,
 					priv->curr_bss_params.bss_descriptor
@@ -1762,7 +1772,7 @@ int mwifiex_ret_802_11_scan(struct mwifiex_private *priv,
 					mwifiex_update_curr_bss_params(priv,
 							bssid, rssi, ie_buf,
 							ie_len, beacon_period,
-							cap_info_bitmap);
+							cap_info_bitmap, band);
 			}
 		} else {
 			dev_dbg(adapter->dev, "missing BSS channel IE\n");
@@ -1779,7 +1789,7 @@ int mwifiex_ret_802_11_scan(struct mwifiex_private *priv,
 		/* Need to indicate IOCTL complete */
 		if (adapter->curr_cmd->wait_q_enabled) {
 			adapter->cmd_wait_q.status = 0;
-			mwifiex_complete_cmd(adapter);
+			mwifiex_complete_cmd(adapter, adapter->curr_cmd);
 		}
 		if (priv->report_scan_result)
 			priv->report_scan_result = false;
@@ -1836,6 +1846,7 @@ mwifiex_queue_scan_cmd(struct mwifiex_private *priv,
 	unsigned long flags;
 
 	cmd_node->wait_q_enabled = true;
+	cmd_node->condition = &adapter->scan_wait_q_woken;
 	spin_lock_irqsave(&adapter->scan_pending_q_lock, flags);
 	list_add_tail(&cmd_node->list, &adapter->scan_pending_q);
 	spin_unlock_irqrestore(&adapter->scan_pending_q_lock, flags);
@@ -1902,7 +1913,7 @@ int mwifiex_request_scan(struct mwifiex_private *priv,
 	}
 	priv->scan_pending_on_block = true;
 
-	priv->adapter->cmd_wait_q.condition = false;
+	priv->adapter->scan_wait_q_woken = false;
 
 	if (req_ssid && req_ssid->ssid_len != 0)
 		/* Specific SSID scan */

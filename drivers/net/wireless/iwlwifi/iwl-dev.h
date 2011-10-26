@@ -877,7 +877,7 @@ struct iwl_priv {
 	u8 channel_count;	/* # of channels */
 
 	/* thermal calibration */
-	s32 temperature;	/* degrees Kelvin */
+	s32 temperature;	/* Celsius */
 	s32 last_temperature;
 
 	/* init calibration results */
@@ -893,9 +893,6 @@ struct iwl_priv {
 	enum iwl_scan_type scan_type;
 	u8 scan_tx_ant[IEEE80211_NUM_BANDS];
 	u8 mgmt_tx_ant;
-
-	/*TODO: remove these pointers - use bus(priv) instead */
-	struct iwl_bus *bus;	/* bus specific data */
 
 	/* max number of station keys */
 	u8 sta_key_max_num;

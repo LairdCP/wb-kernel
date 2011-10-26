@@ -55,7 +55,9 @@ int mwifiex_wait_queue_complete(struct mwifiex_adapter *adapter)
 {
 	bool cancel_flag = false;
 	int status = adapter->cmd_wait_q.status;
+	struct cmd_ctrl_node *cmd_queued = adapter->cmd_queued;
 
+	adapter->cmd_queued = NULL;
 	dev_dbg(adapter->dev, "cmd pending\n");
 	atomic_inc(&adapter->cmd_pending);
 
@@ -64,8 +66,8 @@ int mwifiex_wait_queue_complete(struct mwifiex_adapter *adapter)
 
 	/* Wait for completion */
 	wait_event_interruptible(adapter->cmd_wait_q.wait,
-					adapter->cmd_wait_q.condition);
-	if (!adapter->cmd_wait_q.condition)
+					*(cmd_queued->condition));
+	if (!*(cmd_queued->condition))
 		cancel_flag = true;
 
 	if (cancel_flag) {
@@ -148,7 +150,7 @@ int mwifiex_request_set_multicast_list(struct mwifiex_private *priv,
 int mwifiex_fill_new_bss_desc(struct mwifiex_private *priv,
 			      u8 *bssid, s32 rssi, u8 *ie_buf,
 			      size_t ie_len, u16 beacon_period,
-			      u16 cap_info_bitmap,
+			      u16 cap_info_bitmap, u8 band,
 			      struct mwifiex_bssdescriptor *bss_desc)
 {
 	int ret;
@@ -159,6 +161,7 @@ int mwifiex_fill_new_bss_desc(struct mwifiex_private *priv,
 	bss_desc->beacon_buf_size = ie_len;
 	bss_desc->beacon_period = beacon_period;
 	bss_desc->cap_info_bitmap = cap_info_bitmap;
+	bss_desc->bss_band = band;
 	if (bss_desc->cap_info_bitmap & WLAN_CAPABILITY_PRIVACY) {
 		dev_dbg(priv->adapter->dev, "info: InterpretIE: AP WEP enabled\n");
 		bss_desc->privacy = MWIFIEX_802_11_PRIV_FILTER_8021X_WEP;
@@ -211,7 +214,8 @@ int mwifiex_bss_start(struct mwifiex_private *priv, struct cfg80211_bss *bss,
 		ret = mwifiex_fill_new_bss_desc(priv, bss->bssid, bss->signal,
 						beacon_ie, bss->len_beacon_ies,
 						bss->beacon_interval,
-						bss->capability, bss_desc);
+						bss->capability,
+						*(u8 *)bss->priv, bss_desc);
 		if (ret)
 			goto done;
 	}
@@ -289,8 +293,8 @@ done:
  * This function prepares the correct firmware command and
  * issues it.
  */
-int mwifiex_set_hs_params(struct mwifiex_private *priv, u16 action,
-			  int cmd_type, struct mwifiex_ds_hs_cfg *hs_cfg)
+static int mwifiex_set_hs_params(struct mwifiex_private *priv, u16 action,
+				 int cmd_type, struct mwifiex_ds_hs_cfg *hs_cfg)
 
 {
 	struct mwifiex_adapter *adapter = priv->adapter;
@@ -653,6 +657,7 @@ mwifiex_drv_change_adhoc_chan(struct mwifiex_private *priv, int channel)
 	u16 curr_chan = 0;
 	struct cfg80211_bss *bss = NULL;
 	struct ieee80211_channel *chan;
+	enum ieee80211_band band;
 
 	memset(&bss_info, 0, sizeof(bss_info));
 
@@ -689,9 +694,9 @@ mwifiex_drv_change_adhoc_chan(struct mwifiex_private *priv, int channel)
 		goto done;
 	}
 
+	band = mwifiex_band_to_radio_type(priv->curr_bss_params.band);
 	chan = __ieee80211_get_channel(priv->wdev->wiphy,
-			ieee80211_channel_to_frequency(channel,
-						priv->curr_bss_params.band));
+			ieee80211_channel_to_frequency(channel, band));
 
 	/* Find the BSS we want using available scan results */
 	bss = cfg80211_get_bss(priv->wdev->wiphy, chan, bss_info.bssid,
@@ -717,51 +722,9 @@ done:
 static int mwifiex_rate_ioctl_get_rate_value(struct mwifiex_private *priv,
 					     struct mwifiex_rate_cfg *rate_cfg)
 {
-	struct mwifiex_adapter *adapter = priv->adapter;
-
 	rate_cfg->is_rate_auto = priv->is_data_rate_auto;
-	if (!priv->media_connected) {
-		switch (adapter->config_bands) {
-		case BAND_B:
-			/* Return the lowest supported rate for B band */
-			rate_cfg->rate = supported_rates_b[0] & 0x7f;
-			break;
-		case BAND_G:
-		case BAND_G | BAND_GN:
-			/* Return the lowest supported rate for G band */
-			rate_cfg->rate = supported_rates_g[0] & 0x7f;
-			break;
-		case BAND_B | BAND_G:
-		case BAND_A | BAND_B | BAND_G:
-		case BAND_A | BAND_B:
-		case BAND_A | BAND_B | BAND_G | BAND_AN | BAND_GN:
-		case BAND_B | BAND_G | BAND_GN:
-			/* Return the lowest supported rate for BG band */
-			rate_cfg->rate = supported_rates_bg[0] & 0x7f;
-			break;
-		case BAND_A:
-		case BAND_A | BAND_G:
-		case BAND_A | BAND_G | BAND_AN | BAND_GN:
-		case BAND_A | BAND_AN:
-			/* Return the lowest supported rate for A band */
-			rate_cfg->rate = supported_rates_a[0] & 0x7f;
-			break;
-		case BAND_GN:
-			/* Return the lowest supported rate for N band */
-			rate_cfg->rate = supported_rates_n[0] & 0x7f;
-			break;
-		default:
-			dev_warn(adapter->dev, "invalid band %#x\n",
-			       adapter->config_bands);
-			break;
-		}
-	} else {
-		return mwifiex_send_cmd_sync(priv,
-					    HostCmd_CMD_802_11_TX_RATE_QUERY,
-					    HostCmd_ACT_GEN_GET, 0, NULL);
-	}
-
-	return 0;
+	return mwifiex_send_cmd_sync(priv, HostCmd_CMD_802_11_TX_RATE_QUERY,
+				     HostCmd_ACT_GEN_GET, 0, NULL);
 }
 
 /*
@@ -802,7 +765,7 @@ static int mwifiex_rate_ioctl_set_rate_value(struct mwifiex_private *priv,
 			if ((rate[i] & 0x7f) == (rate_cfg->rate & 0x7f))
 				break;
 		}
-		if (!rate[i] || (i == MWIFIEX_SUPPORTED_RATES)) {
+		if ((i == MWIFIEX_SUPPORTED_RATES) || !rate[i]) {
 			dev_err(adapter->dev, "fixed data rate %#x is out "
 			       "of range\n", rate_cfg->rate);
 			return -1;

@@ -100,7 +100,7 @@ struct iwl_priv;
 struct iwl_sensitivity_ranges;
 struct iwl_trans_ops;
 
-#define DRV_NAME        "iwlagn"
+#define DRV_NAME        "iwlwifi"
 #define IWLWIFI_VERSION "in-tree:"
 #define DRV_COPYRIGHT	"Copyright(c) 2003-2011 Intel Corporation"
 #define DRV_AUTHOR     "<ilw@linux.intel.com>"
@@ -165,7 +165,6 @@ struct iwl_mod_params {
  * @rx_chains_num: Number of RX chains
  * @valid_tx_ant: usable antennas for TX
  * @valid_rx_ant: usable antennas for RX
- * @max_stations: the maximal number of stations
  * @ht40_channel: is 40MHz width possible: BIT(IEEE80211_BAND_XXX)
  * @sku: sku read from EEPROM
  * @rx_page_order: Rx buffer page order
@@ -186,7 +185,6 @@ struct iwl_hw_params {
 	u8  rx_chains_num;
 	u8  valid_tx_ant;
 	u8  valid_rx_ant;
-	u8  max_stations;
 	u8  ht40_channel;
 	bool shadow_reg_enable;
 	u16 sku;
@@ -489,6 +487,7 @@ static inline void iwl_print_rx_config_cmd(struct iwl_priv *priv,
 #define STATUS_FW_ERROR		17
 #define STATUS_DEVICE_ENABLED	18
 #define STATUS_CHANNEL_SWITCH_PENDING 19
+#define STATUS_SCAN_COMPLETE	20
 
 static inline int iwl_is_ready(struct iwl_shared *shrd)
 {

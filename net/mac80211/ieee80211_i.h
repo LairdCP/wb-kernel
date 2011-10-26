@@ -136,7 +136,6 @@ typedef unsigned __bitwise__ ieee80211_tx_result;
 #define TX_DROP		((__force ieee80211_tx_result) 1u)
 #define TX_QUEUED	((__force ieee80211_tx_result) 2u)
 
-#define IEEE80211_TX_FRAGMENTED		BIT(0)
 #define IEEE80211_TX_UNICAST		BIT(1)
 #define IEEE80211_TX_PS_BUFFERED	BIT(2)
 
@@ -149,7 +148,6 @@ struct ieee80211_tx_data {
 
 	struct ieee80211_channel *channel;
 
-	u16 ethertype;
 	unsigned int flags;
 };
 
@@ -346,6 +344,7 @@ struct ieee80211_work {
 		struct {
 			struct sk_buff *frame;
 			u32 wait;
+			bool status;
 		} offchan_tx;
 	};
 
@@ -609,6 +608,8 @@ struct ieee80211_sub_if_data {
 	__be16 control_port_protocol;
 	bool control_port_no_encrypt;
 
+	struct ieee80211_tx_queue_params tx_conf[IEEE80211_MAX_QUEUES];
+
 	struct work_struct work;
 	struct sk_buff_head skb_queue;
 
@@ -662,6 +663,11 @@ enum sdata_queue_type {
 enum {
 	IEEE80211_RX_MSG	= 1,
 	IEEE80211_TX_STATUS_MSG	= 2,
+	IEEE80211_EOSP_MSG	= 3,
+};
+
+struct skb_eosp_msg_data {
+	u8 sta[ETH_ALEN], iface[ETH_ALEN];
 };
 
 enum queue_stop_reason {
@@ -751,7 +757,6 @@ struct ieee80211_local {
 	struct workqueue_struct *workqueue;
 
 	unsigned long queue_stop_reasons[IEEE80211_MAX_QUEUES];
-	struct ieee80211_tx_queue_params tx_conf[IEEE80211_MAX_QUEUES];
 	/* also used to protect ampdu_ac_queue and amdpu_ac_stop_refcnt */
 	spinlock_t queue_stop_reason_lock;
 
@@ -1172,18 +1177,6 @@ netdev_tx_t ieee80211_monitor_start_xmit(struct sk_buff *skb,
 netdev_tx_t ieee80211_subif_start_xmit(struct sk_buff *skb,
 				       struct net_device *dev);
 
-/*
- * radiotap header for status frames
- */
-struct ieee80211_tx_status_rtap_hdr {
-	struct ieee80211_radiotap_header hdr;
-	u8 rate;
-	u8 padding_for_rate;
-	__le16 tx_flags;
-	u8 data_retries;
-} __packed;
-
-
 /* HT */
 void ieee80211_ht_cap_ie_to_sta_ht_cap(struct ieee80211_supported_band *sband,
 				       struct ieee80211_ht_cap *ht_cap_ie,
@@ -1271,6 +1264,7 @@ void mac80211_ev_michael_mic_failure(struct ieee80211_sub_if_data *sdata, int ke
 				     struct ieee80211_hdr *hdr, const u8 *tsc,
 				     gfp_t gfp);
 void ieee80211_set_wmm_default(struct ieee80211_sub_if_data *sdata);
+void ieee80211_xmit(struct ieee80211_sub_if_data *sdata, struct sk_buff *skb);
 void ieee80211_tx_skb(struct ieee80211_sub_if_data *sdata, struct sk_buff *skb);
 void ieee802_11_parse_elems(u8 *start, size_t len,
 			    struct ieee802_11_elems *elems);
@@ -1302,11 +1296,11 @@ void ieee80211_stop_queue_by_reason(struct ieee80211_hw *hw, int queue,
 				    enum queue_stop_reason reason);
 void ieee80211_add_pending_skb(struct ieee80211_local *local,
 			       struct sk_buff *skb);
-int ieee80211_add_pending_skbs(struct ieee80211_local *local,
-			       struct sk_buff_head *skbs);
-int ieee80211_add_pending_skbs_fn(struct ieee80211_local *local,
-				  struct sk_buff_head *skbs,
-				  void (*fn)(void *data), void *data);
+void ieee80211_add_pending_skbs(struct ieee80211_local *local,
+				struct sk_buff_head *skbs);
+void ieee80211_add_pending_skbs_fn(struct ieee80211_local *local,
+				   struct sk_buff_head *skbs,
+				   void (*fn)(void *data), void *data);
 
 void ieee80211_send_auth(struct ieee80211_sub_if_data *sdata,
 			 u16 transaction, u16 auth_alg,
@@ -1324,7 +1318,7 @@ struct sk_buff *ieee80211_build_probe_req(struct ieee80211_sub_if_data *sdata,
 void ieee80211_send_probe_req(struct ieee80211_sub_if_data *sdata, u8 *dst,
 			      const u8 *ssid, size_t ssid_len,
 			      const u8 *ie, size_t ie_len,
-			      u32 ratemask, bool directed);
+			      u32 ratemask, bool directed, bool no_cck);
 
 void ieee80211_sta_def_wmm_params(struct ieee80211_sub_if_data *sdata,
 				  const size_t supp_rates_len,

@@ -458,7 +458,7 @@ ieee80211_direct_probe(struct ieee80211_work *wk)
 	 */
 	ieee80211_send_probe_req(sdata, NULL, wk->probe_auth.ssid,
 				 wk->probe_auth.ssid_len, NULL, 0,
-				 (u32) -1, true);
+				 (u32) -1, true, false);
 
 	wk->timeout = jiffies + IEEE80211_AUTH_TIMEOUT;
 	run_again(local, wk->timeout);
@@ -577,7 +577,7 @@ ieee80211_offchannel_tx(struct ieee80211_work *wk)
 		/*
 		 * After this, offchan_tx.frame remains but now is no
 		 * longer a valid pointer -- we still need it as the
-		 * cookie for canceling this work.
+		 * cookie for canceling this work/status matching.
 		 */
 		ieee80211_tx_skb(wk->sdata, wk->offchan_tx.frame);
 

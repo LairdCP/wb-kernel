@@ -181,7 +181,7 @@ static void wl1271_stop_ba_event(struct wl1271 *wl)
 	} else {
 		int i;
 		struct wl1271_link *lnk;
-		for (i = WL1271_AP_STA_HLID_START; i < WL12XX_MAX_LINKS; i++) {
+		for (i = WL1271_AP_STA_HLID_START; i < AP_MAX_LINKS; i++) {
 			lnk = &wl->links[i];
 			if (!wl1271_is_active_sta(wl, i) || !lnk->ba_bitmap)
 				continue;
@@ -298,6 +298,21 @@ static int wl1271_event_process(struct wl1271 *wl, struct event_mailbox *mbox)
 
 		if (wl->vif && !wl->ba_allowed)
 			wl1271_stop_ba_event(wl);
+	}
+
+	if ((vector & CHANNEL_SWITCH_COMPLETE_EVENT_ID) && !is_ap) {
+		wl1271_debug(DEBUG_EVENT, "CHANNEL_SWITCH_COMPLETE_EVENT_ID. "
+					  "status = 0x%x",
+					  mbox->channel_switch_status);
+		/*
+		 * That event uses for two cases:
+		 * 1) channel switch complete with status=0
+		 * 2) channel switch failed status=1
+		 */
+		if (test_and_clear_bit(WL1271_FLAG_CS_PROGRESS, &wl->flags) &&
+		    (wl->vif))
+			ieee80211_chswitch_done(wl->vif,
+				mbox->channel_switch_status ? false : true);
 	}
 
 	if ((vector & DUMMY_PACKET_EVENT_ID)) {

@@ -35,9 +35,7 @@
 
 #include "iwl-dev.h"
 #include "iwl-core.h"
-#include "iwl-sta.h"
 #include "iwl-io.h"
-#include "iwl-helpers.h"
 #include "iwl-agn-hw.h"
 #include "iwl-agn.h"
 #include "iwl-trans.h"
@@ -113,8 +111,6 @@ static void iwlagn_tx_cmd_build_basic(struct iwl_priv *priv,
 	tx_cmd->next_frame_len = 0;
 }
 
-#define RTS_DFAULT_RETRY_LIMIT		60
-
 static void iwlagn_tx_cmd_build_rate(struct iwl_priv *priv,
 				     struct iwl_tx_cmd *tx_cmd,
 				     struct ieee80211_tx_info *info,
@@ -126,17 +122,25 @@ static void iwlagn_tx_cmd_build_rate(struct iwl_priv *priv,
 	u8 data_retry_limit;
 	u8 rate_plcp;
 
-	/* Set retry limit on DATA packets and Probe Responses*/
-	if (ieee80211_is_probe_resp(fc))
-		data_retry_limit = 3;
-	else
-		data_retry_limit = IWLAGN_DEFAULT_TX_RETRY;
-	tx_cmd->data_retry_limit = data_retry_limit;
+	if (priv->shrd->wowlan) {
+		rts_retry_limit = IWLAGN_LOW_RETRY_LIMIT;
+		data_retry_limit = IWLAGN_LOW_RETRY_LIMIT;
+	} else {
+		/* Set retry limit on RTS packets */
+		rts_retry_limit = IWLAGN_RTS_DFAULT_RETRY_LIMIT;
 
-	/* Set retry limit on RTS packets */
-	rts_retry_limit = RTS_DFAULT_RETRY_LIMIT;
-	if (data_retry_limit < rts_retry_limit)
-		rts_retry_limit = data_retry_limit;
+		/* Set retry limit on DATA packets and Probe Responses*/
+		if (ieee80211_is_probe_resp(fc)) {
+			data_retry_limit = IWLAGN_MGMT_DFAULT_RETRY_LIMIT;
+			rts_retry_limit =
+				min(data_retry_limit, rts_retry_limit);
+		} else if (ieee80211_is_back_req(fc))
+			data_retry_limit = IWLAGN_BAR_DFAULT_RETRY_LIMIT;
+		else
+			data_retry_limit = IWLAGN_DEFAULT_TX_RETRY;
+	}
+
+	tx_cmd->data_retry_limit = data_retry_limit;
 	tx_cmd->rts_retry_limit = rts_retry_limit;
 
 	/* DATA packets will use the uCode station table for rate/antenna
@@ -300,7 +304,7 @@ int iwlagn_tx_skb(struct iwl_priv *priv, struct sk_buff *skb)
 		sta_priv = (void *)info->control.sta->drv_priv;
 
 	if (sta_priv && sta_priv->asleep &&
-	    (info->flags & IEEE80211_TX_CTL_PSPOLL_RESPONSE)) {
+	    (info->flags & IEEE80211_TX_CTL_POLL_RESPONSE)) {
 		/*
 		 * This sends an asynchronous command to the device,
 		 * but we can rely on it being processed before the
@@ -327,9 +331,6 @@ int iwlagn_tx_skb(struct iwl_priv *priv, struct sk_buff *skb)
 	memset(dev_cmd, 0, sizeof(*dev_cmd));
 	tx_cmd = (struct iwl_tx_cmd *) dev_cmd->payload;
 
-	/* Copy MAC header from skb into command buffer */
-	memcpy(tx_cmd->hdr, hdr, hdr_len);
-
 	/* Total # bytes to be transmitted */
 	len = (u16)skb->len;
 	tx_cmd->len = cpu_to_le16(len);
@@ -344,6 +345,8 @@ int iwlagn_tx_skb(struct iwl_priv *priv, struct sk_buff *skb)
 	iwlagn_tx_cmd_build_rate(priv, tx_cmd, info, fc);
 
 	iwl_update_stats(priv, true, fc, len);
+
+	memset(&info->status, 0, sizeof(info->status));
 
 	info->driver_data[0] = ctx;
 	info->driver_data[1] = dev_cmd;
@@ -582,6 +585,9 @@ static void iwl_rx_reply_tx_agg(struct iwl_priv *priv,
 	    priv->cfg->bt_params->advanced_bt_coexist) {
 		IWL_DEBUG_COEX(priv, "receive reply tx w/ bt_kill\n");
 	}
+
+	if (tx_resp->frame_count == 1)
+		return;
 
 	/* Construct bit-map of pending frames within Tx window */
 	for (i = 0; i < tx_resp->frame_count; i++) {
@@ -941,7 +947,10 @@ int iwlagn_rx_reply_compressed_ba(struct iwl_priv *priv,
 		else
 			WARN_ON_ONCE(1);
 
-		if (freed == 0) {
+		info = IEEE80211_SKB_CB(skb);
+		kmem_cache_free(priv->tx_cmd_pool, (info->driver_data[1]));
+
+		if (freed == 1) {
 			/* this is the first skb we deliver in this batch */
 			/* put the rate scaling data there */
 			info = IEEE80211_SKB_CB(skb);
@@ -953,9 +962,6 @@ int iwlagn_rx_reply_compressed_ba(struct iwl_priv *priv,
 			iwlagn_hwrate_to_tx_control(priv, agg->rate_n_flags,
 						    info);
 		}
-
-		info = IEEE80211_SKB_CB(skb);
-		kmem_cache_free(priv->tx_cmd_pool, (info->driver_data[1]));
 
 		ieee80211_tx_status_irqsafe(priv->hw, skb);
 	}

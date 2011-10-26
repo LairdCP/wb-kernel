@@ -424,6 +424,17 @@ enum plink_actions {
 };
 
 /**
+ * enum station_parameters_apply_mask - station parameter values to apply
+ * @STATION_PARAM_APPLY_UAPSD: apply new uAPSD parameters (uapsd_queues, max_sp)
+ *
+ * Not all station parameters have in-band "no change" signalling,
+ * for those that don't these flags will are used.
+ */
+enum station_parameters_apply_mask {
+	STATION_PARAM_APPLY_UAPSD = BIT(0),
+};
+
+/**
  * struct station_parameters - station parameters
  *
  * Used to change and create a new station.
@@ -450,6 +461,7 @@ struct station_parameters {
 	u8 *supported_rates;
 	struct net_device *vlan;
 	u32 sta_flags_mask, sta_flags_set;
+	u32 sta_modify_mask;
 	int listen_interval;
 	u16 aid;
 	u8 supported_rates_len;
@@ -485,6 +497,7 @@ struct station_parameters {
  * @STATION_INFO_BSS_PARAM: @bss_param filled
  * @STATION_INFO_CONNECTED_TIME: @connected_time filled
  * @STATION_INFO_ASSOC_REQ_IES: @assoc_req_ies filled
+ * @STATION_INFO_STA_FLAGS: @sta_flags filled
  */
 enum station_info_flags {
 	STATION_INFO_INACTIVE_TIME	= 1<<0,
@@ -504,7 +517,8 @@ enum station_info_flags {
 	STATION_INFO_RX_BITRATE		= 1<<14,
 	STATION_INFO_BSS_PARAM          = 1<<15,
 	STATION_INFO_CONNECTED_TIME	= 1<<16,
-	STATION_INFO_ASSOC_REQ_IES	= 1<<17
+	STATION_INFO_ASSOC_REQ_IES	= 1<<17,
+	STATION_INFO_STA_FLAGS		= 1<<18
 };
 
 /**
@@ -621,6 +635,7 @@ struct station_info {
 	u32 tx_failed;
 	u32 rx_dropped_misc;
 	struct sta_bss_parameters bss_param;
+	struct nl80211_sta_flag_update sta_flags;
 
 	int generation;
 
@@ -860,6 +875,7 @@ struct cfg80211_ssid {
  * @wiphy: the wiphy this was for
  * @dev: the interface
  * @aborted: (internal) scan request was notified as aborted
+ * @no_cck: used to send probe requests at non CCK rate in 2GHz band
  */
 struct cfg80211_scan_request {
 	struct cfg80211_ssid *ssids;
@@ -874,6 +890,7 @@ struct cfg80211_scan_request {
 	struct wiphy *wiphy;
 	struct net_device *dev;
 	bool aborted;
+	bool no_cck;
 
 	/* keep last */
 	struct ieee80211_channel *channels[0];
@@ -1408,6 +1425,9 @@ struct cfg80211_gtk_rekey_data {
  * @set_ringparam: Set tx and rx ring sizes.
  *
  * @get_ringparam: Get tx and rx ring current and maximum sizes.
+ *
+ * @tdls_mgmt: Transmit a TDLS management frame.
+ * @tdls_oper: Perform a high-level TDLS operation (e.g. TDLS link setup).
  */
 struct cfg80211_ops {
 	int	(*suspend)(struct wiphy *wiphy, struct cfg80211_wowlan *wow);
@@ -1484,7 +1504,7 @@ struct cfg80211_ops {
 	int	(*change_bss)(struct wiphy *wiphy, struct net_device *dev,
 			      struct bss_parameters *params);
 
-	int	(*set_txq_params)(struct wiphy *wiphy,
+	int	(*set_txq_params)(struct wiphy *wiphy, struct net_device *dev,
 				  struct ieee80211_txq_params *params);
 
 	int	(*set_channel)(struct wiphy *wiphy, struct net_device *dev,
@@ -1560,7 +1580,8 @@ struct cfg80211_ops {
 			  struct ieee80211_channel *chan, bool offchan,
 			  enum nl80211_channel_type channel_type,
 			  bool channel_type_valid, unsigned int wait,
-			  const u8 *buf, size_t len, u64 *cookie);
+			  const u8 *buf, size_t len, bool no_cck,
+			  u64 *cookie);
 	int	(*mgmt_tx_cancel_wait)(struct wiphy *wiphy,
 				       struct net_device *dev,
 				       u64 cookie);
@@ -1590,6 +1611,12 @@ struct cfg80211_ops {
 
 	int	(*set_rekey_data)(struct wiphy *wiphy, struct net_device *dev,
 				  struct cfg80211_gtk_rekey_data *data);
+
+	int	(*tdls_mgmt)(struct wiphy *wiphy, struct net_device *dev,
+			     u8 *peer, u8 action_code,  u8 dialog_token,
+			     u16 status_code, const u8 *buf, size_t len);
+	int	(*tdls_oper)(struct wiphy *wiphy, struct net_device *dev,
+			     u8 *peer, enum nl80211_tdls_operation oper);
 };
 
 /*
@@ -1642,6 +1669,12 @@ struct cfg80211_ops {
  * @WIPHY_FLAG_SUPPORTS_FW_ROAM: The device supports roaming feature in the
  *	firmware.
  * @WIPHY_FLAG_AP_UAPSD: The device supports uapsd on AP.
+ * @WIPHY_FLAG_SUPPORTS_TDLS: The device supports TDLS (802.11z) operation.
+ * @WIPHY_FLAG_TDLS_EXTERNAL_SETUP: The device does not handle TDLS (802.11z)
+ *	link setup/discovery operations internally. Setup, discovery and
+ *	teardown packets should be sent through the @NL80211_CMD_TDLS_MGMT
+ *	command. When this flag is not set, @NL80211_CMD_TDLS_OPER should be
+ *	used for asking the driver/firmware to perform a TDLS operation.
  */
 enum wiphy_flags {
 	WIPHY_FLAG_CUSTOM_REGULATORY		= BIT(0),
@@ -1658,6 +1691,8 @@ enum wiphy_flags {
 	WIPHY_FLAG_ENFORCE_COMBINATIONS		= BIT(12),
 	WIPHY_FLAG_SUPPORTS_FW_ROAM		= BIT(13),
 	WIPHY_FLAG_AP_UAPSD			= BIT(14),
+	WIPHY_FLAG_SUPPORTS_TDLS		= BIT(15),
+	WIPHY_FLAG_TDLS_EXTERNAL_SETUP		= BIT(16),
 };
 
 /**

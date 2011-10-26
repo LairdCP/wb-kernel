@@ -36,7 +36,6 @@
 #include <linux/workqueue.h>
 
 #include "iwl-dev.h"
-#include "iwl-sta.h"
 #include "iwl-core.h"
 #include "iwl-agn.h"
 
@@ -2273,9 +2272,6 @@ static void rs_rate_scale_perform(struct iwl_priv *priv,
 	    info->flags & IEEE80211_TX_CTL_NO_ACK)
 		return;
 
-	if (!sta || !lq_sta)
-		return;
-
 	lq_sta->supp_rates = sta->supp_rates[lq_sta->band];
 
 	tid = rs_tl_add_packet(lq_sta, hdr);
@@ -2669,8 +2665,7 @@ lq_update:
 
 out:
 	tbl->current_rate = rate_n_flags_from_tbl(priv, tbl, index, is_green);
-	i = index;
-	lq_sta->last_txrate_idx = i;
+	lq_sta->last_txrate_idx = index;
 }
 
 /**
