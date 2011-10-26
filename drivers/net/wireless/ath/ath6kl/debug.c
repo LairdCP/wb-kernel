@@ -142,50 +142,48 @@ void ath6kl_dump_registers(struct ath6kl_device *dev,
 
 static void dump_cred_dist(struct htc_endpoint_credit_dist *ep_dist)
 {
-	ath6kl_dbg(ATH6KL_DBG_ANY,
+	ath6kl_dbg(ATH6KL_DBG_CREDIT,
 		   "--- endpoint: %d  svc_id: 0x%X ---\n",
 		   ep_dist->endpoint, ep_dist->svc_id);
-	ath6kl_dbg(ATH6KL_DBG_ANY, " dist_flags     : 0x%X\n",
+	ath6kl_dbg(ATH6KL_DBG_CREDIT, " dist_flags     : 0x%X\n",
 		   ep_dist->dist_flags);
-	ath6kl_dbg(ATH6KL_DBG_ANY, " cred_norm      : %d\n",
+	ath6kl_dbg(ATH6KL_DBG_CREDIT, " cred_norm      : %d\n",
 		   ep_dist->cred_norm);
-	ath6kl_dbg(ATH6KL_DBG_ANY, " cred_min       : %d\n",
+	ath6kl_dbg(ATH6KL_DBG_CREDIT, " cred_min       : %d\n",
 		   ep_dist->cred_min);
-	ath6kl_dbg(ATH6KL_DBG_ANY, " credits        : %d\n",
+	ath6kl_dbg(ATH6KL_DBG_CREDIT, " credits        : %d\n",
 		   ep_dist->credits);
-	ath6kl_dbg(ATH6KL_DBG_ANY, " cred_assngd    : %d\n",
+	ath6kl_dbg(ATH6KL_DBG_CREDIT, " cred_assngd    : %d\n",
 		   ep_dist->cred_assngd);
-	ath6kl_dbg(ATH6KL_DBG_ANY, " seek_cred      : %d\n",
+	ath6kl_dbg(ATH6KL_DBG_CREDIT, " seek_cred      : %d\n",
 		   ep_dist->seek_cred);
-	ath6kl_dbg(ATH6KL_DBG_ANY, " cred_sz        : %d\n",
+	ath6kl_dbg(ATH6KL_DBG_CREDIT, " cred_sz        : %d\n",
 		   ep_dist->cred_sz);
-	ath6kl_dbg(ATH6KL_DBG_ANY, " cred_per_msg   : %d\n",
+	ath6kl_dbg(ATH6KL_DBG_CREDIT, " cred_per_msg   : %d\n",
 		   ep_dist->cred_per_msg);
-	ath6kl_dbg(ATH6KL_DBG_ANY, " cred_to_dist   : %d\n",
+	ath6kl_dbg(ATH6KL_DBG_CREDIT, " cred_to_dist   : %d\n",
 		   ep_dist->cred_to_dist);
-	ath6kl_dbg(ATH6KL_DBG_ANY, " txq_depth      : %d\n",
-		   get_queue_depth(&((struct htc_endpoint *)
-				     ep_dist->htc_rsvd)->txq));
-	ath6kl_dbg(ATH6KL_DBG_ANY,
+	ath6kl_dbg(ATH6KL_DBG_CREDIT, " txq_depth      : %d\n",
+		   get_queue_depth(&ep_dist->htc_ep->txq));
+	ath6kl_dbg(ATH6KL_DBG_CREDIT,
 		   "----------------------------------\n");
 }
 
+/* FIXME: move to htc.c */
 void dump_cred_dist_stats(struct htc_target *target)
 {
 	struct htc_endpoint_credit_dist *ep_list;
 
-	if (!AR_DBG_LVL_CHECK(ATH6KL_DBG_TRC))
+	if (!AR_DBG_LVL_CHECK(ATH6KL_DBG_CREDIT))
 		return;
 
 	list_for_each_entry(ep_list, &target->cred_dist_list, list)
 		dump_cred_dist(ep_list);
 
-	ath6kl_dbg(ATH6KL_DBG_HTC, "ctxt:%p dist:%p\n",
-		   target->cred_dist_cntxt, NULL);
-	ath6kl_dbg(ATH6KL_DBG_HTC,
-		   "credit distribution, total : %d, free : %d\n",
-		   target->cred_dist_cntxt->total_avail_credits,
-		   target->cred_dist_cntxt->cur_free_credits);
+	ath6kl_dbg(ATH6KL_DBG_CREDIT,
+		   "credit distribution total %d free %d\n",
+		   target->credit_info->total_avail_credits,
+		   target->credit_info->cur_free_credits);
 }
 
 static int ath6kl_debugfs_open(struct inode *inode, struct file *file)
@@ -397,12 +395,19 @@ static ssize_t read_file_tgt_stats(struct file *file, char __user *user_buf,
 				   size_t count, loff_t *ppos)
 {
 	struct ath6kl *ar = file->private_data;
-	struct target_stats *tgt_stats = &ar->target_stats;
+	struct ath6kl_vif *vif;
+	struct target_stats *tgt_stats;
 	char *buf;
 	unsigned int len = 0, buf_len = 1500;
 	int i;
 	long left;
 	ssize_t ret_cnt;
+
+	vif = ath6kl_vif_first(ar);
+	if (!vif)
+		return -EIO;
+
+	tgt_stats = &vif->target_stats;
 
 	buf = kzalloc(buf_len, GFP_KERNEL);
 	if (!buf)
@@ -413,9 +418,9 @@ static ssize_t read_file_tgt_stats(struct file *file, char __user *user_buf,
 		return -EBUSY;
 	}
 
-	set_bit(STATS_UPDATE_PEND, &ar->flag);
+	set_bit(STATS_UPDATE_PEND, &vif->flags);
 
-	if (ath6kl_wmi_get_stats_cmd(ar->wmi)) {
+	if (ath6kl_wmi_get_stats_cmd(ar->wmi, 0)) {
 		up(&ar->sem);
 		kfree(buf);
 		return -EIO;
@@ -423,7 +428,7 @@ static ssize_t read_file_tgt_stats(struct file *file, char __user *user_buf,
 
 	left = wait_event_interruptible_timeout(ar->event_wq,
 						!test_bit(STATS_UPDATE_PEND,
-						&ar->flag), WMI_TIMEOUT);
+						&vif->flags), WMI_TIMEOUT);
 
 	up(&ar->sem);
 
@@ -555,10 +560,10 @@ static ssize_t read_file_credit_dist_stats(struct file *file,
 
 	len += scnprintf(buf + len, buf_len - len, "%25s%5d\n",
 			 "Total Avail Credits: ",
-			 target->cred_dist_cntxt->total_avail_credits);
+			 target->credit_info->total_avail_credits);
 	len += scnprintf(buf + len, buf_len - len, "%25s%5d\n",
 			 "Free credits :",
-			 target->cred_dist_cntxt->cur_free_credits);
+			 target->credit_info->cur_free_credits);
 
 	len += scnprintf(buf + len, buf_len - len,
 			 " Epid  Flags    Cred_norm  Cred_min  Credits  Cred_assngd"
@@ -577,8 +582,7 @@ static ssize_t read_file_credit_dist_stats(struct file *file,
 		print_credit_info("%9d", cred_per_msg);
 		print_credit_info("%14d", cred_to_dist);
 		len += scnprintf(buf + len, buf_len - len, "%12d\n",
-				 get_queue_depth(&((struct htc_endpoint *)
-						 ep_list->htc_rsvd)->txq));
+				 get_queue_depth(&ep_list->htc_ep->txq));
 	}
 
 	if (len > buf_len)
@@ -1181,7 +1185,7 @@ static ssize_t ath6kl_keepalive_write(struct file *file,
 	if (ret)
 		return ret;
 
-	ret = ath6kl_wmi_set_keepalive_cmd(ar->wmi, val);
+	ret = ath6kl_wmi_set_keepalive_cmd(ar->wmi, 0, val);
 	if (ret)
 		return ret;
 
@@ -1226,7 +1230,7 @@ static ssize_t ath6kl_disconnect_timeout_write(struct file *file,
 	if (ret)
 		return ret;
 
-	ret = ath6kl_wmi_disctimeout_cmd(ar->wmi, val);
+	ret = ath6kl_wmi_disctimeout_cmd(ar->wmi, 0, val);
 	if (ret)
 		return ret;
 
@@ -1247,12 +1251,17 @@ static ssize_t ath6kl_create_qos_write(struct file *file,
 {
 
 	struct ath6kl *ar = file->private_data;
+	struct ath6kl_vif *vif;
 	char buf[100];
 	ssize_t len;
 	char *sptr, *token;
 	struct wmi_create_pstream_cmd pstream;
 	u32 val32;
 	u16 val16;
+
+	vif = ath6kl_vif_first(ar);
+	if (!vif)
+		return -EIO;
 
 	len = min(count, sizeof(buf) - 1);
 	if (copy_from_user(buf, user_buf, len))
@@ -1401,7 +1410,7 @@ static ssize_t ath6kl_create_qos_write(struct file *file,
 		return -EINVAL;
 	pstream.medium_time = cpu_to_le32(val32);
 
-	ath6kl_wmi_create_pstream_cmd(ar->wmi, &pstream);
+	ath6kl_wmi_create_pstream_cmd(ar->wmi, vif->fw_vif_idx, &pstream);
 
 	return count;
 }
@@ -1419,11 +1428,16 @@ static ssize_t ath6kl_delete_qos_write(struct file *file,
 {
 
 	struct ath6kl *ar = file->private_data;
+	struct ath6kl_vif *vif;
 	char buf[100];
 	ssize_t len;
 	char *sptr, *token;
 	u8 traffic_class;
 	u8 tsid;
+
+	vif = ath6kl_vif_first(ar);
+	if (!vif)
+		return -EIO;
 
 	len = min(count, sizeof(buf) - 1);
 	if (copy_from_user(buf, user_buf, len))
@@ -1443,7 +1457,8 @@ static ssize_t ath6kl_delete_qos_write(struct file *file,
 	if (kstrtou8(token, 0, &tsid))
 		return -EINVAL;
 
-	ath6kl_wmi_delete_pstream_cmd(ar->wmi, traffic_class, tsid);
+	ath6kl_wmi_delete_pstream_cmd(ar->wmi, vif->fw_vif_idx,
+				      traffic_class, tsid);
 
 	return count;
 }
@@ -1475,7 +1490,7 @@ static ssize_t ath6kl_bgscan_int_write(struct file *file,
 	if (bgscan_int == 0)
 		bgscan_int = 0xffff;
 
-	ath6kl_wmi_scanparams_cmd(ar->wmi, 0, 0, bgscan_int, 0, 0, 0, 3,
+	ath6kl_wmi_scanparams_cmd(ar->wmi, 0, 0, 0, bgscan_int, 0, 0, 0, 3,
 				  0, 0, 0);
 
 	return count;
@@ -1509,7 +1524,7 @@ int ath6kl_debug_init(struct ath6kl *ar)
 	ar->debug.fwlog_mask = 0;
 
 	ar->debugfs_phy = debugfs_create_dir("ath6kl",
-					     ar->wdev->wiphy->debugfsdir);
+					     ar->wiphy->debugfsdir);
 	if (!ar->debugfs_phy) {
 		vfree(ar->debug.fwlog_buf.buf);
 		kfree(ar->debug.fwlog_tmp);

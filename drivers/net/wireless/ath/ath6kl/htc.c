@@ -22,6 +22,314 @@
 
 #define CALC_TXRX_PADDED_LEN(dev, len)  (__ALIGN_MASK((len), (dev)->block_mask))
 
+/* Functions for Tx credit handling */
+static void ath6kl_credit_deposit(struct ath6kl_htc_credit_info *cred_info,
+				  struct htc_endpoint_credit_dist *ep_dist,
+				  int credits)
+{
+	ath6kl_dbg(ATH6KL_DBG_CREDIT, "credit deposit ep %d credits %d\n",
+		   ep_dist->endpoint, credits);
+
+	ep_dist->credits += credits;
+	ep_dist->cred_assngd += credits;
+	cred_info->cur_free_credits -= credits;
+}
+
+static void ath6kl_credit_init(struct ath6kl_htc_credit_info *cred_info,
+			       struct list_head *ep_list,
+			       int tot_credits)
+{
+	struct htc_endpoint_credit_dist *cur_ep_dist;
+	int count;
+
+	ath6kl_dbg(ATH6KL_DBG_CREDIT, "credit init total %d\n", tot_credits);
+
+	cred_info->cur_free_credits = tot_credits;
+	cred_info->total_avail_credits = tot_credits;
+
+	list_for_each_entry(cur_ep_dist, ep_list, list) {
+		if (cur_ep_dist->endpoint == ENDPOINT_0)
+			continue;
+
+		cur_ep_dist->cred_min = cur_ep_dist->cred_per_msg;
+
+		if (tot_credits > 4) {
+			if ((cur_ep_dist->svc_id == WMI_DATA_BK_SVC) ||
+			    (cur_ep_dist->svc_id == WMI_DATA_BE_SVC)) {
+				ath6kl_credit_deposit(cred_info,
+						      cur_ep_dist,
+						      cur_ep_dist->cred_min);
+				cur_ep_dist->dist_flags |= HTC_EP_ACTIVE;
+			}
+		}
+
+		if (cur_ep_dist->svc_id == WMI_CONTROL_SVC) {
+			ath6kl_credit_deposit(cred_info, cur_ep_dist,
+					      cur_ep_dist->cred_min);
+			/*
+			 * Control service is always marked active, it
+			 * never goes inactive EVER.
+			 */
+			cur_ep_dist->dist_flags |= HTC_EP_ACTIVE;
+		} else if (cur_ep_dist->svc_id == WMI_DATA_BK_SVC)
+			/* this is the lowest priority data endpoint */
+			/* FIXME: this looks fishy, check */
+			cred_info->lowestpri_ep_dist = cur_ep_dist->list;
+
+		/*
+		 * Streams have to be created (explicit | implicit) for all
+		 * kinds of traffic. BE endpoints are also inactive in the
+		 * beginning. When BE traffic starts it creates implicit
+		 * streams that redistributes credits.
+		 *
+		 * Note: all other endpoints have minimums set but are
+		 * initially given NO credits. credits will be distributed
+		 * as traffic activity demands
+		 */
+	}
+
+	WARN_ON(cred_info->cur_free_credits <= 0);
+
+	list_for_each_entry(cur_ep_dist, ep_list, list) {
+		if (cur_ep_dist->endpoint == ENDPOINT_0)
+			continue;
+
+		if (cur_ep_dist->svc_id == WMI_CONTROL_SVC)
+			cur_ep_dist->cred_norm = cur_ep_dist->cred_per_msg;
+		else {
+			/*
+			 * For the remaining data endpoints, we assume that
+			 * each cred_per_msg are the same. We use a simple
+			 * calculation here, we take the remaining credits
+			 * and determine how many max messages this can
+			 * cover and then set each endpoint's normal value
+			 * equal to 3/4 this amount.
+			 */
+			count = (cred_info->cur_free_credits /
+				 cur_ep_dist->cred_per_msg)
+				* cur_ep_dist->cred_per_msg;
+			count = (count * 3) >> 2;
+			count = max(count, cur_ep_dist->cred_per_msg);
+			cur_ep_dist->cred_norm = count;
+
+		}
+
+		ath6kl_dbg(ATH6KL_DBG_CREDIT,
+			   "credit ep %d svc_id %d credits %d per_msg %d norm %d min %d\n",
+			   cur_ep_dist->endpoint,
+			   cur_ep_dist->svc_id,
+			   cur_ep_dist->credits,
+			   cur_ep_dist->cred_per_msg,
+			   cur_ep_dist->cred_norm,
+			   cur_ep_dist->cred_min);
+	}
+}
+
+/* initialize and setup credit distribution */
+int ath6kl_credit_setup(void *htc_handle,
+			struct ath6kl_htc_credit_info *cred_info)
+{
+	u16 servicepriority[5];
+
+	memset(cred_info, 0, sizeof(struct ath6kl_htc_credit_info));
+
+	servicepriority[0] = WMI_CONTROL_SVC;  /* highest */
+	servicepriority[1] = WMI_DATA_VO_SVC;
+	servicepriority[2] = WMI_DATA_VI_SVC;
+	servicepriority[3] = WMI_DATA_BE_SVC;
+	servicepriority[4] = WMI_DATA_BK_SVC; /* lowest */
+
+	/* set priority list */
+	ath6kl_htc_set_credit_dist(htc_handle, cred_info, servicepriority, 5);
+
+	return 0;
+}
+
+/* reduce an ep's credits back to a set limit */
+static void ath6kl_credit_reduce(struct ath6kl_htc_credit_info *cred_info,
+				 struct htc_endpoint_credit_dist *ep_dist,
+				 int limit)
+{
+	int credits;
+
+	ath6kl_dbg(ATH6KL_DBG_CREDIT, "credit reduce ep %d limit %d\n",
+		   ep_dist->endpoint, limit);
+
+	ep_dist->cred_assngd = limit;
+
+	if (ep_dist->credits <= limit)
+		return;
+
+	credits = ep_dist->credits - limit;
+	ep_dist->credits -= credits;
+	cred_info->cur_free_credits += credits;
+}
+
+static void ath6kl_credit_update(struct ath6kl_htc_credit_info *cred_info,
+				 struct list_head *epdist_list)
+{
+	struct htc_endpoint_credit_dist *cur_dist_list;
+
+	list_for_each_entry(cur_dist_list, epdist_list, list) {
+		if (cur_dist_list->endpoint == ENDPOINT_0)
+			continue;
+
+		if (cur_dist_list->cred_to_dist > 0) {
+			cur_dist_list->credits +=
+					cur_dist_list->cred_to_dist;
+			cur_dist_list->cred_to_dist = 0;
+			if (cur_dist_list->credits >
+			    cur_dist_list->cred_assngd)
+				ath6kl_credit_reduce(cred_info,
+						cur_dist_list,
+						cur_dist_list->cred_assngd);
+
+			if (cur_dist_list->credits >
+			    cur_dist_list->cred_norm)
+				ath6kl_credit_reduce(cred_info, cur_dist_list,
+						     cur_dist_list->cred_norm);
+
+			if (!(cur_dist_list->dist_flags & HTC_EP_ACTIVE)) {
+				if (cur_dist_list->txq_depth == 0)
+					ath6kl_credit_reduce(cred_info,
+							     cur_dist_list, 0);
+			}
+		}
+	}
+}
+
+/*
+ * HTC has an endpoint that needs credits, ep_dist is the endpoint in
+ * question.
+ */
+static void ath6kl_credit_seek(struct ath6kl_htc_credit_info *cred_info,
+				struct htc_endpoint_credit_dist *ep_dist)
+{
+	struct htc_endpoint_credit_dist *curdist_list;
+	int credits = 0;
+	int need;
+
+	if (ep_dist->svc_id == WMI_CONTROL_SVC)
+		goto out;
+
+	if ((ep_dist->svc_id == WMI_DATA_VI_SVC) ||
+	    (ep_dist->svc_id == WMI_DATA_VO_SVC))
+		if ((ep_dist->cred_assngd >= ep_dist->cred_norm))
+			goto out;
+
+	/*
+	 * For all other services, we follow a simple algorithm of:
+	 *
+	 * 1. checking the free pool for credits
+	 * 2. checking lower priority endpoints for credits to take
+	 */
+
+	credits = min(cred_info->cur_free_credits, ep_dist->seek_cred);
+
+	if (credits >= ep_dist->seek_cred)
+		goto out;
+
+	/*
+	 * We don't have enough in the free pool, try taking away from
+	 * lower priority services The rule for taking away credits:
+	 *
+	 *   1. Only take from lower priority endpoints
+	 *   2. Only take what is allocated above the minimum (never
+	 *      starve an endpoint completely)
+	 *   3. Only take what you need.
+	 */
+
+	list_for_each_entry_reverse(curdist_list,
+				    &cred_info->lowestpri_ep_dist,
+				    list) {
+		if (curdist_list == ep_dist)
+			break;
+
+		need = ep_dist->seek_cred - cred_info->cur_free_credits;
+
+		if ((curdist_list->cred_assngd - need) >=
+		     curdist_list->cred_min) {
+			/*
+			 * The current one has been allocated more than
+			 * it's minimum and it has enough credits assigned
+			 * above it's minimum to fulfill our need try to
+			 * take away just enough to fulfill our need.
+			 */
+			ath6kl_credit_reduce(cred_info, curdist_list,
+					     curdist_list->cred_assngd - need);
+
+			if (cred_info->cur_free_credits >=
+			    ep_dist->seek_cred)
+				break;
+		}
+
+		if (curdist_list->endpoint == ENDPOINT_0)
+			break;
+	}
+
+	credits = min(cred_info->cur_free_credits, ep_dist->seek_cred);
+
+out:
+	/* did we find some credits? */
+	if (credits)
+		ath6kl_credit_deposit(cred_info, ep_dist, credits);
+
+	ep_dist->seek_cred = 0;
+}
+
+/* redistribute credits based on activity change */
+static void ath6kl_credit_redistribute(struct ath6kl_htc_credit_info *info,
+				       struct list_head *ep_dist_list)
+{
+	struct htc_endpoint_credit_dist *curdist_list;
+
+	list_for_each_entry(curdist_list, ep_dist_list, list) {
+		if (curdist_list->endpoint == ENDPOINT_0)
+			continue;
+
+		if ((curdist_list->svc_id == WMI_DATA_BK_SVC)  ||
+		    (curdist_list->svc_id == WMI_DATA_BE_SVC))
+			curdist_list->dist_flags |= HTC_EP_ACTIVE;
+
+		if ((curdist_list->svc_id != WMI_CONTROL_SVC) &&
+		    !(curdist_list->dist_flags & HTC_EP_ACTIVE)) {
+			if (curdist_list->txq_depth == 0)
+				ath6kl_credit_reduce(info, curdist_list, 0);
+			else
+				ath6kl_credit_reduce(info,
+						     curdist_list,
+						     curdist_list->cred_min);
+		}
+	}
+}
+
+/*
+ *
+ * This function is invoked whenever endpoints require credit
+ * distributions. A lock is held while this function is invoked, this
+ * function shall NOT block. The ep_dist_list is a list of distribution
+ * structures in prioritized order as defined by the call to the
+ * htc_set_credit_dist() api.
+ */
+static void ath6kl_credit_distribute(struct ath6kl_htc_credit_info *cred_info,
+				     struct list_head *ep_dist_list,
+			      enum htc_credit_dist_reason reason)
+{
+	switch (reason) {
+	case HTC_CREDIT_DIST_SEND_COMPLETE:
+		ath6kl_credit_update(cred_info, ep_dist_list);
+		break;
+	case HTC_CREDIT_DIST_ACTIVITY_CHANGE:
+		ath6kl_credit_redistribute(cred_info, ep_dist_list);
+		break;
+	default:
+		break;
+	}
+
+	WARN_ON(cred_info->cur_free_credits > cred_info->total_avail_credits);
+	WARN_ON(cred_info->cur_free_credits < 0);
+}
+
 static void ath6kl_htc_tx_buf_align(u8 **buf, unsigned long len)
 {
 	u8 *align_addr;
@@ -103,11 +411,11 @@ static void htc_tx_comp_update(struct htc_target *target,
 	endpoint->cred_dist.txq_depth = get_queue_depth(&endpoint->txq);
 
 	ath6kl_dbg(ATH6KL_DBG_HTC, "htc tx ctxt 0x%p dist 0x%p\n",
-		   target->cred_dist_cntxt, &target->cred_dist_list);
+		   target->credit_info, &target->cred_dist_list);
 
-	ath6k_credit_distribute(target->cred_dist_cntxt,
-				&target->cred_dist_list,
-				HTC_CREDIT_DIST_SEND_COMPLETE);
+	ath6kl_credit_distribute(target->credit_info,
+				 &target->cred_dist_list,
+				 HTC_CREDIT_DIST_SEND_COMPLETE);
 
 	spin_unlock_bh(&target->tx_lock);
 }
@@ -224,7 +532,7 @@ static int htc_check_credits(struct htc_target *target,
 	*req_cred = (len > target->tgt_cred_sz) ?
 		     DIV_ROUND_UP(len, target->tgt_cred_sz) : 1;
 
-	ath6kl_dbg(ATH6KL_DBG_HTC, "htc creds required %d got %d\n",
+	ath6kl_dbg(ATH6KL_DBG_CREDIT, "credit check need %d got %d\n",
 		   *req_cred, ep->cred_dist.credits);
 
 	if (ep->cred_dist.credits < *req_cred) {
@@ -234,16 +542,13 @@ static int htc_check_credits(struct htc_target *target,
 		/* Seek more credits */
 		ep->cred_dist.seek_cred = *req_cred - ep->cred_dist.credits;
 
-		ath6kl_dbg(ATH6KL_DBG_HTC, "htc creds ctxt 0x%p dist 0x%p\n",
-			   target->cred_dist_cntxt, &ep->cred_dist);
-
-		ath6k_seek_credits(target->cred_dist_cntxt, &ep->cred_dist);
+		ath6kl_credit_seek(target->credit_info, &ep->cred_dist);
 
 		ep->cred_dist.seek_cred = 0;
 
 		if (ep->cred_dist.credits < *req_cred) {
-			ath6kl_dbg(ATH6KL_DBG_HTC,
-				   "htc creds not enough credits for ep %d\n",
+			ath6kl_dbg(ATH6KL_DBG_CREDIT,
+				   "credit not found for ep %d\n",
 				   eid);
 			return -EINVAL;
 		}
@@ -257,17 +562,15 @@ static int htc_check_credits(struct htc_target *target,
 		ep->cred_dist.seek_cred =
 		ep->cred_dist.cred_per_msg - ep->cred_dist.credits;
 
-		ath6kl_dbg(ATH6KL_DBG_HTC, "htc creds ctxt 0x%p dist 0x%p\n",
-			   target->cred_dist_cntxt, &ep->cred_dist);
-
-		ath6k_seek_credits(target->cred_dist_cntxt, &ep->cred_dist);
+		ath6kl_credit_seek(target->credit_info, &ep->cred_dist);
 
 		/* see if we were successful in getting more */
 		if (ep->cred_dist.credits < ep->cred_dist.cred_per_msg) {
 			/* tell the target we need credits ASAP! */
 			*flags |= HTC_FLAGS_NEED_CREDIT_UPDATE;
 			ep->ep_st.cred_low_indicate += 1;
-			ath6kl_dbg(ATH6KL_DBG_HTC, "htc creds host needs credits\n");
+			ath6kl_dbg(ATH6KL_DBG_CREDIT,
+				   "credit we need credits asap\n");
 		}
 	}
 
@@ -619,7 +922,7 @@ static void htc_chk_ep_txq(struct htc_target *target)
 	 * are not modifying any state.
 	 */
 	list_for_each_entry(cred_dist, &target->cred_dist_list, list) {
-		endpoint = (struct htc_endpoint *)cred_dist->htc_rsvd;
+		endpoint = cred_dist->htc_ep;
 
 		spin_lock_bh(&target->tx_lock);
 		if (!list_empty(&endpoint->txq)) {
@@ -698,13 +1001,13 @@ static int htc_setup_tx_complete(struct htc_target *target)
 }
 
 void ath6kl_htc_set_credit_dist(struct htc_target *target,
-				struct htc_credit_state_info *cred_dist_cntxt,
+				struct ath6kl_htc_credit_info *credit_info,
 				u16 srvc_pri_order[], int list_len)
 {
 	struct htc_endpoint *endpoint;
 	int i, ep;
 
-	target->cred_dist_cntxt = cred_dist_cntxt;
+	target->credit_info = credit_info;
 
 	list_add_tail(&target->endpoint[ENDPOINT_0].cred_dist.list,
 		      &target->cred_dist_list);
@@ -840,11 +1143,11 @@ void ath6kl_htc_indicate_activity_change(struct htc_target *target,
 
 		ath6kl_dbg(ATH6KL_DBG_HTC,
 			   "htc tx activity ctxt 0x%p dist 0x%p\n",
-			   target->cred_dist_cntxt, &target->cred_dist_list);
+			   target->credit_info, &target->cred_dist_list);
 
-		ath6k_credit_distribute(target->cred_dist_cntxt,
-					&target->cred_dist_list,
-					HTC_CREDIT_DIST_ACTIVITY_CHANGE);
+		ath6kl_credit_distribute(target->credit_info,
+					 &target->cred_dist_list,
+					 HTC_CREDIT_DIST_ACTIVITY_CHANGE);
 	}
 
 	spin_unlock_bh(&target->tx_lock);
@@ -1204,9 +1507,6 @@ static void htc_proc_cred_rpt(struct htc_target *target,
 	int tot_credits = 0, i;
 	bool dist = false;
 
-	ath6kl_dbg(ATH6KL_DBG_HTC,
-		   "htc creds report entries %d\n", n_entries);
-
 	spin_lock_bh(&target->tx_lock);
 
 	for (i = 0; i < n_entries; i++, rpt++) {
@@ -1218,8 +1518,8 @@ static void htc_proc_cred_rpt(struct htc_target *target,
 
 		endpoint = &target->endpoint[rpt->eid];
 
-		ath6kl_dbg(ATH6KL_DBG_HTC,
-			   "htc creds report ep %d credits %d\n",
+		ath6kl_dbg(ATH6KL_DBG_CREDIT,
+			   "credit report ep %d credits %d\n",
 			   rpt->eid, rpt->credits);
 
 		endpoint->ep_st.tx_cred_rpt += 1;
@@ -1260,21 +1560,14 @@ static void htc_proc_cred_rpt(struct htc_target *target,
 		tot_credits += rpt->credits;
 	}
 
-	ath6kl_dbg(ATH6KL_DBG_HTC,
-		   "htc creds report tot_credits %d\n",
-		   tot_credits);
-
 	if (dist) {
 		/*
 		 * This was a credit return based on a completed send
 		 * operations note, this is done with the lock held
 		 */
-		ath6kl_dbg(ATH6KL_DBG_HTC, "htc creds ctxt 0x%p dist 0x%p\n",
-			   target->cred_dist_cntxt, &target->cred_dist_list);
-
-		ath6k_credit_distribute(target->cred_dist_cntxt,
-					&target->cred_dist_list,
-					HTC_CREDIT_DIST_SEND_COMPLETE);
+		ath6kl_credit_distribute(target->credit_info,
+					 &target->cred_dist_list,
+					 HTC_CREDIT_DIST_SEND_COMPLETE);
 	}
 
 	spin_unlock_bh(&target->tx_lock);
@@ -2119,7 +2412,7 @@ int ath6kl_htc_conn_service(struct htc_target *target,
 	endpoint->len_max = max_msg_sz;
 	endpoint->ep_cb = conn_req->ep_cb;
 	endpoint->cred_dist.svc_id = conn_req->svc_id;
-	endpoint->cred_dist.htc_rsvd = endpoint;
+	endpoint->cred_dist.htc_ep = endpoint;
 	endpoint->cred_dist.endpoint = assigned_ep;
 	endpoint->cred_dist.cred_sz = target->tgt_cred_sz;
 
@@ -2176,6 +2469,7 @@ static void reset_ep_state(struct htc_target *target)
 	}
 
 	/* reset distribution list */
+	/* FIXME: free existing entries */
 	INIT_LIST_HEAD(&target->cred_dist_list);
 }
 
@@ -2205,7 +2499,7 @@ static void htc_setup_msg_bndl(struct htc_target *target)
 	target->msg_per_bndl_max = min(target->max_scat_entries,
 				       target->msg_per_bndl_max);
 
-	ath6kl_dbg(ATH6KL_DBG_HTC,
+	ath6kl_dbg(ATH6KL_DBG_BOOT,
 		   "htc bundling allowed msg_per_bndl_max %d\n",
 		   target->msg_per_bndl_max);
 
@@ -2215,7 +2509,7 @@ static void htc_setup_msg_bndl(struct htc_target *target)
 	target->max_tx_bndl_sz = min(HIF_MBOX0_EXT_WIDTH,
 				     target->max_xfer_szper_scatreq);
 
-	ath6kl_dbg(ATH6KL_DBG_HTC, "htc max_rx_bndl_sz %d max_tx_bndl_sz %d\n",
+	ath6kl_dbg(ATH6KL_DBG_BOOT, "htc max_rx_bndl_sz %d max_tx_bndl_sz %d\n",
 		   target->max_rx_bndl_sz, target->max_tx_bndl_sz);
 
 	if (target->max_tx_bndl_sz)
@@ -2269,7 +2563,7 @@ int ath6kl_htc_wait_target(struct htc_target *target)
 	target->tgt_creds = le16_to_cpu(rdy_msg->ver2_0_info.cred_cnt);
 	target->tgt_cred_sz = le16_to_cpu(rdy_msg->ver2_0_info.cred_sz);
 
-	ath6kl_dbg(ATH6KL_DBG_HTC,
+	ath6kl_dbg(ATH6KL_DBG_BOOT,
 		   "htc target ready credits %d size %d\n",
 		   target->tgt_creds, target->tgt_cred_sz);
 
@@ -2284,7 +2578,7 @@ int ath6kl_htc_wait_target(struct htc_target *target)
 		target->msg_per_bndl_max = 0;
 	}
 
-	ath6kl_dbg(ATH6KL_DBG_HTC, "htc using protocol %s (%d)\n",
+	ath6kl_dbg(ATH6KL_DBG_BOOT, "htc using protocol %s (%d)\n",
 		  (target->htc_tgt_ver == HTC_VERSION_2P0) ? "2.0" : ">= 2.1",
 		  target->htc_tgt_ver);
 
@@ -2338,8 +2632,8 @@ int ath6kl_htc_start(struct htc_target *target)
 	}
 
 	/* NOTE: the first entry in the distribution list is ENDPOINT_0 */
-	ath6k_credit_init(target->cred_dist_cntxt, &target->cred_dist_list,
-			  target->tgt_creds);
+	ath6kl_credit_init(target->credit_info, &target->cred_dist_list,
+			   target->tgt_creds);
 
 	dump_cred_dist_stats(target);
 
