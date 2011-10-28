@@ -69,6 +69,8 @@
 #define ATH6KL_MAX_TRANSFER_SIZE_PER_SCATTER      (16 * 1024)
 #define ATH6KL_SCATTER_REQS                       4
 
+#define ATH6KL_HIF_COMMUNICATION_TIMEOUT	1000
+
 struct bus_request {
 	struct list_head list;
 
@@ -242,6 +244,8 @@ struct ath6kl_hif_ops {
 	void (*cleanup_scatter)(struct ath6kl *ar);
 	int (*suspend)(struct ath6kl *ar);
 	int (*resume)(struct ath6kl *ar);
+	int (*power_on)(struct ath6kl *ar);
+	int (*power_off)(struct ath6kl *ar);
 };
 
 int ath6kl_hif_setup(struct ath6kl_device *dev);

@@ -554,6 +554,8 @@ void ath6kl_core_free(struct ath6kl *ar)
 
 void ath6kl_core_cleanup(struct ath6kl *ar)
 {
+	ath6kl_hif_power_off(ar);
+
 	destroy_workqueue(ar->ath6kl_wq);
 
 	if (ar->htc_target)
@@ -1419,39 +1421,167 @@ static int ath6kl_init_hw_params(struct ath6kl *ar)
 	return 0;
 }
 
-static int ath6kl_init(struct ath6kl *ar)
+static int ath6kl_hw_start(struct ath6kl *ar)
 {
-	int status = 0;
-	s32 timeleft;
-	struct net_device *ndev;
-	int i;
+	long timeleft;
+	int ret, i;
 
-	if (!ar)
-		return -EIO;
+	ret = ath6kl_hif_power_on(ar);
+	if (ret)
+		return ret;
+
+	ret = ath6kl_configure_target(ar);
+	if (ret)
+		goto err_power_off;
+
+	ret = ath6kl_init_upload(ar);
+	if (ret)
+		goto err_power_off;
 
 	/* Do we need to finish the BMI phase */
+	/* FIXME: return error from ath6kl_bmi_done() */
 	if (ath6kl_bmi_done(ar)) {
-		status = -EIO;
-		goto ath6kl_init_done;
+		ret = -EIO;
+		goto err_power_off;
 	}
+
+	/*
+	 * The reason we have to wait for the target here is that the
+	 * driver layer has to init BMI in order to set the host block
+	 * size.
+	 */
+	if (ath6kl_htc_wait_target(ar->htc_target)) {
+		ret = -EIO;
+		goto err_power_off;
+	}
+
+	if (ath6kl_init_service_ep(ar)) {
+		ret = -EIO;
+		goto err_cleanup_scatter;
+	}
+
+	/* setup credit distribution */
+	ath6kl_credit_setup(ar->htc_target, &ar->credit_state_info);
+
+	/* start HTC */
+	ret = ath6kl_htc_start(ar->htc_target);
+	if (ret) {
+		/* FIXME: call this */
+		ath6kl_cookie_cleanup(ar);
+		goto err_cleanup_scatter;
+	}
+
+	/* Wait for Wmi event to be ready */
+	timeleft = wait_event_interruptible_timeout(ar->event_wq,
+						    test_bit(WMI_READY,
+							     &ar->flag),
+						    WMI_TIMEOUT);
+
+	ath6kl_dbg(ATH6KL_DBG_BOOT, "firmware booted\n");
+
+	if (ar->version.abi_ver != ATH6KL_ABI_VERSION) {
+		ath6kl_err("abi version mismatch: host(0x%x), target(0x%x)\n",
+			   ATH6KL_ABI_VERSION, ar->version.abi_ver);
+		ret = -EIO;
+		goto err_htc_stop;
+	}
+
+	if (!timeleft || signal_pending(current)) {
+		ath6kl_err("wmi is not ready or wait was interrupted\n");
+		ret = -EIO;
+		goto err_htc_stop;
+	}
+
+	ath6kl_dbg(ATH6KL_DBG_TRC, "%s: wmi is ready\n", __func__);
+
+	/* communicate the wmi protocol verision to the target */
+	/* FIXME: return error */
+	if ((ath6kl_set_host_app_area(ar)) != 0)
+		ath6kl_err("unable to set the host app area\n");
+
+	for (i = 0; i < MAX_NUM_VIF; i++) {
+		ret = ath6kl_target_config_wlan_params(ar, i);
+		if (ret)
+			goto err_htc_stop;
+	}
+
+	return 0;
+
+err_htc_stop:
+	ath6kl_htc_stop(ar->htc_target);
+err_cleanup_scatter:
+	ath6kl_hif_cleanup_scatter(ar);
+err_power_off:
+	ath6kl_hif_power_off(ar);
+
+	return ret;
+}
+
+int ath6kl_core_init(struct ath6kl *ar)
+{
+	struct ath6kl_bmi_target_info targ_info;
+	struct net_device *ndev;
+	int ret = 0, i;
+
+	ar->ath6kl_wq = create_singlethread_workqueue("ath6kl");
+	if (!ar->ath6kl_wq)
+		return -ENOMEM;
+
+	ret = ath6kl_bmi_init(ar);
+	if (ret)
+		goto err_wq;
+
+	/*
+	 * Turn on power to get hardware (target) version and leave power
+	 * on delibrately as we will boot the hardware anyway within few
+	 * seconds.
+	 */
+	ret = ath6kl_hif_power_on(ar);
+	if (ret)
+		goto err_bmi_cleanup;
+
+	ret = ath6kl_bmi_get_target_info(ar, &targ_info);
+	if (ret)
+		goto err_power_off;
+
+	ar->version.target_ver = le32_to_cpu(targ_info.version);
+	ar->target_type = le32_to_cpu(targ_info.type);
+	ar->wiphy->hw_version = le32_to_cpu(targ_info.version);
+
+	ret = ath6kl_init_hw_params(ar);
+	if (ret)
+		goto err_power_off;
+
+	ar->htc_target = ath6kl_htc_create(ar);
+
+	if (!ar->htc_target) {
+		ret = -ENOMEM;
+		goto err_power_off;
+	}
+
+	ret = ath6kl_fetch_firmwares(ar);
+	if (ret)
+		goto err_htc_cleanup;
+
+	/* FIXME: we should free all firmwares in the error cases below */
 
 	/* Indicate that WMI is enabled (although not ready yet) */
 	set_bit(WMI_ENABLED, &ar->flag);
 	ar->wmi = ath6kl_wmi_init(ar);
 	if (!ar->wmi) {
 		ath6kl_err("failed to initialize wmi\n");
-		status = -EIO;
-		goto ath6kl_init_done;
+		ret = -EIO;
+		goto err_htc_cleanup;
 	}
 
 	ath6kl_dbg(ATH6KL_DBG_TRC, "%s: got wmi @ 0x%p.\n", __func__, ar->wmi);
 
-	status = ath6kl_register_ieee80211_hw(ar);
-	if (status)
+	ret = ath6kl_register_ieee80211_hw(ar);
+	if (ret)
 		goto err_node_cleanup;
 
-	status = ath6kl_debug_init(ar);
-	if (status) {
+	ret = ath6kl_debug_init(ar);
+	if (ret) {
 		wiphy_unregister(ar->wiphy);
 		goto err_node_cleanup;
 	}
@@ -1469,7 +1599,7 @@ static int ath6kl_init(struct ath6kl *ar)
 
 	if (!ndev) {
 		ath6kl_err("Failed to instantiate a network device\n");
-		status = -ENOMEM;
+		ret = -ENOMEM;
 		wiphy_unregister(ar->wiphy);
 		goto err_debug_init;
 	}
@@ -1477,21 +1607,6 @@ static int ath6kl_init(struct ath6kl *ar)
 
 	ath6kl_dbg(ATH6KL_DBG_TRC, "%s: name=%s dev=0x%p, ar=0x%p\n",
 			__func__, ndev->name, ndev, ar);
-
-	/*
-	 * The reason we have to wait for the target here is that the
-	 * driver layer has to init BMI in order to set the host block
-	 * size.
-	 */
-	if (ath6kl_htc_wait_target(ar->htc_target)) {
-		status = -EIO;
-		goto err_if_deinit;
-	}
-
-	if (ath6kl_init_service_ep(ar)) {
-		status = -EIO;
-		goto err_cleanup_scatter;
-	}
 
 	/* setup access class priority mappings */
 	ar->ac_stream_pri_map[WMM_AC_BK] = 0; /* lowest  */
@@ -1506,55 +1621,17 @@ static int ath6kl_init(struct ath6kl *ar)
 	/* allocate some buffers that handle larger AMSDU frames */
 	ath6kl_refill_amsdu_rxbufs(ar, ATH6KL_MAX_AMSDU_RX_BUFFERS);
 
-	/* setup credit distribution */
-	ath6kl_credit_setup(ar->htc_target, &ar->credit_state_info);
-
 	ath6kl_cookie_init(ar);
-
-	/* start HTC */
-	status = ath6kl_htc_start(ar->htc_target);
-
-	if (status) {
-		ath6kl_cookie_cleanup(ar);
-		goto err_rxbuf_cleanup;
-	}
-
-	/* Wait for Wmi event to be ready */
-	timeleft = wait_event_interruptible_timeout(ar->event_wq,
-						    test_bit(WMI_READY,
-							     &ar->flag),
-						    WMI_TIMEOUT);
-
-	ath6kl_dbg(ATH6KL_DBG_BOOT, "firmware booted\n");
-
-	if (ar->version.abi_ver != ATH6KL_ABI_VERSION) {
-		ath6kl_err("abi version mismatch: host(0x%x), target(0x%x)\n",
-			   ATH6KL_ABI_VERSION, ar->version.abi_ver);
-		status = -EIO;
-		goto err_htc_stop;
-	}
-
-	if (!timeleft || signal_pending(current)) {
-		ath6kl_err("wmi is not ready or wait was interrupted\n");
-		status = -EIO;
-		goto err_htc_stop;
-	}
-
-	ath6kl_dbg(ATH6KL_DBG_TRC, "%s: wmi is ready\n", __func__);
-
-	/* communicate the wmi protocol verision to the target */
-	if ((ath6kl_set_host_app_area(ar)) != 0)
-		ath6kl_err("unable to set the host app area\n");
 
 	ar->conf_flags = ATH6KL_CONF_IGNORE_ERP_BARKER |
 			 ATH6KL_CONF_ENABLE_11N | ATH6KL_CONF_ENABLE_TX_BURST;
 
 	ar->wiphy->flags |= WIPHY_FLAG_SUPPORTS_FW_ROAM;
 
-	for (i = 0; i < MAX_NUM_VIF; i++) {
-		status = ath6kl_target_config_wlan_params(ar, i);
-		if (status)
-			goto err_htc_stop;
+	ret = ath6kl_hw_start(ar);
+	if (ret) {
+		ath6kl_err("Failed to boot hardware: %d\n", ret);
+		goto err_rxbuf_cleanup;
 	}
 
 	/*
@@ -1563,16 +1640,11 @@ static int ath6kl_init(struct ath6kl *ar)
 	 */
 	memcpy(ndev->dev_addr, ar->mac_addr, ETH_ALEN);
 
-	return status;
+	return ret;
 
-err_htc_stop:
-	ath6kl_htc_stop(ar->htc_target);
 err_rxbuf_cleanup:
 	ath6kl_htc_flush_rx_buf(ar->htc_target);
 	ath6kl_cleanup_amsdu_rxbufs(ar);
-err_cleanup_scatter:
-	ath6kl_hif_cleanup_scatter(ar);
-err_if_deinit:
 	rtnl_lock();
 	ath6kl_deinit_if_data(netdev_priv(ndev));
 	rtnl_unlock();
@@ -1583,63 +1655,10 @@ err_node_cleanup:
 	ath6kl_wmi_shutdown(ar->wmi);
 	clear_bit(WMI_ENABLED, &ar->flag);
 	ar->wmi = NULL;
-
-ath6kl_init_done:
-	return status;
-}
-
-int ath6kl_core_init(struct ath6kl *ar)
-{
-	int ret = 0;
-	struct ath6kl_bmi_target_info targ_info;
-
-	ar->ath6kl_wq = create_singlethread_workqueue("ath6kl");
-	if (!ar->ath6kl_wq)
-		return -ENOMEM;
-
-	ret = ath6kl_bmi_init(ar);
-	if (ret)
-		goto err_wq;
-
-	ret = ath6kl_bmi_get_target_info(ar, &targ_info);
-	if (ret)
-		goto err_bmi_cleanup;
-
-	ar->version.target_ver = le32_to_cpu(targ_info.version);
-	ar->target_type = le32_to_cpu(targ_info.type);
-	ar->wiphy->hw_version = le32_to_cpu(targ_info.version);
-
-	ret = ath6kl_init_hw_params(ar);
-	if (ret)
-		goto err_bmi_cleanup;
-
-	ret = ath6kl_configure_target(ar);
-	if (ret)
-		goto err_bmi_cleanup;
-
-	ar->htc_target = ath6kl_htc_create(ar);
-
-	if (!ar->htc_target) {
-		ret = -ENOMEM;
-		goto err_bmi_cleanup;
-	}
-
-	ret = ath6kl_fetch_firmwares(ar);
-	if (ret)
-		goto err_htc_cleanup;
-
-	ret = ath6kl_init_upload(ar);
-	if (ret)
-		goto err_htc_cleanup;
-
-	ret = ath6kl_init(ar);
-	if (ret)
-		goto err_htc_cleanup;
-
-	return ret;
-
 err_htc_cleanup:
 	ath6kl_htc_cleanup(ar->htc_target);
+err_power_off:
+	ath6kl_hif_power_off(ar);
 err_bmi_cleanup:
 	ath6kl_bmi_cleanup(ar);
 err_wq:
