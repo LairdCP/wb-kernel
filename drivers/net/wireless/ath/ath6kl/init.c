@@ -1452,6 +1452,8 @@ int ath6kl_init_hw_start(struct ath6kl *ar)
 			goto err_htc_stop;
 	}
 
+	ar->state = ATH6KL_STATE_ON;
+
 	return 0;
 
 err_htc_stop:
@@ -1479,6 +1481,8 @@ int ath6kl_init_hw_stop(struct ath6kl *ar)
 	ret = ath6kl_hif_power_off(ar);
 	if (ret)
 		ath6kl_warn("failed to power off hif: %d\n", ret);
+
+	ar->state = ATH6KL_STATE_OFF;
 
 	return 0;
 }
@@ -1680,17 +1684,17 @@ void ath6kl_stop_txrx(struct ath6kl *ar)
 		return;
 	}
 
-	spin_lock(&ar->list_lock);
+	spin_lock_bh(&ar->list_lock);
 	list_for_each_entry_safe(vif, tmp_vif, &ar->vif_list, list) {
 		list_del(&vif->list);
-		spin_unlock(&ar->list_lock);
+		spin_unlock_bh(&ar->list_lock);
 		ath6kl_cleanup_vif(vif, test_bit(WMI_READY, &ar->flag));
 		rtnl_lock();
 		ath6kl_deinit_if_data(vif);
 		rtnl_unlock();
-		spin_lock(&ar->list_lock);
+		spin_lock_bh(&ar->list_lock);
 	}
-	spin_unlock(&ar->list_lock);
+	spin_unlock_bh(&ar->list_lock);
 
 	clear_bit(WMI_READY, &ar->flag);
 

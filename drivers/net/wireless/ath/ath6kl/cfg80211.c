@@ -871,23 +871,19 @@ static int ath6kl_cfg80211_scan(struct wiphy *wiphy, struct net_device *ndev,
 	return ret;
 }
 
-void ath6kl_cfg80211_scan_complete_event(struct ath6kl_vif *vif, int status)
+void ath6kl_cfg80211_scan_complete_event(struct ath6kl_vif *vif, bool aborted)
 {
 	struct ath6kl *ar = vif->ar;
-	bool aborted;
 	int i;
 
-	ath6kl_dbg(ATH6KL_DBG_WLAN_CFG, "%s: status %d\n", __func__, status);
+	ath6kl_dbg(ATH6KL_DBG_WLAN_CFG, "%s: status%s\n", __func__,
+		   aborted ? " aborted" : "");
 
 	if (!vif->scan_req)
 		return;
 
-	if ((status == -ECANCELED) || (status == -EBUSY)) {
-		aborted = true;
+	if (aborted)
 		goto out;
-	}
-
-	aborted = false;
 
 	if (vif->scan_req->n_ssids && vif->scan_req->ssids[0].ssid_len) {
 		for (i = 0; i < vif->scan_req->n_ssids; i++) {
@@ -1324,9 +1320,9 @@ static int ath6kl_cfg80211_del_iface(struct wiphy *wiphy,
 	struct ath6kl *ar = wiphy_priv(wiphy);
 	struct ath6kl_vif *vif = netdev_priv(ndev);
 
-	spin_lock(&ar->list_lock);
+	spin_lock_bh(&ar->list_lock);
 	list_del(&vif->list);
-	spin_unlock(&ar->list_lock);
+	spin_unlock_bh(&ar->list_lock);
 
 	ath6kl_cleanup_vif(vif, test_bit(WMI_READY, &ar->flag));
 
@@ -1657,8 +1653,93 @@ static int ath6kl_flush_pmksa(struct wiphy *wiphy, struct net_device *netdev)
 	return 0;
 }
 
+int ath6kl_cfg80211_suspend(struct ath6kl *ar,
+			    enum ath6kl_cfg_suspend_mode mode)
+{
+	int ret;
+
+	ath6kl_cfg80211_stop(ar);
+
+	switch (mode) {
+	case ATH6KL_CFG_SUSPEND_DEEPSLEEP:
+		/* save the current power mode before enabling power save */
+		ar->wmi->saved_pwr_mode = ar->wmi->pwr_mode;
+
+		ret = ath6kl_wmi_powermode_cmd(ar->wmi, 0, REC_POWER);
+		if (ret) {
+			ath6kl_warn("wmi powermode command failed during suspend: %d\n",
+				    ret);
+		}
+
+		ar->state = ATH6KL_STATE_DEEPSLEEP;
+
+		break;
+
+	case ATH6KL_CFG_SUSPEND_CUTPOWER:
+		if (ar->state == ATH6KL_STATE_OFF) {
+			ath6kl_dbg(ATH6KL_DBG_SUSPEND,
+				   "suspend hw off, no action for cutpower\n");
+			break;
+		}
+
+		ath6kl_dbg(ATH6KL_DBG_SUSPEND, "suspend cutting power\n");
+
+		ret = ath6kl_init_hw_stop(ar);
+		if (ret) {
+			ath6kl_warn("failed to stop hw during suspend: %d\n",
+				    ret);
+		}
+
+		ar->state = ATH6KL_STATE_CUTPOWER;
+
+		break;
+
+	default:
+		break;
+	}
+
+	return 0;
+}
+
+int ath6kl_cfg80211_resume(struct ath6kl *ar)
+{
+	int ret;
+
+	switch (ar->state) {
+	case ATH6KL_STATE_DEEPSLEEP:
+		if (ar->wmi->pwr_mode != ar->wmi->saved_pwr_mode) {
+			ret = ath6kl_wmi_powermode_cmd(ar->wmi, 0,
+						       ar->wmi->saved_pwr_mode);
+			if (ret) {
+				ath6kl_warn("wmi powermode command failed during resume: %d\n",
+					    ret);
+			}
+		}
+
+		ar->state = ATH6KL_STATE_ON;
+
+		break;
+
+	case ATH6KL_STATE_CUTPOWER:
+		ath6kl_dbg(ATH6KL_DBG_SUSPEND, "resume restoring power\n");
+
+		ret = ath6kl_init_hw_start(ar);
+		if (ret) {
+			ath6kl_warn("Failed to boot hw in resume: %d\n", ret);
+			return ret;
+		}
+
+	default:
+		break;
+	}
+
+	return 0;
+}
+
 #ifdef CONFIG_PM
-static int ar6k_cfg80211_suspend(struct wiphy *wiphy,
+
+/* hif layer decides what suspend mode to use */
+static int __ath6kl_cfg80211_suspend(struct wiphy *wiphy,
 				 struct cfg80211_wowlan *wow)
 {
 	struct ath6kl *ar = wiphy_priv(wiphy);
@@ -1666,7 +1747,7 @@ static int ar6k_cfg80211_suspend(struct wiphy *wiphy,
 	return ath6kl_hif_suspend(ar);
 }
 
-static int ar6k_cfg80211_resume(struct wiphy *wiphy)
+static int __ath6kl_cfg80211_resume(struct wiphy *wiphy)
 {
 	struct ath6kl *ar = wiphy_priv(wiphy);
 
@@ -2102,8 +2183,8 @@ static struct cfg80211_ops ath6kl_cfg80211_ops = {
 	.flush_pmksa = ath6kl_flush_pmksa,
 	CFG80211_TESTMODE_CMD(ath6kl_tm_cmd)
 #ifdef CONFIG_PM
-	.suspend = ar6k_cfg80211_suspend,
-	.resume = ar6k_cfg80211_resume,
+	.suspend = __ath6kl_cfg80211_suspend,
+	.resume = __ath6kl_cfg80211_resume,
 #endif
 	.set_channel = ath6kl_set_channel,
 	.add_beacon = ath6kl_add_beacon,
@@ -2115,6 +2196,57 @@ static struct cfg80211_ops ath6kl_cfg80211_ops = {
 	.mgmt_tx = ath6kl_mgmt_tx,
 	.mgmt_frame_register = ath6kl_mgmt_frame_register,
 };
+
+void ath6kl_cfg80211_stop(struct ath6kl *ar)
+{
+	struct ath6kl_vif *vif;
+
+	/* FIXME: for multi vif */
+	vif = ath6kl_vif_first(ar);
+	if (!vif) {
+		/* save the current power mode before enabling power save */
+		ar->wmi->saved_pwr_mode = ar->wmi->pwr_mode;
+
+		if (ath6kl_wmi_powermode_cmd(ar->wmi, 0, REC_POWER) != 0)
+			ath6kl_warn("ath6kl_deep_sleep_enable: "
+				    "wmi_powermode_cmd failed\n");
+		return;
+	}
+
+	switch (vif->sme_state) {
+	case SME_CONNECTING:
+		cfg80211_connect_result(vif->ndev, vif->bssid, NULL, 0,
+					NULL, 0,
+					WLAN_STATUS_UNSPECIFIED_FAILURE,
+					GFP_KERNEL);
+		break;
+	case SME_CONNECTED:
+	default:
+		/*
+		 * FIXME: oddly enough smeState is in DISCONNECTED during
+		 * suspend, why? Need to send disconnected event in that
+		 * state.
+		 */
+		cfg80211_disconnected(vif->ndev, 0, NULL, 0, GFP_KERNEL);
+		break;
+	}
+
+	if (test_bit(CONNECTED, &vif->flags) ||
+	    test_bit(CONNECT_PEND, &vif->flags))
+		ath6kl_wmi_disconnect_cmd(ar->wmi, vif->fw_vif_idx);
+
+	vif->sme_state = SME_DISCONNECTED;
+	clear_bit(CONNECTED, &vif->flags);
+	clear_bit(CONNECT_PEND, &vif->flags);
+
+	/* disable scanning */
+	if (ath6kl_wmi_scanparams_cmd(ar->wmi, vif->fw_vif_idx, 0xFFFF, 0, 0,
+				      0, 0, 0, 0, 0, 0, 0) != 0)
+		printk(KERN_WARNING "ath6kl: failed to disable scan "
+		       "during suspend\n");
+
+	ath6kl_cfg80211_scan_complete_event(vif, true);
+}
 
 struct ath6kl *ath6kl_core_alloc(struct device *dev)
 {
@@ -2167,6 +2299,8 @@ struct ath6kl *ath6kl_core_alloc(struct device *dev)
 	ar->sc_params.short_scan_ratio = WMI_SHORTSCANRATIO_DEFAULT;
 	ar->sc_params.scan_ctrl_flags = DEFAULT_SCAN_CTRL_FLAGS;
 	ar->lrssi_roam_threshold = DEF_LRSSI_ROAM_THRESHOLD;
+
+	ar->state = ATH6KL_STATE_OFF;
 
 	memset((u8 *)ar->sta_list, 0,
 	       AP_MAX_NUM_STA * sizeof(struct ath6kl_sta));
@@ -2302,9 +2436,9 @@ struct net_device *ath6kl_interface_add(struct ath6kl *ar, char *name,
 	if (type == NL80211_IFTYPE_ADHOC)
 		ar->ibss_if_active = true;
 
-	spin_lock(&ar->list_lock);
+	spin_lock_bh(&ar->list_lock);
 	list_add_tail(&vif->list, &ar->vif_list);
-	spin_unlock(&ar->list_lock);
+	spin_unlock_bh(&ar->list_lock);
 
 	return ndev;
 

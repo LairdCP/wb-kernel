@@ -578,62 +578,6 @@ void ath6kl_disconnect(struct ath6kl_vif *vif)
 	}
 }
 
-void ath6kl_deep_sleep_enable(struct ath6kl *ar)
-{
-	struct ath6kl_vif *vif;
-
-	/* FIXME: for multi vif */
-	vif = ath6kl_vif_first(ar);
-	if (!vif) {
-		/* save the current power mode before enabling power save */
-		ar->wmi->saved_pwr_mode = ar->wmi->pwr_mode;
-
-		if (ath6kl_wmi_powermode_cmd(ar->wmi, 0, REC_POWER) != 0)
-			ath6kl_warn("ath6kl_deep_sleep_enable: "
-				    "wmi_powermode_cmd failed\n");
-		return;
-	}
-
-	switch (vif->sme_state) {
-	case SME_CONNECTING:
-		cfg80211_connect_result(vif->ndev, vif->bssid, NULL, 0,
-					NULL, 0,
-					WLAN_STATUS_UNSPECIFIED_FAILURE,
-					GFP_KERNEL);
-		break;
-	case SME_CONNECTED:
-	default:
-		/*
-		 * FIXME: oddly enough smeState is in DISCONNECTED during
-		 * suspend, why? Need to send disconnected event in that
-		 * state.
-		 */
-		cfg80211_disconnected(vif->ndev, 0, NULL, 0, GFP_KERNEL);
-		break;
-	}
-
-	if (test_bit(CONNECTED, &vif->flags) ||
-	    test_bit(CONNECT_PEND, &vif->flags))
-		ath6kl_wmi_disconnect_cmd(ar->wmi, vif->fw_vif_idx);
-
-	vif->sme_state = SME_DISCONNECTED;
-
-	/* disable scanning */
-	if (ath6kl_wmi_scanparams_cmd(ar->wmi, vif->fw_vif_idx, 0xFFFF, 0, 0,
-				      0, 0, 0, 0, 0, 0, 0) != 0)
-		printk(KERN_WARNING "ath6kl: failed to disable scan "
-		       "during suspend\n");
-
-	ath6kl_cfg80211_scan_complete_event(vif, -ECANCELED);
-
-	/* save the current power mode before enabling power save */
-	ar->wmi->saved_pwr_mode = ar->wmi->pwr_mode;
-
-	if (ath6kl_wmi_powermode_cmd(ar->wmi, 0, REC_POWER) != 0)
-		ath6kl_warn("ath6kl_deep_sleep_enable: "
-			"wmi_powermode_cmd failed\n");
-}
-
 /* WMI Event handlers */
 
 static const char *get_hw_id_string(u32 id)
@@ -684,8 +628,12 @@ void ath6kl_ready_event(void *devt, u8 *datap, u32 sw_ver, u32 abi_ver)
 void ath6kl_scan_complete_evt(struct ath6kl_vif *vif, int status)
 {
 	struct ath6kl *ar = vif->ar;
+	bool aborted = false;
 
-	ath6kl_cfg80211_scan_complete_event(vif, status);
+	if (status != WMI_SCAN_STATUS_SUCCESS)
+		aborted = true;
+
+	ath6kl_cfg80211_scan_complete_event(vif, aborted);
 
 	if (!ar->usr_bss_filter) {
 		clear_bit(CLEAR_BSSFILTER_ON_BEACON, &vif->flags);
@@ -1098,15 +1046,15 @@ struct ath6kl_vif *ath6kl_vif_first(struct ath6kl *ar)
 {
 	struct ath6kl_vif *vif;
 
-	spin_lock(&ar->list_lock);
+	spin_lock_bh(&ar->list_lock);
 	if (list_empty(&ar->vif_list)) {
-		spin_unlock(&ar->list_lock);
+		spin_unlock_bh(&ar->list_lock);
 		return NULL;
 	}
 
 	vif = list_first_entry(&ar->vif_list, struct ath6kl_vif, list);
 
-	spin_unlock(&ar->list_lock);
+	spin_unlock_bh(&ar->list_lock);
 
 	return vif;
 }
@@ -1149,7 +1097,7 @@ static int ath6kl_close(struct net_device *dev)
 
 	}
 
-	ath6kl_cfg80211_scan_complete_event(vif, -ECANCELED);
+	ath6kl_cfg80211_scan_complete_event(vif, true);
 
 	/* FIXME: how to handle multi vif support? */
 	ret = ath6kl_init_hw_stop(ar);

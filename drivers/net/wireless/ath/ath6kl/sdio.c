@@ -733,6 +733,46 @@ static int ath6kl_sdio_enable_scatter(struct ath6kl *ar)
 	return 0;
 }
 
+static int ath6kl_sdio_config(struct ath6kl *ar)
+{
+	struct ath6kl_sdio *ar_sdio = ath6kl_sdio_priv(ar);
+	struct sdio_func *func = ar_sdio->func;
+	int ret;
+
+	sdio_claim_host(func);
+
+	if ((ar_sdio->id->device & MANUFACTURER_ID_ATH6KL_BASE_MASK) >=
+	    MANUFACTURER_ID_AR6003_BASE) {
+		/* enable 4-bit ASYNC interrupt on AR6003 or later */
+		ret = ath6kl_sdio_func0_cmd52_wr_byte(func->card,
+						CCCR_SDIO_IRQ_MODE_REG,
+						SDIO_IRQ_MODE_ASYNC_4BIT_IRQ);
+		if (ret) {
+			ath6kl_err("Failed to enable 4-bit async irq mode %d\n",
+				   ret);
+			goto out;
+		}
+
+		ath6kl_dbg(ATH6KL_DBG_BOOT, "4-bit async irq mode enabled\n");
+	}
+
+	/* give us some time to enable, in ms */
+	func->enable_timeout = 100;
+
+	ret = sdio_set_block_size(func, HIF_MBOX_BLOCK_SIZE);
+	if (ret) {
+		ath6kl_err("Set sdio block size %d failed: %d)\n",
+			   HIF_MBOX_BLOCK_SIZE, ret);
+		sdio_release_host(func);
+		goto out;
+	}
+
+out:
+	sdio_release_host(func);
+
+	return ret;
+}
+
 static int ath6kl_sdio_suspend(struct ath6kl *ar)
 {
 	struct ath6kl_sdio *ar_sdio = ath6kl_sdio_priv(ar);
@@ -742,12 +782,11 @@ static int ath6kl_sdio_suspend(struct ath6kl *ar)
 
 	flags = sdio_get_host_pm_caps(func);
 
+	ath6kl_dbg(ATH6KL_DBG_SUSPEND, "sdio suspend pm_caps 0x%x\n", flags);
+
 	if (!(flags & MMC_PM_KEEP_POWER)) {
-		/* as host doesn't support keep power we need to bail out */
-		ath6kl_dbg(ATH6KL_DBG_SDIO,
-			   "func %d doesn't support MMC_PM_KEEP_POWER\n",
-			   func->num);
-		return -EINVAL;
+		/* as host doesn't support keep power we need to cut power */
+		return ath6kl_cfg80211_suspend(ar, ATH6KL_CFG_SUSPEND_CUTPOWER);
 	}
 
 	ret = sdio_set_host_pm_flags(func, MMC_PM_KEEP_POWER);
@@ -757,19 +796,31 @@ static int ath6kl_sdio_suspend(struct ath6kl *ar)
 		return ret;
 	}
 
-	ath6kl_deep_sleep_enable(ar);
-
-	return 0;
+	return ath6kl_cfg80211_suspend(ar, ATH6KL_CFG_SUSPEND_DEEPSLEEP);
 }
 
 static int ath6kl_sdio_resume(struct ath6kl *ar)
 {
-	if (ar->wmi->pwr_mode != ar->wmi->saved_pwr_mode) {
-		if (ath6kl_wmi_powermode_cmd(ar->wmi, 0,
-			ar->wmi->saved_pwr_mode) != 0)
-			ath6kl_warn("ath6kl_sdio_resume: "
-				"wmi_powermode_cmd failed\n");
+	switch (ar->state) {
+	case ATH6KL_STATE_OFF:
+	case ATH6KL_STATE_CUTPOWER:
+		ath6kl_dbg(ATH6KL_DBG_SUSPEND,
+			   "sdio resume configuring sdio\n");
+
+		/* need to set sdio settings after power is cut from sdio */
+		ath6kl_sdio_config(ar);
+		break;
+
+	case ATH6KL_STATE_ON:
+		/* we shouldn't be on this state during resume */
+		WARN_ON(1);
+		break;
+
+	case ATH6KL_STATE_DEEPSLEEP:
+		break;
 	}
+
+	ath6kl_cfg80211_resume(ar);
 
 	return 0;
 }
@@ -822,6 +873,37 @@ static const struct ath6kl_hif_ops ath6kl_sdio_ops = {
 	.power_off = ath6kl_sdio_power_off,
 	.stop = ath6kl_sdio_stop,
 };
+
+#ifdef CONFIG_PM_SLEEP
+
+/*
+ * Empty handlers so that mmc subsystem doesn't remove us entirely during
+ * suspend. We instead follow cfg80211 suspend/resume handlers.
+ */
+static int ath6kl_sdio_pm_suspend(struct device *device)
+{
+	ath6kl_dbg(ATH6KL_DBG_SUSPEND, "sdio pm suspend\n");
+
+	return 0;
+}
+
+static int ath6kl_sdio_pm_resume(struct device *device)
+{
+	ath6kl_dbg(ATH6KL_DBG_SUSPEND, "sdio pm resume\n");
+
+	return 0;
+}
+
+static SIMPLE_DEV_PM_OPS(ath6kl_sdio_pm_ops, ath6kl_sdio_pm_suspend,
+			 ath6kl_sdio_pm_resume);
+
+#define ATH6KL_SDIO_PM_OPS (&ath6kl_sdio_pm_ops)
+
+#else
+
+#define ATH6KL_SDIO_PM_OPS NULL
+
+#endif /* CONFIG_PM_SLEEP */
 
 static int ath6kl_sdio_probe(struct sdio_func *func,
 			     const struct sdio_device_id *id)
@@ -878,45 +960,16 @@ static int ath6kl_sdio_probe(struct sdio_func *func,
 
 	ath6kl_sdio_set_mbox_info(ar);
 
-	sdio_claim_host(func);
-
-	if ((ar_sdio->id->device & MANUFACTURER_ID_ATH6KL_BASE_MASK) >=
-	    MANUFACTURER_ID_AR6003_BASE) {
-		/* enable 4-bit ASYNC interrupt on AR6003 or later */
-		ret = ath6kl_sdio_func0_cmd52_wr_byte(func->card,
-						CCCR_SDIO_IRQ_MODE_REG,
-						SDIO_IRQ_MODE_ASYNC_4BIT_IRQ);
-		if (ret) {
-			ath6kl_err("Failed to enable 4-bit async irq mode %d\n",
-				   ret);
-			sdio_release_host(func);
-			goto err_core_alloc;
-		}
-
-		ath6kl_dbg(ATH6KL_DBG_BOOT, "4-bit async irq mode enabled\n");
-	}
-
-	/* give us some time to enable, in ms */
-	func->enable_timeout = 100;
-
-	sdio_release_host(func);
-
-	sdio_claim_host(func);
-
-	ret = sdio_set_block_size(func, HIF_MBOX_BLOCK_SIZE);
+	ret = ath6kl_sdio_config(ar);
 	if (ret) {
-		ath6kl_err("Set sdio block size %d failed: %d)\n",
-			   HIF_MBOX_BLOCK_SIZE, ret);
-		sdio_release_host(func);
-		goto err_hif;
+		ath6kl_err("Failed to config sdio: %d\n", ret);
+		goto err_core_alloc;
 	}
-
-	sdio_release_host(func);
 
 	ret = ath6kl_core_init(ar);
 	if (ret) {
 		ath6kl_err("Failed to init ath6kl core\n");
-		goto err_hif;
+		goto err_core_alloc;
 	}
 
 	return ret;
@@ -963,6 +1016,7 @@ static struct sdio_driver ath6kl_sdio_driver = {
 	.id_table = ath6kl_sdio_devices,
 	.probe = ath6kl_sdio_probe,
 	.remove = ath6kl_sdio_remove,
+	.drv.pm = ATH6KL_SDIO_PM_OPS,
 };
 
 static int __init ath6kl_sdio_init(void)

@@ -450,9 +450,19 @@ enum ath6kl_dev_state {
 	FIRST_BOOT,
 };
 
+enum ath6kl_state {
+	ATH6KL_STATE_OFF,
+	ATH6KL_STATE_ON,
+	ATH6KL_STATE_DEEPSLEEP,
+	ATH6KL_STATE_CUTPOWER,
+};
+
 struct ath6kl {
 	struct device *dev;
 	struct wiphy *wiphy;
+
+	enum ath6kl_state state;
+
 	struct ath6kl_bmi bmi;
 	const struct ath6kl_hif_ops *hif_ops;
 	struct wmi *wmi;
@@ -649,7 +659,6 @@ void ath6kl_pspoll_event(struct ath6kl_vif *vif, u8 aid);
 
 void ath6kl_dtimexpiry_event(struct ath6kl_vif *vif);
 void ath6kl_disconnect(struct ath6kl_vif *vif);
-void ath6kl_deep_sleep_enable(struct ath6kl *ar);
 void aggr_recv_delba_req_evt(struct ath6kl_vif *vif, u8 tid);
 void aggr_recv_addba_req_evt(struct ath6kl_vif *vif, u8 tid, u16 seq_no,
 			     u8 win_sz);
