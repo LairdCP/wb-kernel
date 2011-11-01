@@ -298,61 +298,6 @@ out:
 	return status;
 }
 
-#define REG_DUMP_COUNT_AR6003   60
-#define REGISTER_DUMP_LEN_MAX   60
-
-static void ath6kl_dump_target_assert_info(struct ath6kl *ar)
-{
-	u32 address;
-	u32 regdump_loc = 0;
-	int status;
-	u32 regdump_val[REGISTER_DUMP_LEN_MAX];
-	u32 i;
-
-	if (ar->target_type != TARGET_TYPE_AR6003)
-		return;
-
-	/* the reg dump pointer is copied to the host interest area */
-	address = ath6kl_get_hi_item_addr(ar, HI_ITEM(hi_failure_state));
-	address = TARG_VTOP(ar->target_type, address);
-
-	/* read RAM location through diagnostic window */
-	status = ath6kl_diag_read32(ar, address, &regdump_loc);
-
-	if (status || !regdump_loc) {
-		ath6kl_err("failed to get ptr to register dump area\n");
-		return;
-	}
-
-	ath6kl_dbg(ATH6KL_DBG_TRC, "location of register dump data: 0x%X\n",
-		regdump_loc);
-	regdump_loc = TARG_VTOP(ar->target_type, regdump_loc);
-
-	/* fetch register dump data */
-	status = ath6kl_diag_read(ar, regdump_loc, (u8 *)&regdump_val[0],
-				  REG_DUMP_COUNT_AR6003 * (sizeof(u32)));
-
-	if (status) {
-		ath6kl_err("failed to get register dump\n");
-		return;
-	}
-	ath6kl_dbg(ATH6KL_DBG_TRC, "Register Dump:\n");
-
-	for (i = 0; i < REG_DUMP_COUNT_AR6003; i++)
-		ath6kl_dbg(ATH6KL_DBG_TRC, " %d :  0x%8.8X\n",
-			   i, regdump_val[i]);
-
-}
-
-void ath6kl_target_failure(struct ath6kl *ar)
-{
-	ath6kl_err("target asserted\n");
-
-	/* try dumping target assertion information (if any) */
-	ath6kl_dump_target_assert_info(ar);
-
-}
-
 static int ath6kl_target_config_wlan_params(struct ath6kl *ar, int idx)
 {
 	int status = 0;
@@ -1421,10 +1366,12 @@ static int ath6kl_init_hw_params(struct ath6kl *ar)
 	return 0;
 }
 
-static int ath6kl_hw_start(struct ath6kl *ar)
+int ath6kl_init_hw_start(struct ath6kl *ar)
 {
 	long timeleft;
 	int ret, i;
+
+	ath6kl_dbg(ATH6KL_DBG_BOOT, "hw start\n");
 
 	ret = ath6kl_hif_power_on(ar);
 	if (ret)
@@ -1515,6 +1462,25 @@ err_power_off:
 	ath6kl_hif_power_off(ar);
 
 	return ret;
+}
+
+int ath6kl_init_hw_stop(struct ath6kl *ar)
+{
+	int ret;
+
+	ath6kl_dbg(ATH6KL_DBG_BOOT, "hw stop\n");
+
+	ath6kl_htc_stop(ar->htc_target);
+
+	ath6kl_hif_stop(ar);
+
+	ath6kl_bmi_reset(ar);
+
+	ret = ath6kl_hif_power_off(ar);
+	if (ret)
+		ath6kl_warn("failed to power off hif: %d\n", ret);
+
+	return 0;
 }
 
 int ath6kl_core_init(struct ath6kl *ar)
@@ -1628,9 +1594,11 @@ int ath6kl_core_init(struct ath6kl *ar)
 
 	ar->wiphy->flags |= WIPHY_FLAG_SUPPORTS_FW_ROAM;
 
-	ret = ath6kl_hw_start(ar);
+	set_bit(FIRST_BOOT, &ar->flag);
+
+	ret = ath6kl_init_hw_start(ar);
 	if (ret) {
-		ath6kl_err("Failed to boot hardware: %d\n", ret);
+		ath6kl_err("Failed to start hardware: %d\n", ret);
 		goto err_rxbuf_cleanup;
 	}
 
@@ -1639,6 +1607,12 @@ int ath6kl_core_init(struct ath6kl *ar)
 	 * FIXME: Move to ath6kl_interface_add()
 	 */
 	memcpy(ndev->dev_addr, ar->mac_addr, ETH_ALEN);
+
+	ret = ath6kl_init_hw_stop(ar);
+	if (ret) {
+		ath6kl_err("Failed to stop hardware: %d\n", ret);
+		goto err_htc_cleanup;
+	}
 
 	return ret;
 
