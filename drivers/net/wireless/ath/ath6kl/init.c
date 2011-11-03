@@ -27,9 +27,11 @@
 
 unsigned int debug_mask;
 static unsigned int testmode;
+static bool suspend_cutpower;
 
 module_param(debug_mask, uint, 0644);
 module_param(testmode, uint, 0644);
+module_param(suspend_cutpower, bool, 0444);
 
 /*
  * Include definitions here that can be used to tune the WLAN module
@@ -1596,6 +1598,9 @@ int ath6kl_core_init(struct ath6kl *ar)
 	ar->conf_flags = ATH6KL_CONF_IGNORE_ERP_BARKER |
 			 ATH6KL_CONF_ENABLE_11N | ATH6KL_CONF_ENABLE_TX_BURST;
 
+	if (suspend_cutpower)
+		ar->conf_flags |= ATH6KL_CONF_SUSPEND_CUTPOWER;
+
 	ar->wiphy->flags |= WIPHY_FLAG_SUPPORTS_FW_ROAM;
 
 	set_bit(FIRST_BOOT, &ar->flag);
@@ -1611,12 +1616,6 @@ int ath6kl_core_init(struct ath6kl *ar)
 	 * FIXME: Move to ath6kl_interface_add()
 	 */
 	memcpy(ndev->dev_addr, ar->mac_addr, ETH_ALEN);
-
-	ret = ath6kl_init_hw_stop(ar);
-	if (ret) {
-		ath6kl_err("Failed to stop hardware: %d\n", ret);
-		goto err_htc_cleanup;
-	}
 
 	return ret;
 
