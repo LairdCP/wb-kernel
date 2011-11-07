@@ -1644,15 +1644,141 @@ static int ath6kl_flush_pmksa(struct wiphy *wiphy, struct net_device *netdev)
 	return 0;
 }
 
+static int ath6kl_wow_suspend(struct ath6kl *ar, struct cfg80211_wowlan *wow)
+{
+	struct ath6kl_vif *vif;
+	int ret, pos, left;
+	u32 filter = 0;
+	u16 i;
+	u8 mask[WOW_MASK_SIZE];
+
+	vif = ath6kl_vif_first(ar);
+	if (!vif)
+		return -EIO;
+
+	if (!ath6kl_cfg80211_ready(vif))
+		return -EIO;
+
+	if (!test_bit(CONNECTED, &vif->flags))
+		return -EINVAL;
+
+	/* Clear existing WOW patterns */
+	for (i = 0; i < WOW_MAX_FILTERS_PER_LIST; i++)
+		ath6kl_wmi_del_wow_pattern_cmd(ar->wmi, vif->fw_vif_idx,
+					       WOW_LIST_ID, i);
+	/* Configure new WOW patterns */
+	for (i = 0; i < wow->n_patterns; i++) {
+
+		/*
+		 * Convert given nl80211 specific mask value to equivalent
+		 * driver specific mask value and send it to the chip along
+		 * with patterns. For example, If the mask value defined in
+		 * struct cfg80211_wowlan is 0xA (equivalent binary is 1010),
+		 * then equivalent driver specific mask value is
+		 * "0xFF 0x00 0xFF 0x00".
+		 */
+		memset(&mask, 0, sizeof(mask));
+		for (pos = 0; pos < wow->patterns[i].pattern_len; pos++) {
+			if (wow->patterns[i].mask[pos / 8] & (0x1 << (pos % 8)))
+				mask[pos] = 0xFF;
+		}
+		/*
+		 * Note: Pattern's offset is not passed as part of wowlan
+		 * parameter from CFG layer. So it's always passed as ZERO
+		 * to the firmware. It means, given WOW patterns are always
+		 * matched from the first byte of received pkt in the firmware.
+		 */
+		ret = ath6kl_wmi_add_wow_pattern_cmd(ar->wmi,
+					vif->fw_vif_idx, WOW_LIST_ID,
+					wow->patterns[i].pattern_len,
+					0 /* pattern offset */,
+					wow->patterns[i].pattern, mask);
+		if (ret)
+			return ret;
+	}
+
+	if (wow->disconnect)
+		filter |= WOW_FILTER_OPTION_NWK_DISASSOC;
+
+	if (wow->magic_pkt)
+		filter |= WOW_FILTER_OPTION_MAGIC_PACKET;
+
+	if (wow->gtk_rekey_failure)
+		filter |= WOW_FILTER_OPTION_GTK_ERROR;
+
+	if (wow->eap_identity_req)
+		filter |= WOW_FILTER_OPTION_EAP_REQ;
+
+	if (wow->four_way_handshake)
+		filter |= WOW_FILTER_OPTION_8021X_4WAYHS;
+
+	ret = ath6kl_wmi_set_wow_mode_cmd(ar->wmi, vif->fw_vif_idx,
+					  ATH6KL_WOW_MODE_ENABLE,
+					  filter,
+					  WOW_HOST_REQ_DELAY);
+	if (ret)
+		return ret;
+
+	ret = ath6kl_wmi_set_host_sleep_mode_cmd(ar->wmi, vif->fw_vif_idx,
+						 ATH6KL_HOST_MODE_ASLEEP);
+	if (ret)
+		return ret;
+
+	if (ar->tx_pending[ar->ctrl_ep]) {
+		left = wait_event_interruptible_timeout(ar->event_wq,
+				ar->tx_pending[ar->ctrl_ep] == 0, WMI_TIMEOUT);
+		if (left == 0) {
+			ath6kl_warn("clear wmi ctrl data timeout\n");
+			ret = -ETIMEDOUT;
+		} else if (left < 0) {
+			ath6kl_warn("clear wmi ctrl data failed: %d\n", left);
+			ret = left;
+		}
+	}
+
+	return ret;
+}
+
+static int ath6kl_wow_resume(struct ath6kl *ar)
+{
+	struct ath6kl_vif *vif;
+	int ret;
+
+	vif = ath6kl_vif_first(ar);
+	if (!vif)
+		return -EIO;
+
+	ret = ath6kl_wmi_set_host_sleep_mode_cmd(ar->wmi, vif->fw_vif_idx,
+						 ATH6KL_HOST_MODE_AWAKE);
+	return ret;
+}
+
 int ath6kl_cfg80211_suspend(struct ath6kl *ar,
-			    enum ath6kl_cfg_suspend_mode mode)
+			    enum ath6kl_cfg_suspend_mode mode,
+			    struct cfg80211_wowlan *wow)
 {
 	int ret;
 
-	ath6kl_cfg80211_stop(ar);
-
 	switch (mode) {
+	case ATH6KL_CFG_SUSPEND_WOW:
+
+		ath6kl_dbg(ATH6KL_DBG_SUSPEND, "wow mode suspend\n");
+
+		/* Flush all non control pkts in TX path */
+		ath6kl_tx_data_cleanup(ar);
+
+		ret = ath6kl_wow_suspend(ar, wow);
+		if (ret) {
+			ath6kl_err("wow suspend failed: %d\n", ret);
+			return ret;
+		}
+		ar->state = ATH6KL_STATE_WOW;
+		break;
+
 	case ATH6KL_CFG_SUSPEND_DEEPSLEEP:
+
+		ath6kl_cfg80211_stop(ar);
+
 		/* save the current power mode before enabling power save */
 		ar->wmi->saved_pwr_mode = ar->wmi->pwr_mode;
 
@@ -1667,6 +1793,9 @@ int ath6kl_cfg80211_suspend(struct ath6kl *ar,
 		break;
 
 	case ATH6KL_CFG_SUSPEND_CUTPOWER:
+
+		ath6kl_cfg80211_stop(ar);
+
 		if (ar->state == ATH6KL_STATE_OFF) {
 			ath6kl_dbg(ATH6KL_DBG_SUSPEND,
 				   "suspend hw off, no action for cutpower\n");
@@ -1697,6 +1826,18 @@ int ath6kl_cfg80211_resume(struct ath6kl *ar)
 	int ret;
 
 	switch (ar->state) {
+	case  ATH6KL_STATE_WOW:
+		ath6kl_dbg(ATH6KL_DBG_SUSPEND, "wow mode resume\n");
+
+		ret = ath6kl_wow_resume(ar);
+		if (ret) {
+			ath6kl_warn("wow mode resume failed: %d\n", ret);
+			return ret;
+		}
+
+		ar->state = ATH6KL_STATE_ON;
+		break;
+
 	case ATH6KL_STATE_DEEPSLEEP:
 		if (ar->wmi->pwr_mode != ar->wmi->saved_pwr_mode) {
 			ret = ath6kl_wmi_powermode_cmd(ar->wmi, 0,
@@ -1719,6 +1860,7 @@ int ath6kl_cfg80211_resume(struct ath6kl *ar)
 			ath6kl_warn("Failed to boot hw in resume: %d\n", ret);
 			return ret;
 		}
+		break;
 
 	default:
 		break;
@@ -1735,7 +1877,7 @@ static int __ath6kl_cfg80211_suspend(struct wiphy *wiphy,
 {
 	struct ath6kl *ar = wiphy_priv(wiphy);
 
-	return ath6kl_hif_suspend(ar);
+	return ath6kl_hif_suspend(ar, wow);
 }
 
 static int __ath6kl_cfg80211_resume(struct wiphy *wiphy)
@@ -1743,6 +1885,34 @@ static int __ath6kl_cfg80211_resume(struct wiphy *wiphy)
 	struct ath6kl *ar = wiphy_priv(wiphy);
 
 	return ath6kl_hif_resume(ar);
+}
+
+/*
+ * FIXME: WOW suspend mode is selected if the host sdio controller supports
+ * both sdio irq wake up and keep power. The target pulls sdio data line to
+ * wake up the host when WOW pattern matches. This causes sdio irq handler
+ * is being called in the host side which internally hits ath6kl's RX path.
+ *
+ * Since sdio interrupt is not disabled, RX path executes even before
+ * the host executes the actual resume operation from PM module.
+ *
+ * In the current scenario, WOW resume should happen before start processing
+ * any data from the target. So It's required to perform WOW resume in RX path.
+ * Ideally we should perform WOW resume only in the actual platform
+ * resume path. This area needs bit rework to avoid WOW resume in RX path.
+ *
+ * ath6kl_check_wow_status() is called from ath6kl_rx().
+ */
+void ath6kl_check_wow_status(struct ath6kl *ar)
+{
+	if (ar->state == ATH6KL_STATE_WOW)
+		ath6kl_cfg80211_resume(ar);
+}
+
+#else
+
+void ath6kl_check_wow_status(struct ath6kl *ar)
+{
 }
 #endif
 
@@ -2338,6 +2508,16 @@ int ath6kl_register_ieee80211_hw(struct ath6kl *ar)
 
 	wiphy->cipher_suites = cipher_suites;
 	wiphy->n_cipher_suites = ARRAY_SIZE(cipher_suites);
+
+	wiphy->wowlan.flags = WIPHY_WOWLAN_MAGIC_PKT |
+			      WIPHY_WOWLAN_DISCONNECT |
+			      WIPHY_WOWLAN_GTK_REKEY_FAILURE  |
+			      WIPHY_WOWLAN_SUPPORTS_GTK_REKEY |
+			      WIPHY_WOWLAN_EAP_IDENTITY_REQ   |
+			      WIPHY_WOWLAN_4WAY_HANDSHAKE;
+	wiphy->wowlan.n_patterns = WOW_MAX_FILTERS_PER_LIST;
+	wiphy->wowlan.pattern_min_len = 1;
+	wiphy->wowlan.pattern_max_len = WOW_PATTERN_SIZE;
 
 	ret = wiphy_register(wiphy);
 	if (ret < 0) {

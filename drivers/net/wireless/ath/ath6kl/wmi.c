@@ -2412,13 +2412,168 @@ int ath6kl_wmi_set_ip_cmd(struct wmi *wmi, struct wmi_set_ip_cmd *ip_cmd)
 	return ret;
 }
 
-static int ath6kl_wmi_get_wow_list_event_rx(struct wmi *wmi, u8 * datap,
-					    int len)
+static void ath6kl_wmi_relinquish_implicit_pstream_credits(struct wmi *wmi)
 {
-	if (len < sizeof(struct wmi_get_wow_list_reply))
-		return -EINVAL;
+	u16 active_tsids;
+	u8 stream_exist;
+	int i;
 
-	return 0;
+	/*
+	 * Relinquish credits from all implicitly created pstreams
+	 * since when we go to sleep. If user created explicit
+	 * thinstreams exists with in a fatpipe leave them intact
+	 * for the user to delete.
+	 */
+	spin_lock_bh(&wmi->lock);
+	stream_exist = wmi->fat_pipe_exist;
+	spin_unlock_bh(&wmi->lock);
+
+	for (i = 0; i < WMM_NUM_AC; i++) {
+		if (stream_exist & (1 << i)) {
+
+			/*
+			 * FIXME: Is this lock & unlock inside
+			 * for loop correct? may need rework.
+			 */
+			spin_lock_bh(&wmi->lock);
+			active_tsids = wmi->stream_exist_for_ac[i];
+			spin_unlock_bh(&wmi->lock);
+
+			/*
+			 * If there are no user created thin streams
+			 * delete the fatpipe
+			 */
+			if (!active_tsids) {
+				stream_exist &= ~(1 << i);
+				/*
+				 * Indicate inactivity to driver layer for
+				 * this fatpipe (pstream)
+				 */
+				ath6kl_indicate_tx_activity(wmi->parent_dev,
+							    i, false);
+			}
+		}
+	}
+
+	/* FIXME: Can we do this assignment without locking ? */
+	spin_lock_bh(&wmi->lock);
+	wmi->fat_pipe_exist = stream_exist;
+	spin_unlock_bh(&wmi->lock);
+}
+
+int ath6kl_wmi_set_host_sleep_mode_cmd(struct wmi *wmi, u8 if_idx,
+				       enum ath6kl_host_mode host_mode)
+{
+	struct sk_buff *skb;
+	struct wmi_set_host_sleep_mode_cmd *cmd;
+	int ret;
+
+	if ((host_mode != ATH6KL_HOST_MODE_ASLEEP) &&
+	    (host_mode != ATH6KL_HOST_MODE_AWAKE)) {
+		ath6kl_err("invalid host sleep mode: %d\n", host_mode);
+		return -EINVAL;
+	}
+
+	skb = ath6kl_wmi_get_new_buf(sizeof(*cmd));
+	if (!skb)
+		return -ENOMEM;
+
+	cmd = (struct wmi_set_host_sleep_mode_cmd *) skb->data;
+
+	if (host_mode == ATH6KL_HOST_MODE_ASLEEP) {
+		ath6kl_wmi_relinquish_implicit_pstream_credits(wmi);
+		cmd->asleep = cpu_to_le32(1);
+	} else
+		cmd->awake = cpu_to_le32(1);
+
+	ret = ath6kl_wmi_cmd_send(wmi, if_idx, skb,
+				  WMI_SET_HOST_SLEEP_MODE_CMDID,
+				  NO_SYNC_WMIFLAG);
+	return ret;
+}
+
+int ath6kl_wmi_set_wow_mode_cmd(struct wmi *wmi, u8 if_idx,
+				enum ath6kl_wow_mode wow_mode,
+				u32 filter, u16 host_req_delay)
+{
+	struct sk_buff *skb;
+	struct wmi_set_wow_mode_cmd *cmd;
+	int ret;
+
+	if ((wow_mode != ATH6KL_WOW_MODE_ENABLE) &&
+	     wow_mode != ATH6KL_WOW_MODE_DISABLE) {
+		ath6kl_err("invalid wow mode: %d\n", wow_mode);
+		return -EINVAL;
+	}
+
+	skb = ath6kl_wmi_get_new_buf(sizeof(*cmd));
+	if (!skb)
+		return -ENOMEM;
+
+	cmd = (struct wmi_set_wow_mode_cmd *) skb->data;
+	cmd->enable_wow = cpu_to_le32(wow_mode);
+	cmd->filter = cpu_to_le32(filter);
+	cmd->host_req_delay = cpu_to_le16(host_req_delay);
+
+	ret = ath6kl_wmi_cmd_send(wmi, if_idx, skb, WMI_SET_WOW_MODE_CMDID,
+				  NO_SYNC_WMIFLAG);
+	return ret;
+}
+
+int ath6kl_wmi_add_wow_pattern_cmd(struct wmi *wmi, u8 if_idx,
+				   u8 list_id, u8 filter_size,
+				   u8 filter_offset, u8 *filter, u8 *mask)
+{
+	struct sk_buff *skb;
+	struct wmi_add_wow_pattern_cmd *cmd;
+	u16 size;
+	u8 *filter_mask;
+	int ret;
+
+	/*
+	 * Allocate additional memory in the buffer to hold
+	 * filter and mask value, which is twice of filter_size.
+	 */
+	size = sizeof(*cmd) + (2 * filter_size);
+
+	skb = ath6kl_wmi_get_new_buf(size);
+	if (!skb)
+		return -ENOMEM;
+
+	cmd = (struct wmi_add_wow_pattern_cmd *) skb->data;
+	cmd->filter_list_id = list_id;
+	cmd->filter_size = filter_size;
+	cmd->filter_offset = filter_offset;
+
+	memcpy(cmd->filter, filter, filter_size);
+
+	filter_mask = (u8 *) (cmd->filter + filter_size);
+	memcpy(filter_mask, mask, filter_size);
+
+	ret = ath6kl_wmi_cmd_send(wmi, if_idx, skb, WMI_ADD_WOW_PATTERN_CMDID,
+				  NO_SYNC_WMIFLAG);
+
+	return ret;
+}
+
+int ath6kl_wmi_del_wow_pattern_cmd(struct wmi *wmi, u8 if_idx,
+				   u16 list_id, u16 filter_id)
+{
+	struct sk_buff *skb;
+	struct wmi_del_wow_pattern_cmd *cmd;
+	int ret;
+
+	skb = ath6kl_wmi_get_new_buf(sizeof(*cmd));
+	if (!skb)
+		return -ENOMEM;
+
+	cmd = (struct wmi_del_wow_pattern_cmd *) skb->data;
+	cmd->filter_list_id = cpu_to_le16(list_id);
+	cmd->filter_id = cpu_to_le16(filter_id);
+
+	ret = ath6kl_wmi_cmd_send(wmi, if_idx, skb, WMI_DEL_WOW_PATTERN_CMDID,
+				  NO_SYNC_WMIFLAG);
+	return ret;
 }
 
 static int ath6kl_wmi_cmd_send_xtnd(struct wmi *wmi, struct sk_buff *skb,
@@ -3131,7 +3286,6 @@ int ath6kl_wmi_control_rx(struct wmi *wmi, struct sk_buff *skb)
 		break;
 	case WMI_GET_WOW_LIST_EVENTID:
 		ath6kl_dbg(ATH6KL_DBG_WMI, "WMI_GET_WOW_LIST_EVENTID\n");
-		ret = ath6kl_wmi_get_wow_list_event_rx(wmi, datap, len);
 		break;
 	case WMI_GET_PMKID_LIST_EVENTID:
 		ath6kl_dbg(ATH6KL_DBG_WMI, "WMI_GET_PMKID_LIST_EVENTID\n");

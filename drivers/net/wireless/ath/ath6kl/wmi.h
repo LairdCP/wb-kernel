@@ -1795,7 +1795,6 @@ struct wmi_set_appie_cmd {
 #define WSC_REG_ACTIVE     1
 #define WSC_REG_INACTIVE   0
 
-#define WOW_MAX_FILTER_LISTS	 1
 #define WOW_MAX_FILTERS_PER_LIST 4
 #define WOW_PATTERN_SIZE	 64
 #define WOW_MASK_SIZE		 64
@@ -1818,17 +1817,52 @@ struct wmi_set_ip_cmd {
 	__le32 ips[MAX_IP_ADDRS];
 } __packed;
 
-/* WMI_GET_WOW_LIST_CMD reply  */
-struct wmi_get_wow_list_reply {
-	/* number of patterns in reply */
-	u8 num_filters;
+enum ath6kl_wow_filters {
+	WOW_FILTER_SSID			= BIT(0),
+	WOW_FILTER_OPTION_MAGIC_PACKET  = BIT(2),
+	WOW_FILTER_OPTION_EAP_REQ	= BIT(3),
+	WOW_FILTER_OPTION_PATTERNS	= BIT(4),
+	WOW_FILTER_OPTION_OFFLOAD_ARP	= BIT(5),
+	WOW_FILTER_OPTION_OFFLOAD_NS	= BIT(6),
+	WOW_FILTER_OPTION_OFFLOAD_GTK	= BIT(7),
+	WOW_FILTER_OPTION_8021X_4WAYHS	= BIT(8),
+	WOW_FILTER_OPTION_NLO_DISCVRY	= BIT(9),
+	WOW_FILTER_OPTION_NWK_DISASSOC	= BIT(10),
+	WOW_FILTER_OPTION_GTK_ERROR	= BIT(11),
+	WOW_FILTER_OPTION_TEST_MODE	= BIT(15),
+};
 
-	/* this is filter # x of total num_filters */
-	u8 this_filter_num;
+enum ath6kl_host_mode {
+	ATH6KL_HOST_MODE_AWAKE,
+	ATH6KL_HOST_MODE_ASLEEP,
+};
 
-	u8 wow_mode;
-	u8 host_mode;
-	struct wow_filter wow_filters[1];
+struct wmi_set_host_sleep_mode_cmd {
+	__le32 awake;
+	__le32 asleep;
+} __packed;
+
+enum ath6kl_wow_mode {
+	ATH6KL_WOW_MODE_DISABLE,
+	ATH6KL_WOW_MODE_ENABLE,
+};
+
+struct wmi_set_wow_mode_cmd {
+	__le32 enable_wow;
+	__le32 filter;
+	__le16 host_req_delay;
+} __packed;
+
+struct wmi_add_wow_pattern_cmd {
+	u8 filter_list_id;
+	u8 filter_size;
+	u8 filter_offset;
+	u8 filter[0];
+} __packed;
+
+struct wmi_del_wow_pattern_cmd {
+	__le16 filter_list_id;
+	__le16 filter_id;
 } __packed;
 
 /* WMI_SET_AKMP_PARAMS_CMD */
@@ -2273,6 +2307,16 @@ int ath6kl_wmi_test_cmd(struct wmi *wmi, void *buf, size_t len);
 s32 ath6kl_wmi_get_rate(s8 rate_index);
 
 int ath6kl_wmi_set_ip_cmd(struct wmi *wmi, struct wmi_set_ip_cmd *ip_cmd);
+int ath6kl_wmi_set_host_sleep_mode_cmd(struct wmi *wmi, u8 if_idx,
+				       enum ath6kl_host_mode host_mode);
+int ath6kl_wmi_set_wow_mode_cmd(struct wmi *wmi, u8 if_idx,
+				enum ath6kl_wow_mode wow_mode,
+				u32 filter, u16 host_req_delay);
+int ath6kl_wmi_add_wow_pattern_cmd(struct wmi *wmi, u8 if_idx,
+				   u8 list_id, u8 filter_size,
+				   u8 filter_offset, u8 *filter, u8 *mask);
+int ath6kl_wmi_del_wow_pattern_cmd(struct wmi *wmi, u8 if_idx,
+				   u16 list_id, u16 filter_id);
 int ath6kl_wmi_set_roam_lrssi_cmd(struct wmi *wmi, u8 lrssi);
 int ath6kl_wmi_force_roam_cmd(struct wmi *wmi, const u8 *bssid);
 int ath6kl_wmi_set_roam_mode_cmd(struct wmi *wmi, enum wmi_roam_mode mode);
