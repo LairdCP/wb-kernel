@@ -36,12 +36,14 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/kernel.h>
+#include <linux/export.h>
 #include <linux/slab.h>
 #include <linux/list.h>
 #include <linux/random.h>
 #include <linux/ctype.h>
 #include <linux/nl80211.h>
 #include <linux/platform_device.h>
+#include <linux/moduleparam.h>
 #include <net/cfg80211.h>
 #include "core.h"
 #include "reg.h"
@@ -2262,6 +2264,9 @@ void /* __init_or_exit */ regulatory_exit(void)
 	reset_regdomains();
 
 	kfree(last_request);
+
+	last_request = NULL;
+	dev_set_uevent_suppress(&reg_pdev->dev, true);
 
 	platform_device_unregister(reg_pdev);
 

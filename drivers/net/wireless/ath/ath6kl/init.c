@@ -1601,7 +1601,8 @@ int ath6kl_core_init(struct ath6kl *ar)
 	if (suspend_cutpower)
 		ar->conf_flags |= ATH6KL_CONF_SUSPEND_CUTPOWER;
 
-	ar->wiphy->flags |= WIPHY_FLAG_SUPPORTS_FW_ROAM;
+	ar->wiphy->flags |= WIPHY_FLAG_SUPPORTS_FW_ROAM |
+		WIPHY_FLAG_HAVE_AP_SME;
 
 	set_bit(FIRST_BOOT, &ar->flag);
 
