@@ -114,11 +114,19 @@ struct ath6kl_fw_ie {
 
 /* AR6004 1.0 definitions */
 #define AR6004_REV1_VERSION                 0x30000623
-#define AR6004_REV1_FIRMWARE_FILE           "ath6k/AR6004/hw6.1/fw.ram.bin"
-#define AR6004_REV1_FIRMWARE_2_FILE         "ath6k/AR6004/hw6.1/fw-2.bin"
-#define AR6004_REV1_BOARD_DATA_FILE         "ath6k/AR6004/hw6.1/bdata.bin"
-#define AR6004_REV1_DEFAULT_BOARD_DATA_FILE "ath6k/AR6004/hw6.1/bdata.DB132.bin"
-#define AR6004_REV1_EPPING_FIRMWARE_FILE "ath6k/AR6004/hw6.1/endpointping.bin"
+#define AR6004_REV1_FIRMWARE_2_FILE         "ath6k/AR6004/hw1.0/fw-2.bin"
+#define AR6004_REV1_FIRMWARE_FILE           "ath6k/AR6004/hw1.0/fw.ram.bin"
+#define AR6004_REV1_BOARD_DATA_FILE         "ath6k/AR6004/hw1.0/bdata.bin"
+#define AR6004_REV1_DEFAULT_BOARD_DATA_FILE \
+	"ath6k/AR6004/hw1.0/bdata.DB132.bin"
+
+/* AR6004 1.1 definitions */
+#define AR6004_REV2_VERSION                 0x30000001
+#define AR6004_REV2_FIRMWARE_2_FILE         "ath6k/AR6004/hw1.1/fw-2.bin"
+#define AR6004_REV2_FIRMWARE_FILE           "ath6k/AR6004/hw1.1/fw.ram.bin"
+#define AR6004_REV2_BOARD_DATA_FILE         "ath6k/AR6004/hw1.1/bdata.bin"
+#define AR6004_REV2_DEFAULT_BOARD_DATA_FILE \
+	"ath6k/AR6004/hw1.1/bdata.DB132.bin"
 
 /* Per STA data, used in AP mode */
 #define STA_PS_AWAKE		BIT(0)
@@ -272,6 +280,8 @@ struct ath6kl_bmi {
 	u32 cmd_credits;
 	bool done_sent;
 	u8 *cmd_buf;
+	u32 max_data_size;
+	u32 max_cmd_size;
 };
 
 struct target_stats {
@@ -381,6 +391,11 @@ struct ath6kl_req_key {
 	u8 key_len;
 };
 
+enum ath6kl_hif_type {
+	ATH6KL_HIF_TYPE_SDIO,
+	ATH6KL_HIF_TYPE_USB,
+};
+
 #define MAX_NUM_VIF	1
 
 /* vif flags info */
@@ -474,6 +489,7 @@ struct ath6kl {
 	int tx_pending[ENDPOINT_MAX];
 	int total_tx_data_pend;
 	struct htc_target *htc_target;
+	enum ath6kl_hif_type hif_type;
 	void *hif_priv;
 	struct list_head vif_list;
 	/* Lock to avoid race in vif_list entries among add/del/traverse */
