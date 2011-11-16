@@ -359,7 +359,7 @@ static bool ath6kl_is_valid_iftype(struct ath6kl *ar, enum nl80211_iftype type,
 
 	if (type == NL80211_IFTYPE_STATION ||
 	    type == NL80211_IFTYPE_AP || type == NL80211_IFTYPE_ADHOC) {
-		for (i = 0; i < MAX_NUM_VIF; i++) {
+		for (i = 0; i < ar->vif_max; i++) {
 			if ((ar->avail_idx_map >> i) & BIT(0)) {
 				*if_idx = i;
 				return true;
@@ -369,7 +369,7 @@ static bool ath6kl_is_valid_iftype(struct ath6kl *ar, enum nl80211_iftype type,
 
 	if (type == NL80211_IFTYPE_P2P_CLIENT ||
 	    type == NL80211_IFTYPE_P2P_GO) {
-		for (i = ar->max_norm_iface; i < MAX_NUM_VIF; i++) {
+		for (i = ar->max_norm_iface; i < ar->vif_max; i++) {
 			if ((ar->avail_idx_map >> i) & BIT(0)) {
 				*if_idx = i;
 				return true;
@@ -433,7 +433,8 @@ static int ath6kl_cfg80211_connect(struct wiphy *wiphy, struct net_device *dev,
 		status = ath6kl_set_assoc_req_ies(vif, sme->ie, sme->ie_len);
 		if (status)
 			return status;
-	}
+	} else
+		ar->connect_ctrl_flags &= ~CONNECT_WPS_FLAG;
 
 	if (test_bit(CONNECTED, &vif->flags) &&
 	    vif->ssid_len == sme->ssid_len &&
@@ -1308,7 +1309,7 @@ static struct net_device *ath6kl_cfg80211_add_iface(struct wiphy *wiphy,
 	struct net_device *ndev;
 	u8 if_idx, nw_type;
 
-	if (ar->num_vif == MAX_NUM_VIF) {
+	if (ar->num_vif == ar->vif_max) {
 		ath6kl_err("Reached maximum number of supported vif\n");
 		return ERR_PTR(-EINVAL);
 	}
@@ -1352,9 +1353,6 @@ static int ath6kl_cfg80211_change_iface(struct wiphy *wiphy,
 	struct ath6kl_vif *vif = netdev_priv(ndev);
 
 	ath6kl_dbg(ATH6KL_DBG_WLAN_CFG, "%s: type %u\n", __func__, type);
-
-	if (!ath6kl_cfg80211_ready(vif))
-		return -EIO;
 
 	switch (type) {
 	case NL80211_IFTYPE_STATION:
@@ -2460,6 +2458,8 @@ struct ath6kl *ath6kl_core_alloc(struct device *dev)
 		ar->p2p = !!ath6kl_p2p;
 	ar->wiphy = wiphy;
 	ar->dev = dev;
+
+	ar->vif_max = 1;
 
 	if (multi_norm_if_support)
 		ar->max_norm_iface = 2;
