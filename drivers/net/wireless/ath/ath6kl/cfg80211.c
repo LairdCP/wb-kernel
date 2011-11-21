@@ -23,10 +23,8 @@
 #include "testmode.h"
 
 static unsigned int ath6kl_p2p;
-static unsigned int multi_norm_if_support;
 
 module_param(ath6kl_p2p, uint, 0644);
-module_param(multi_norm_if_support, uint, 0644);
 
 #define RATETAB_ENT(_rate, _rateid, _flags) {   \
 	.bitrate    = (_rate),                  \
@@ -431,8 +429,10 @@ static int ath6kl_cfg80211_connect(struct wiphy *wiphy, struct net_device *dev,
 
 	if (sme->ie && (sme->ie_len > 0)) {
 		status = ath6kl_set_assoc_req_ies(vif, sme->ie, sme->ie_len);
-		if (status)
+		if (status) {
+			up(&ar->sem);
 			return status;
+		}
 	} else
 		ar->connect_ctrl_flags &= ~CONNECT_WPS_FLAG;
 
@@ -2454,19 +2454,12 @@ struct ath6kl *ath6kl_core_alloc(struct device *dev)
 	}
 
 	ar = wiphy_priv(wiphy);
-	if (!multi_norm_if_support)
-		ar->p2p = !!ath6kl_p2p;
+	ar->p2p = !!ath6kl_p2p;
 	ar->wiphy = wiphy;
 	ar->dev = dev;
 
 	ar->vif_max = 1;
 
-	if (multi_norm_if_support)
-		ar->max_norm_iface = 2;
-	else
-		ar->max_norm_iface = 1;
-
-	/* FIXME: Remove this once the multivif support is enabled */
 	ar->max_norm_iface = 1;
 
 	spin_lock_init(&ar->lock);

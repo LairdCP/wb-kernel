@@ -414,11 +414,7 @@ static int ath6kl_target_config_wlan_params(struct ath6kl *ar, int idx)
 			status = -EIO;
 		}
 
-	/*
-	 * FIXME: Make sure p2p configurations are not applied to
-	 * non-p2p capable interfaces when multivif support is enabled.
-	 */
-	if (ar->p2p) {
+	if (ar->p2p && (ar->vif_max == 1 || idx)) {
 		ret = ath6kl_wmi_info_req_cmd(ar->wmi, idx,
 					      P2P_FLAG_CAPABILITIES_REQ |
 					      P2P_FLAG_MACADDR_REQ |
@@ -431,11 +427,7 @@ static int ath6kl_target_config_wlan_params(struct ath6kl *ar, int idx)
 		}
 	}
 
-	/*
-	 * FIXME: Make sure p2p configurations are not applied to
-	 * non-p2p capable interfaces when multivif support is enabled.
-	 */
-	if (ar->p2p) {
+	if (ar->p2p && (ar->vif_max == 1 || idx)) {
 		/* Enable Probe Request reporting for P2P */
 		ret = ath6kl_wmi_probe_report_req_cmd(ar->wmi, idx, true);
 		if (ret) {
@@ -481,11 +473,7 @@ int ath6kl_configure_target(struct ath6kl *ar)
 		fw_submode |= HI_OPTION_FW_SUBMODE_P2PDEV <<
 			      (i * HI_OPTION_FW_SUBMODE_BITS);
 
-	/*
-	 * FIXME: This needs to be removed once the multivif
-	 * support is enabled.
-	 */
-	if (ar->p2p)
+	if (ar->p2p && ar->vif_max == 1)
 		fw_submode = HI_OPTION_FW_SUBMODE_P2PDEV;
 
 	param = HTC_PROTOCOL_VERSION;
@@ -970,6 +958,9 @@ static int ath6kl_fetch_fw_api2(struct ath6kl *ar)
 			val = (__le32 *) data;
 			ar->vif_max = min_t(unsigned int, le32_to_cpup(val),
 					    ATH6KL_VIF_MAX);
+
+			if (ar->vif_max > 1 && !ar->p2p)
+				ar->max_norm_iface = 2;
 
 			ath6kl_dbg(ATH6KL_DBG_BOOT,
 				   "found vif max ie %d\n", ar->vif_max);
@@ -1647,7 +1638,14 @@ int ath6kl_core_init(struct ath6kl *ar)
 		ar->conf_flags |= ATH6KL_CONF_SUSPEND_CUTPOWER;
 
 	ar->wiphy->flags |= WIPHY_FLAG_SUPPORTS_FW_ROAM |
-			    WIPHY_FLAG_HAVE_AP_SME;
+			    WIPHY_FLAG_HAVE_AP_SME |
+			    WIPHY_FLAG_AP_PROBE_RESP_OFFLOAD;
+
+	ar->wiphy->probe_resp_offload =
+		NL80211_PROBE_RESP_OFFLOAD_SUPPORT_WPS |
+		NL80211_PROBE_RESP_OFFLOAD_SUPPORT_WPS2 |
+		NL80211_PROBE_RESP_OFFLOAD_SUPPORT_P2P |
+		NL80211_PROBE_RESP_OFFLOAD_SUPPORT_80211U;
 
 	set_bit(FIRST_BOOT, &ar->flag);
 
