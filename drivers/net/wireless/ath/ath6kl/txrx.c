@@ -21,6 +21,8 @@
 #include "debug.h"
 #include "htc-ops.h"
 
+#include "laird.h"
+
 /*
  * tid - tid_mux0..tid_mux3
  * aid - tid_mux4..tid_mux7
@@ -348,7 +350,13 @@ fail_ctrl_tx:
 	return status;
 }
 
+#ifdef LAIRD_FIPS
+int laird_data_tx_continue(struct sk_buff *skb, 
+						   struct net_device *dev,
+						   int isfips)
+#else
 int ath6kl_data_tx(struct sk_buff *skb, struct net_device *dev)
+#endif
 {
 	struct ath6kl *ar = ath6kl_priv(dev);
 	struct ath6kl_cookie *cookie = NULL;
@@ -364,6 +372,11 @@ int ath6kl_data_tx(struct sk_buff *skb, struct net_device *dev)
 	u8 csum_start = 0, csum_dest = 0, csum = skb->ip_summed;
 	u8 meta_ver = 0;
 	u32 flags = 0;
+
+#ifdef LAIRD_FIPS
+	if (isfips < 0) // check if fips encryption failed
+		goto fail_tx;
+#endif
 
 	ath6kl_dbg(ATH6KL_DBG_WLAN_TX,
 		   "%s: skb=0x%p, data=0x%p, len=0x%x\n", __func__,
@@ -386,6 +399,12 @@ int ath6kl_data_tx(struct sk_buff *skb, struct net_device *dev)
 	}
 
 	if (test_bit(WMI_ENABLED, &ar->flag)) {
+#ifdef LAIRD_FIPS
+		if (isfips)
+			goto fips_skip1;
+
+		// only do the following for non-fips mode
+#endif
 		if ((dev->features & NETIF_F_IP_CSUM) &&
 		    (csum == CHECKSUM_PARTIAL)) {
 			csum_start = skb->csum_start -
@@ -410,6 +429,10 @@ int ath6kl_data_tx(struct sk_buff *skb, struct net_device *dev)
 			goto fail_tx;
 		}
 
+#ifdef LAIRD_FIPS
+	fips_skip1: // contunue fips processing here
+#endif /* LAIRD_FIPS */
+	 
 		if ((dev->features & NETIF_F_IP_CSUM) &&
 		    (csum == CHECKSUM_PARTIAL)) {
 			meta_v2.csum_start = csum_start;
@@ -424,8 +447,14 @@ int ath6kl_data_tx(struct sk_buff *skb, struct net_device *dev)
 			meta = NULL;
 		}
 
+#ifdef LAIRD_FIPS
+#define LAIRD_HDR_TYPE (isfips ? WMI_DATA_HDR_DATA_TYPE_802_11 : 0)
+#else
+#define LAIRD_HDR_TYPE 0
+#endif /* LAIRD_FIPS */
+
 		ret = ath6kl_wmi_data_hdr_add(ar->wmi, skb,
-				DATA_MSGTYPE, flags, 0,
+				DATA_MSGTYPE, flags, LAIRD_HDR_TYPE,
 				meta_ver,
 				meta, vif->fw_vif_idx);
 
@@ -519,6 +548,28 @@ fail_tx:
 
 	return 0;
 }
+
+#ifdef LAIRD_FIPS
+int ath6kl_data_tx(struct sk_buff *skb, struct net_device *dev)
+{
+	struct ath6kl *ar = ath6kl_priv(dev);
+
+	// if not in fips_mode use the normal routine
+	if (!fips_mode) return laird_data_tx_continue(skb, dev, 0);
+
+	// in fips_mode, convert the socket buffer and then continue
+	// TBD: modify call to enable WMM
+	if (laird_skb_encrypt_prep(skb, dev, ar->wmi->is_wmm_enabled,
+			&laird_data_tx_continue)) {
+		// failure -- pass to original routine to handle failure
+		return laird_data_tx_continue(skb, dev, -1);
+	}
+
+	// laird_data_tx_continue() will be called in laird_skb_tx_tasklet()
+
+	return 0;
+}
+#endif
 
 /* indicate tx activity or inactivity on a WMI stream */
 void ath6kl_indicate_tx_activity(void *devt, u8 traffic_class, bool active)
@@ -628,6 +679,12 @@ enum htc_send_full_action ath6kl_tx_queue_full(struct htc_target *target,
 			spin_unlock_bh(&ar->list_lock);
 
 			set_bit(NETQ_STOPPED, &vif->flags);
+#ifdef LAIRD_FIPS
+			if (fips_mode) {
+				// also, stop completed fips packets from being submitted
+		        laird_stop_queue(vif->ndev);
+			}
+#endif
 			netif_stop_queue(vif->ndev);
 
 			return action;
@@ -800,6 +857,12 @@ void ath6kl_tx_complete(struct htc_target *target,
 		if (test_bit(CONNECTED, &vif->flags) &&
 		    !flushing[vif->fw_vif_idx]) {
 			spin_unlock_bh(&ar->list_lock);
+#ifdef LAIRD_FIPS
+			if (fips_mode) {
+				// also, enable completed fips packets to be submitted
+				laird_wake_queue(vif->ndev);
+			}
+#endif
 			netif_wake_queue(vif->ndev);
 			spin_lock_bh(&ar->list_lock);
 		}
@@ -1298,6 +1361,9 @@ static void ath6kl_uapsd_trigger_frame_rx(struct ath6kl_vif *vif,
 	return;
 }
 
+// for forward reference
+void laird_skb_rx_continue(struct sk_buff *skb, int res);
+
 void ath6kl_rx(struct htc_target *target, struct htc_packet *packet)
 {
 	struct ath6kl *ar = target->dev->ar;
@@ -1542,6 +1608,24 @@ void ath6kl_rx(struct htc_target *target, struct htc_packet *packet)
 
 	skb_pull(skb, pad_before_data_start);
 
+#ifdef LAIRD_FIPS
+	if (fips_mode) {
+		int res;
+		res = laird_skb_rx_prep(skb, &laird_skb_rx_continue);
+		if (res == 0) {
+			// will continue in laird_skb_rx_continue
+			return;
+		}
+		if (res < 0) {
+			// failed -- delete packet
+			dev_kfree_skb(skb);
+			return;
+		}
+		// TBD: temporary code for testing...
+		// letting driver finish receive processing
+	}
+#endif
+
 	if (dot11_hdr)
 		status = ath6kl_wmi_dot11_hdr_remove(ar->wmi, skb);
 	else if (!is_amsdu)
@@ -1616,6 +1700,20 @@ void ath6kl_rx(struct htc_target *target, struct htc_packet *packet)
 
 	ath6kl_deliver_frames_to_nw_stack(vif->ndev, skb);
 }
+
+#ifdef LAIRD_FIPS
+// continue receive packet processing
+void laird_skb_rx_continue(struct sk_buff *skb, int res)
+{
+	if (res < 0) {
+		// failed decrypt -- free buffer
+		dev_kfree_skb(skb);
+	} else {
+		// TBD: above is now using vif->ndev ???
+		ath6kl_deliver_frames_to_nw_stack(skb->dev, skb);
+	}
+}
+#endif
 
 static void aggr_timeout(unsigned long arg)
 {

@@ -83,4 +83,7 @@ enum htc_credit_dist_reason;
 struct ath6kl_htc_credit_info;
 
 struct sk_buff *ath6kl_buf_alloc(int size);
+
+#include "laird.h"
+
 #endif /* COMMON_H */

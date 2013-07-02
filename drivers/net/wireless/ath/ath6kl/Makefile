@@ -42,3 +42,7 @@ ath6kl_sdio-y += sdio.o
 
 obj-$(CONFIG_ATH6KL_USB) += ath6kl_usb.o
 ath6kl_usb-y += usb.o
+
+ccflags-y += -DLAIRD_FIPS
+#ccflags-y += -DCONFIG_ATH6KL_DEBUG
+
