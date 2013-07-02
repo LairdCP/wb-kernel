@@ -26,33 +26,62 @@
 	ahb {
 		nand0: nand@40000000 {
 			nand-bus-width = <8>;
-			nand-ecc-mode = "soft";
+			nand-ecc-mode = "hw";
+			atmel,has-pmecc;	/* enable PMECC */
+			atmel,pmecc-cap = <4>;
+			atmel,pmecc-sector-size = <512>;
+			atmel,pmecc-lookup-table-offset = <0x8000 0x10000>;
 			nand-on-flash-bbt;
 			status = "okay";
 
 			at91bootstrap@0 {
 				label = "at91bootstrap";
-				reg = <0x0 0x40000>;
+				reg = <0x0 0x20000>;
 			};
 
-			uboot@40000 {
+			uboot@20000 {
 				label = "u-boot";
-				reg = <0x40000 0x80000>;
+				reg = <0x20000 0x80000>;
+			};
+
+			ubootenv@a0000 {
+				label = "U-Boot Env";
+				reg = <0xa0000 0x20000>;
 			};
 
 			ubootenv@c0000 {
-				label = "U-Boot Env";
-				reg = <0xc0000 0x140000>;
+				label = "U-Boot Redund Env";
+				reg = <0xc0000 0x20000>;
 			};
 
-			kernel@200000 {
-				label = "kernel";
-				reg = <0x200000 0x600000>;
+			kernel-a@e0000 {
+				label = "kernel-a";
+				reg = <0xe0000 0x280000>;
 			};
 
-			rootfs@800000 {
-				label = "rootfs";
-				reg = <0x800000 0x1f800000>;
+			kernel-b@360000 {
+				label = "kernel-b";
+				reg = <0x360000 0x280000>;
+			};
+
+			rootfs-a@5e0000 {
+				label = "rootfs-a";
+				reg = <0x5e0000 0x2600000>;
+			};
+
+			rootfs-b@2be0000 {
+				label = "rootfs-b";
+				reg = <0x2be0000 0x2600000>;
+			};
+
+			user@51e0000 {
+				label = "user";
+				reg = <0x51e0000 0x2dc0000>;
+			};
+
+			logs@7fa0000 {
+				label = "logs";
+				reg = <0x7fa0000 0x60000>;
 			};
 		};
 	};
@@ -60,15 +89,15 @@
 	leds {
 		compatible = "gpio-leds";
 
-		pb18 {
-			label = "pb18";
-			gpios = <&pioB 18 1>;
+		pc8 {
+			label = "pc8";
+			gpios = <&pioC 8 1>;
 			linux,default-trigger = "heartbeat";
 		};
 
-		pd21 {
-			label = "pd21";
-			gpios = <&pioD 21 0>;
+		pc14 {
+			label = "pc14";
+			gpios = <&pioC 14 0>;
 		};
 	};
 };

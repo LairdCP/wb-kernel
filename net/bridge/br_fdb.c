@@ -674,3 +674,4 @@ int br_fdb_delete(struct ndmsg *ndm, struct net_device *dev,
 
 	return err;
 }
+

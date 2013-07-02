@@ -868,8 +868,7 @@ static int cfg80211_netdev_notifier_call(struct notifier_block *nb,
 
 		netdev_set_default_ethtool_ops(dev, &cfg80211_ethtool_ops);
 
-		if ((wdev->iftype == NL80211_IFTYPE_STATION ||
-		     wdev->iftype == NL80211_IFTYPE_P2P_CLIENT ||
+		if ((wdev->iftype == NL80211_IFTYPE_P2P_CLIENT ||
 		     wdev->iftype == NL80211_IFTYPE_ADHOC) && !wdev->use_4addr)
 			dev->priv_flags |= IFF_DONT_BRIDGE;
 		break;

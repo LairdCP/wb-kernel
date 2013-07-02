@@ -47,7 +47,7 @@ static const char *at91_dt_board_compat[] __initdata = {
 	NULL
 };
 
-DT_MACHINE_START(at91sam_dt, "Atmel AT91SAM (Device Tree)")
+DT_MACHINE_START(at91sam_dt, "Workgroup Bridge 45N - Atmel AT91SAM (dt)")
 	/* Maintainer: Atmel */
 	.timer		= &at91sam926x_timer,
 	.map_io		= at91_map_io,

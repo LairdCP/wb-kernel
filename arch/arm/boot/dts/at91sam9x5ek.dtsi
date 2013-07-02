@@ -27,7 +27,7 @@
 				slot@0 {
 					reg = <0>;
 					bus-width = <4>;
-					cd-gpios = <&pioD 15 0>;
+					/* cd-gpios = <&pioD 15 0>; */
 				};
 			};
 
@@ -40,7 +40,7 @@
 				slot@0 {
 					reg = <0>;
 					bus-width = <4>;
-					cd-gpios = <&pioD 14 0>;
+					/* cd-gpios = <&pioD 14 0>; */
 				};
 			};
 
@@ -49,6 +49,14 @@
 			};
 
 			usart0: serial@f801c000 {
+				status = "okay";
+			};
+
+			usart1: serial@f8020000 {
+				status = "okay";
+			};
+
+			usart2: serial@f8024000 {
 				status = "okay";
 			};
 
@@ -89,13 +97,22 @@
 		usb0: ohci@00600000 {
 			status = "okay";
 			num-ports = <2>;
-			atmel,vbus-gpio = <&pioD 19 1
-					   &pioD 20 1
-					  >;
+			atmel,vbus-gpio = <&pioB 12 0 &pioA 31 0>;
+			atmel,oc-gpio = <&pioB 13 1>;
 		};
 
 		usb1: ehci@00700000 {
 			status = "okay";
 		};
+
+		usb2: gadget@f803c000 {
+			atmel,vbus-gpio = <&pioB 11 0>;
+			status = "okay";
+		};
 	};
+
+	atheros {
+		compatible = "atheros,ath6kl";
+		atheros,board-id = "SD32";
+ 	};
 };
