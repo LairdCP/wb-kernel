@@ -23,6 +23,7 @@
 #include "testmode.h"
 #include "../regd.h"
 #include "../regd_common.h"
+#include "laird.h"
 
 static int ath6kl_wmi_sync_point(struct wmi *wmi, u8 if_idx);
 
@@ -4257,7 +4258,6 @@ int ath6kl_genl_get_version (struct sk_buff *skb_2, struct genl_info *info)
 	}
 	
 	/* add a ATHEROS_ATTR_MSG attribute (actual value to be sent) */
-#define LAIRD_DRV_VERSION 0x03040001
 	rc = nla_put_s32( skb, ATHEROS_ATTR_MSG, LAIRD_DRV_VERSION );
 	if (rc != 0)
 		goto out;
