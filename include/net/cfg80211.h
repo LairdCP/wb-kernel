@@ -1295,6 +1295,8 @@ struct cfg80211_ssid {
  * @aborted: (internal) scan request was notified as aborted
  * @notified: (internal) scan request was notified as done or aborted
  * @no_cck: used to send probe requests at non CCK rate in 2GHz band
+ * @chan_time: how many msec driver should stay on each channel during scan.
+ *	Setting 0 leaves the decision up to the driver.
  */
 struct cfg80211_scan_request {
 	struct cfg80211_ssid *ssids;
@@ -1303,6 +1305,7 @@ struct cfg80211_scan_request {
 	const u8 *ie;
 	size_t ie_len;
 	u32 flags;
+	int chan_time;
 
 	u32 rates[IEEE80211_NUM_BANDS];
 

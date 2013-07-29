@@ -1436,6 +1436,11 @@ enum nl80211_commands {
  *	allowed to be used with the first @NL80211_CMD_SET_STATION command to
  *	update a TDLS peer STA entry.
  *
+ * @NL80211_ATTR_SCAN_CHAN_TIME: Specifies how many msec should a driver spend
+ *	on each channel during scanning. This is optional and the default is
+ *	leave the decision up to the driver. This setting may, but preferrably
+ *	shouldn't, be ignored by driver.
+ *
  * @NL80211_ATTR_MAX: highest attribute number currently defined
  * @__NL80211_ATTR_AFTER_LAST: internal use
  */
@@ -1735,6 +1740,8 @@ enum nl80211_attrs {
 	NL80211_ATTR_MAX_CRIT_PROT_DURATION,
 
 	NL80211_ATTR_PEER_AID,
+
+	NL80211_ATTR_SCAN_CHAN_TIME,
 
 	/* add attributes here, update the policy in nl80211.c */
 
