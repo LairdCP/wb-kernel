@@ -415,7 +415,18 @@ static void ieee80211_scan_state_send_probe(struct ieee80211_local *local,
 	 * After sending probe requests, wait for probe responses
 	 * on the channel.
 	 */
-	*next_delay = IEEE80211_CHANNEL_TIME;
+	if (local->scan_req->chan_time) {
+		/*
+		 * Account probe delay to compute the delay needed to reach
+		 * chan_time on a given channel.
+		 */
+		*next_delay = msecs_to_jiffies(local->scan_req->chan_time);
+		if (*next_delay > IEEE80211_PROBE_DELAY)
+			*next_delay -= IEEE80211_PROBE_DELAY;
+		else
+			*next_delay = 0;
+	} else
+		*next_delay = IEEE80211_CHANNEL_TIME;
 	local->next_scan_state = SCAN_DECISION;
 }
 
@@ -457,6 +468,7 @@ static int __ieee80211_start_scan(struct ieee80211_sub_if_data *sdata,
 			req->n_channels * sizeof(req->channels[0]);
 		local->hw_scan_req->ie = ies;
 		local->hw_scan_req->flags = req->flags;
+		local->hw_scan_req->chan_time = req->chan_time;
 
 		local->hw_scan_band = 0;
 
@@ -503,6 +515,9 @@ static int __ieee80211_start_scan(struct ieee80211_sub_if_data *sdata,
 			ieee80211_scan_state_send_probe(local, &next_delay);
 			next_delay = IEEE80211_CHANNEL_TIME;
 		}
+
+		if (req->chan_time)
+			next_delay = msecs_to_jiffies(req->chan_time);
 
 		/* Now, just wait a bit and we are all done! */
 		ieee80211_queue_delayed_work(&local->hw, &local->scan_work,
@@ -645,7 +660,10 @@ static void ieee80211_scan_state_set_channel(struct ieee80211_local *local,
 	 */
 	if (chan->flags & IEEE80211_CHAN_PASSIVE_SCAN ||
 	    !local->scan_req->n_ssids) {
-		*next_delay = IEEE80211_PASSIVE_CHANNEL_TIME;
+		if (local->scan_req->chan_time)
+			*next_delay = msecs_to_jiffies(local->scan_req->chan_time);
+		else
+			*next_delay = IEEE80211_PASSIVE_CHANNEL_TIME;
 		local->next_scan_state = SCAN_DECISION;
 		return;
 	}
