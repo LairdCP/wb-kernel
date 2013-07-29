@@ -2326,6 +2326,12 @@ static int ath10k_hw_scan(struct ieee80211_hw *hw,
 	arg.vdev_id = arvif->vdev_id;
 	arg.scan_id = ATH10K_SCAN_ID;
 
+	if (req->chan_time) {
+		arg.dwell_time_active = req->chan_time;
+		arg.dwell_time_passive = req->chan_time;
+		arg.max_scan_time = 2 * req->chan_time * req->n_channels;
+	}
+
 	if (!req->no_cck)
 		arg.scan_ctrl_flags |= WMI_SCAN_ADD_CCK_RATES;
 
