@@ -4161,6 +4161,8 @@ enum {
 	ATHEROS_CMD_GET_VERSION,
 	ATHEROS_CMD_SET_CHANNEL_PARAMS,
 	ATHEROS_CMD_SET_POWER_SAVE,
+	ATHEROS_CMD_SET_TX_SELECT_RATES,
+	ATHEROS_CMD_SET_HT_CAP,
 	__ATHEROS_CMD_MAX,
 };
 #define ATHEROS_CMD_MAX (__ATHEROS_CMD_MAX - 1)
@@ -4173,6 +4175,91 @@ static struct wmi *gwmi = NULL;  // get access to wmi pointer for netlink entry 
 
 int ath6kl_genl_set_power_save (struct sk_buff *skb_2, struct genl_info *info)
 {
+	return 0;
+}
+
+int	ath6kl_genl_set_tx_select_rates(struct sk_buff *skb_2, struct genl_info *info)
+{
+	struct nlattr *na;
+	struct sk_buff *skb;
+	struct wmi_set_tx_select_rates32_cmd *params;
+	struct ath6kl *ar;  
+	struct wmi *wmi = gwmi;
+
+	if ( gwmi == NULL )
+		return 0;
+
+	ar = wmi->parent_dev;
+		
+	if (info == NULL)
+	{
+		printk("%s: no data received\n", __func__);
+    	return 0;
+	}
+	na = info->attrs[ATHEROS_ATTR_MSG];
+    
+	if (na) {
+		params = (struct wmi_set_tx_select_rates32_cmd*)nla_data(na);
+		if (params == NULL)
+			printk("error while receiving data\n");
+		else
+		{
+			skb = ath6kl_wmi_get_new_buf(sizeof(*params));
+			if (!skb)
+				return -ENOMEM;
+
+			memcpy(skb->data, params, sizeof(*params));
+
+			ath6kl_wmi_cmd_send(wmi, 0, skb, WMI_SET_TX_SELECT_RATES_CMDID,
+					    NO_SYNC_WMIFLAG); 
+		}
+	}
+	else
+		printk("%s: no info->attrs %i\n", __func__, ATHEROS_ATTR_MSG);
+
+	return 0;
+}
+
+int	ath6kl_genl_set_ht_cap(struct sk_buff *skb_2, struct genl_info *info)
+{
+	struct nlattr *na;
+	struct sk_buff *skb;
+	struct wmi_set_htcap_cmd * params;
+	struct ath6kl *ar;  
+	struct wmi *wmi = gwmi;
+
+	if ( gwmi == NULL )
+		return 0;
+
+	ar = wmi->parent_dev;
+		
+	if (info == NULL)
+	{
+		printk("%s: no data received\n", __func__);
+    	return 0;
+	}
+	na = info->attrs[ATHEROS_ATTR_MSG];
+    
+	if (na) {
+		params = (struct wmi_set_htcap_cmd*)nla_data(na);
+		if (params == NULL)
+			printk("error while receiving data\n");
+		else
+		{
+			skb = ath6kl_wmi_get_new_buf(sizeof(*params));
+			if (!skb)
+				return -ENOMEM;
+
+			memcpy(skb->data, params, sizeof(*params));
+
+			ath6kl_wmi_cmd_send(wmi, 0, skb, WMI_SET_HT_CAP_CMDID,
+					    NO_SYNC_WMIFLAG); 
+		}
+	}
+	else
+		printk("%s: no info->attrs %i\n", __func__, ATHEROS_ATTR_MSG);
+
+	
 	return 0;
 }
 
@@ -4245,7 +4332,15 @@ int ath6kl_genl_get_version (struct sk_buff *skb_2, struct genl_info *info)
 	struct sk_buff *skb;
 	int rc;
 	void *msg_head;
-	/* send a message back*/
+	{
+		struct ath6kl *ar;  // How to get ?  //efb
+		struct wmi *wmi = gwmi;
+		ar = wmi->parent_dev;
+		printk ("ready event mac addr %pM sw_ver 0x%x abi_ver 0x%x\n",
+				ar->mac_addr, 
+				ar->version.wlan_ver,
+				ar->version.abi_ver);
+	}
 	/* allocate some memory, since the size is not yet known use NLMSG_GOODSIZE*/	
 	skb = genlmsg_new(NLMSG_GOODSIZE, GFP_KERNEL);
 	if (skb == NULL)
@@ -4273,9 +4368,8 @@ int ath6kl_genl_get_version (struct sk_buff *skb_2, struct genl_info *info)
 
  	out:
     	ath6kl_err("an error occured in %s\n", __func__);
-  
-	return 0;
 
+	return 0;
 }
 
 int ath6kl_genl_set_low_rssi_params (struct sk_buff *skb_2, struct genl_info *info)
@@ -4472,6 +4566,18 @@ struct genl_ops atheros_ops[] = {
 		.flags = 0,
 		.policy = atheros_policy,
 		.doit = ath6kl_genl_set_power_save,
+		.dumpit = NULL,
+	}, {
+		.cmd = ATHEROS_CMD_SET_TX_SELECT_RATES,
+		.flags = 0,
+		.policy = atheros_policy,
+		.doit = ath6kl_genl_set_tx_select_rates,
+		.dumpit = NULL,
+	}, {
+		.cmd = ATHEROS_CMD_SET_HT_CAP,
+		.flags = 0,
+		.policy = atheros_policy,
+		.doit = ath6kl_genl_set_ht_cap,
 		.dumpit = NULL,
 	}, 
 };
