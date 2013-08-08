@@ -64,8 +64,10 @@ void ath6kl_tm_rx_wmi_event(struct ath6kl *ar, void *buf, size_t buf_len)
 		ath6kl_warn("failed to allocate testmode rx skb!\n");
 		return;
 	}
-	nla_put_u32(skb, ATH6KL_TM_ATTR_CMD, ATH6KL_TM_CMD_WMI_CMD);
-	nla_put(skb, ATH6KL_TM_ATTR_DATA, buf_len, buf);
+	if(nla_put_u32(skb, ATH6KL_TM_ATTR_CMD, ATH6KL_TM_CMD_WMI_CMD))
+		goto nla_put_failure;
+	if(nla_put(skb, ATH6KL_TM_ATTR_DATA, buf_len, buf))
+		goto nla_put_failure;
 	cfg80211_testmode_event(skb, GFP_KERNEL);
 	return;
 
