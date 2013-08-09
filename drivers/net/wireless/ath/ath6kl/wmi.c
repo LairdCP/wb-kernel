@@ -24,6 +24,7 @@
 #include "../regd.h"
 #include "../regd_common.h"
 #include "laird.h"
+#include "wmiconfig.h"
 
 static int ath6kl_wmi_sync_point(struct wmi *wmi, u8 if_idx);
 
@@ -1216,7 +1217,6 @@ static int ath6kl_wmi_ratemask_reply_rx(struct wmi *wmi, u8 *datap, int len)
 {
 	if (len < sizeof(struct wmi_fix_rates_reply))
 		return -EINVAL;
-
 	ath6kl_wakeup_event(wmi->parent_dev);
 
 	return 0;
@@ -1224,8 +1224,17 @@ static int ath6kl_wmi_ratemask_reply_rx(struct wmi *wmi, u8 *datap, int len)
 
 static int ath6kl_wmi_ch_list_reply_rx(struct wmi *wmi, u8 *datap, int len)
 {
+	//LAIRD:  for reply
+	struct wmi_channel_list_reply *reply;
+
 	if (len < sizeof(struct wmi_channel_list_reply))
 		return -EINVAL;
+
+	reply = (struct wmi_channel_list_reply*)datap;
+
+#ifdef CONFIG_NL80211_TESTMODE
+	ath6kl_wmicfg_send_channel_list_reply(wmi, reply);
+#endif
 
 	ath6kl_wakeup_event(wmi->parent_dev);
 
@@ -1775,7 +1784,7 @@ int ath6kl_wmi_cmd_send(struct wmi *wmi, u8 if_idx, struct sk_buff *skb,
 		   cmd_id, skb->len, sync_flag);
 	ath6kl_dbg_dump(ATH6KL_DBG_WMI_DUMP, NULL, "wmi tx ",
 			skb->data, skb->len);
-
+	//LAIRD: send all commands to userspace
 	ath6kl_wmi_event_multicast(cmd_id, skb->data, skb->len);
 
 	if (sync_flag >= END_WMIFLAG) {
@@ -3980,7 +3989,7 @@ static int ath6kl_wmi_proc_events(struct wmi *wmi, struct sk_buff *skb)
 	ath6kl_dbg(ATH6KL_DBG_WMI, "wmi rx id %d len %d\n", id, len);
 	ath6kl_dbg_dump(ATH6KL_DBG_WMI_DUMP, NULL, "wmi rx ",
 			datap, len);
-
+	//LAIRD: send all events to userspace
 	ath6kl_wmi_event_multicast(id, datap, len);
 
 	switch (id) {
