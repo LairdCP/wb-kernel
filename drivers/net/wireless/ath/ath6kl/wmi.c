@@ -4270,6 +4270,7 @@ enum {
 	ATHEROS_CMD_SET_TX_SELECT_RATES,
 	ATHEROS_CMD_SET_HT_CAP,
 	ATHEROS_CMD_SET_DFS_MODE,
+	ATHEROS_CMD_SET_REGDOMAIN,
 	__ATHEROS_CMD_MAX,
 };
 #define ATHEROS_CMD_MAX (__ATHEROS_CMD_MAX - 1)
@@ -4522,7 +4523,7 @@ int ath6kl_genl_set_low_rssi_params (struct sk_buff *skb_2, struct genl_info *in
 int ath6kl_genl_set_dfs_mode(struct sk_buff *skb_2, struct genl_info *info)
 {
 	struct nlattr *na;
-	struct ath6kl *ar;  // How to get ?  //efb
+	struct ath6kl *ar;  
 	struct wmi *wmi = gwmi;
 	enum wmi_dfs_mode *mode;
 
@@ -4556,6 +4557,49 @@ int ath6kl_genl_set_dfs_mode(struct sk_buff *skb_2, struct genl_info *info)
 	else
 		printk("%s: no info->attrs %i\n", __func__, ATHEROS_ATTR_MSG);
 
+	return 0;
+}
+
+int ath6kl_genl_set_regdomain(struct sk_buff *skb_2, struct genl_info *info)
+{
+	struct nlattr *na;
+	struct sk_buff *skb;
+	struct wmi_set_regdomain_cmd * params;
+	struct ath6kl *ar;  
+	struct wmi *wmi = gwmi;
+
+	if ( gwmi == NULL )
+		return 0;
+
+	ar = wmi->parent_dev;
+		
+	if (info == NULL)
+	{
+		printk("%s: no data received\n", __func__);
+    	return 0;
+	}
+	na = info->attrs[ATHEROS_ATTR_MSG];
+    
+	if (na) {
+		params = (struct wmi_set_regdomain_cmd*)nla_data(na);
+		if (params == NULL)
+			printk("error while receiving data\n");
+		else
+		{
+			skb = ath6kl_wmi_get_new_buf(sizeof(*params));
+			if (!skb)
+				return -ENOMEM;
+
+			memcpy(skb->data, params, sizeof(*params));
+
+			ath6kl_wmi_cmd_send(wmi, 0, skb, WMI_SET_REGDOMAIN_CMDID,
+					    NO_SYNC_WMIFLAG); 
+		}
+	}
+	else
+		printk("%s: no info->attrs %i\n", __func__, ATHEROS_ATTR_MSG);
+
+	
 	return 0;
 }
 
@@ -4708,6 +4752,12 @@ struct genl_ops atheros_ops[] = {
 		.flags = 0,
 		.policy = atheros_policy,
 		.doit = ath6kl_genl_set_dfs_mode,
+		.dumpit = NULL,
+	}, {
+		.cmd = ATHEROS_CMD_SET_REGDOMAIN,
+		.flags = 0,
+		.policy = atheros_policy,
+		.doit = ath6kl_genl_set_regdomain,
 		.dumpit = NULL,
 	},
 };
