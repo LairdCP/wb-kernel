@@ -1107,6 +1107,8 @@ enum wmi_mode_phy {
 	WMI_RATES_MODE_MAX
 };
 
+
+
 /* WMI_SET_TX_SELECT_RATES_CMDID */
 struct wmi_set_tx_select_rates32_cmd {
 	__le32 ratemask[WMI_RATES_MODE_MAX];
@@ -1225,7 +1227,21 @@ enum wmi_phy_mode {
 	WMI_11G_HT20	= 0x6,
 };
 
+/* LAIRD addition to support DFS modes */
+enum wmi_dfs_mode {
+	DFS_DISABLED,
+	DFS_ENABLED,
+};
+
 #define WMI_MAX_CHANNELS        32
+
+struct wmi_channel_params_cmd {
+    u8     reserved1;
+    u8     scan_param;              /* set if enable scan */
+    u8     phy_mode;                /* see WMI_PHY_MODE */
+    u8     num_channels;            /* how many channels follow */
+    u16    channel_list[1];         /* channels in Mhz */
+} __attribute__((__packed__));
 
 /*
  *  WMI_RSSI_THRESHOLD_PARAMS_CMDID
@@ -2669,6 +2685,8 @@ int ath6kl_wmi_sta_bmiss_enhance_cmd(struct wmi *wmi, u8 if_idx, bool enable);
 int ath6kl_wmi_set_txe_notify(struct wmi *wmi, u8 idx,
 			      u32 rate, u32 pkts, u32 intvl);
 int ath6kl_wmi_set_regdomain_cmd(struct wmi *wmi, const char *alpha2);
+int ath6kl_wmi_channel_params_cmd(struct wmi *wmi, u8 if_idx, u8 scan_param,
+			    				u8 phy_mode, u8 num_channels, u16 *channel_list);
 
 /* AP mode uAPSD */
 int ath6kl_wmi_ap_set_apsd(struct wmi *wmi, u8 if_idx, u8 enable);

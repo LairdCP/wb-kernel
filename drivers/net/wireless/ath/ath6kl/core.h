@@ -847,7 +847,9 @@ struct ath6kl {
 	//LAIRD
 	struct {
 		enum wmi_mode_phy phy_mode;	 		
-		bool dfs_channels;
+		enum wmi_dfs_mode dfs_mode;
+		u8 num_channels;
+		u16 channel_list[WMI_MAX_CHANNELS];
 	} laird;
 };
 
