@@ -1217,8 +1217,21 @@ static int ath6kl_wmi_test_rx(struct wmi *wmi, u8 *datap, int len)
 
 static int ath6kl_wmi_ratemask_reply_rx(struct wmi *wmi, u8 *datap, int len)
 {
+	//LAIRD: for reply
+	struct ath6kl *ar;
+	struct wmi_fix_rates_reply *reply;
+
+	ar = wmi->parent_dev;
+
 	if (len < sizeof(struct wmi_fix_rates_reply))
 		return -EINVAL;
+
+	reply = (struct wmi_fix_rates_reply*)datap;
+
+#ifdef CONFIG_NL80211_TESTMODE
+	ath6kl_wmicfg_send_fix_rates_reply(wmi, reply);
+#endif
+
 	ath6kl_wakeup_event(wmi->parent_dev);
 
 	return 0;
