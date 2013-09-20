@@ -4239,8 +4239,8 @@ int ath6kl_wmi_channel_params_cmd(struct wmi *wmi, u8 if_idx, u8 scan_param,
 	cmd->num_channels = cpu_to_le16(num_channels);
 	memcpy(cmd->channel_list, channel_list, (num_channels)*sizeof(u16));
 
-	//ret = ath6kl_wmi_cmd_send(wmi, if_idx, skb, WMI_SET_CHANNEL_PARAMS_CMDID,
-	//			  NO_SYNC_WMIFLAG);
+	ret = ath6kl_wmi_cmd_send(wmi, if_idx, skb, WMI_SET_CHANNEL_PARAMS_CMDID,
+				  NO_SYNC_WMIFLAG);
 	return ret;
 }
 
