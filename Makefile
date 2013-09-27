@@ -1,7 +1,7 @@
 VERSION = 3
 PATCHLEVEL = 8
 SUBLEVEL = 0
-EXTRAVERSION = -laird5
+EXTRAVERSION = -laird6
 NAME = Unicycling Gorilla
 
 # *DOCUMENTATION*
