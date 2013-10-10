@@ -23,11 +23,14 @@
 #include <linux/mmc/sdio_ids.h>
 #include <linux/mmc/sdio.h>
 #include <linux/mmc/sd.h>
+#include <linux/gpio.h>
 #include "hif.h"
 #include "hif-ops.h"
 #include "target.h"
 #include "debug.h"
 #include "cfg80211.h"
+
+#define PWR_RESET_GPIO    28
 
 struct ath6kl_sdio {
 	struct sdio_func *func;
@@ -1271,8 +1274,43 @@ static int ath6kl_sdio_pm_resume(struct device *device)
 	return 0;
 }
 
-static SIMPLE_DEV_PM_OPS(ath6kl_sdio_pm_ops, ath6kl_sdio_pm_suspend,
-			 ath6kl_sdio_pm_resume);
+/*
+ * Below handlers leverage the PM system to make sure we turn on and off
+ * the power gpio at the right time. If we do it in the earlier power on and off handlers
+ * for the sdio, we get errors from the mmc subsystem.
+ */
+static int ath6kl_sdio_pm_suspend_late(struct device *device)
+{
+	ath6kl_dbg(ATH6KL_DBG_SUSPEND, "sdio pm ath6kl_sdio_pm_suspend_late\n");
+
+	gpio_set_value(PWR_RESET_GPIO, 0);
+
+	return 0;
+}
+
+static int ath6kl_sdio_pm_resume_early(struct device *device)
+{
+	ath6kl_dbg(ATH6KL_DBG_SUSPEND, "sdio pm ath6kl_sdio_pm_resume_early\n");
+
+	gpio_set_value(PWR_RESET_GPIO, 1);
+
+	msleep(1); /* wait for power up */
+
+	return 0;
+}
+
+const struct dev_pm_ops ath6kl_sdio_pm_ops = {
+	.suspend = ath6kl_sdio_pm_suspend,
+	.suspend_late = ath6kl_sdio_pm_suspend_late,
+	.resume_early = ath6kl_sdio_pm_resume_early,
+	.resume = ath6kl_sdio_pm_resume,
+	.freeze = ath6kl_sdio_pm_suspend,
+	.thaw = ath6kl_sdio_pm_resume,
+	.poweroff = ath6kl_sdio_pm_suspend,
+	.poweroff_late = ath6kl_sdio_pm_suspend_late,
+	.restore_early = ath6kl_sdio_pm_resume_early,
+	.restore = ath6kl_sdio_pm_resume,
+};
 
 #define ATH6KL_SDIO_PM_OPS (&ath6kl_sdio_pm_ops)
 
@@ -1342,6 +1380,12 @@ static int ath6kl_sdio_probe(struct sdio_func *func,
 
 	ath6kl_sdio_set_mbox_info(ar);
 
+	if( ret = gpio_request_one(PWR_RESET_GPIO, GPIOF_OUT_INIT_HIGH|GPIOF_EXPORT_DIR_FIXED, "WIFI_RESET") ) {
+		ath6kl_err("Unable to get WIFI power gpio: %d\n", ret);
+	} else {
+		ath6kl_dbg(ATH6KL_DBG_SUSPEND, "Setup wifi gpio #%d\n", PWR_RESET_GPIO);
+	}
+
 	ret = ath6kl_sdio_config(ar);
 	if (ret) {
 		ath6kl_err("Failed to config sdio: %d\n", ret);
@@ -1384,6 +1428,7 @@ static void ath6kl_sdio_remove(struct sdio_func *func)
 
 	kfree(ar_sdio->dma_buffer);
 	kfree(ar_sdio);
+	gpio_free(PWR_RESET_GPIO);
 }
 
 static const struct sdio_device_id ath6kl_sdio_devices[] = {
