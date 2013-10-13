@@ -6463,6 +6463,9 @@ void cfg80211_send_layer2_update(struct net_device *dev, const u8 *addr);
  */
 int regulatory_hint(struct wiphy *wiphy, const char *alpha2);
 
+int regulatory_hint_user(const char *alpha2,
+			 enum nl80211_user_reg_hint_type user_reg_hint_type);
+
 /**
  * regulatory_set_wiphy_regd - set regdom info for self managed drivers
  * @wiphy: the wireless device we want to process the regulatory domain on
