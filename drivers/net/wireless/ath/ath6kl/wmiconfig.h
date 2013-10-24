@@ -22,4 +22,6 @@ struct sk_buff *ath6kl_wmi_get_buf(u32 size);
 void ath6kl_tm_rx_wmi_event(struct ath6kl *ar, void *buf, size_t buf_len);
 void ath6kl_wmicfg_send_stats(struct ath6kl_vif *vif,
 			      struct target_stats *stats);
+void ath6kl_wmicfg_send_channel_list_reply(struct wmi *wmi, struct wmi_channel_list_reply *reply);
+void ath6kl_wmicfg_send_fix_rates_reply(struct wmi *wmi, struct wmi_fix_rates_reply *reply);
 #endif

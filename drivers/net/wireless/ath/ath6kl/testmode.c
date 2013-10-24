@@ -98,7 +98,6 @@ int ath6kl_tm_cmd(struct wiphy *wiphy, void *data, int len)
 		skb = ath6kl_wmi_get_buf(buf_len-4);
 		if (!skb)
 			return -ENOMEM;
-ath6kl_err("DANKE: in %s at %d\n", __func__, __LINE__);
 
 		memcpy(&wmi_cmd, buf, sizeof(wmi_cmd));
 		memcpy(skb->data, (u32 *)buf + 1, buf_len - 4);
@@ -114,7 +113,6 @@ ath6kl_err("DANKE: in %s at %d\n", __func__, __LINE__);
 		buf = nla_data(tb[ATH6KL_TM_ATTR_DATA]);
 		buf_len = nla_len(tb[ATH6KL_TM_ATTR_DATA]);
 
-ath6kl_err("DANKE: in %s at %d\n", __func__, __LINE__);
 		ath6kl_wmi_test_cmd(ar->wmi, buf, buf_len);
 
 		return 0;
@@ -122,7 +120,6 @@ ath6kl_err("DANKE: in %s at %d\n", __func__, __LINE__);
 		break;
 	case ATH6KL_TM_CMD_RX_REPORT:
 	default:
-ath6kl_err("DANKE: in %s at %d\n", __func__, __LINE__);
 
 		return -EOPNOTSUPP;
 	}

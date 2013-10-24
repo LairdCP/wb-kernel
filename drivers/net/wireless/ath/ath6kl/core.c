@@ -303,6 +303,12 @@ struct ath6kl *ath6kl_core_create(struct device *dev)
 	skb_queue_head_init(&ar->mcastpsq);
 
 	memcpy(ar->ap_country_code, DEF_AP_COUNTRY_CODE, 3);
+	
+	//LAIRD: Initialize specifics
+	ar->laird.phy_mode = WMI_11AG_MODE;
+	ar->laird.dfs_mode = DFS_ENABLED;
+	ar->laird.num_channels = 0;
+	memset(ar->laird.channel_list, 0, sizeof(u16) * WMI_MAX_CHANNELS); 
 
 	return ar;
 }

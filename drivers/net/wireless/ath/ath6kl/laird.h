@@ -6,7 +6,7 @@
 
 // Laird version is 32bit value.  Parsed in the form w.x.y.z.  
 // increment y.z as needed for each change
-#define LAIRD_DRV_VERSION 0x03040002
+#define LAIRD_DRV_VERSION 0x03040006
 
 #ifdef LAIRD_FIPS
 #include <linux/etherdevice.h>

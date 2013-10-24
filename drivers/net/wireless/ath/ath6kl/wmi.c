@@ -24,6 +24,7 @@
 #include "../regd.h"
 #include "../regd_common.h"
 #include "laird.h"
+#include "wmiconfig.h"
 
 static int ath6kl_wmi_sync_point(struct wmi *wmi, u8 if_idx);
 
@@ -73,6 +74,8 @@ static const u8 up_to_ac[] = {
 	WMM_AC_VO,
 	WMM_AC_VO,
 };
+
+static void __remove_dfs_channels(u8 *num_channels, u16 *channel_list);
 
 void ath6kl_wmi_set_control_ep(struct wmi *wmi, enum htc_endpoint_id ep_id)
 {
@@ -1214,8 +1217,20 @@ static int ath6kl_wmi_test_rx(struct wmi *wmi, u8 *datap, int len)
 
 static int ath6kl_wmi_ratemask_reply_rx(struct wmi *wmi, u8 *datap, int len)
 {
+	//LAIRD: for reply
+	struct ath6kl *ar;
+	struct wmi_fix_rates_reply *reply;
+
+	ar = wmi->parent_dev;
+
 	if (len < sizeof(struct wmi_fix_rates_reply))
 		return -EINVAL;
+
+	reply = (struct wmi_fix_rates_reply*)datap;
+
+#ifdef CONFIG_NL80211_TESTMODE
+	ath6kl_wmicfg_send_fix_rates_reply(wmi, reply);
+#endif
 
 	ath6kl_wakeup_event(wmi->parent_dev);
 
@@ -1224,8 +1239,31 @@ static int ath6kl_wmi_ratemask_reply_rx(struct wmi *wmi, u8 *datap, int len)
 
 static int ath6kl_wmi_ch_list_reply_rx(struct wmi *wmi, u8 *datap, int len)
 {
+	//LAIRD:  for reply
+	struct ath6kl *ar;  
+	struct wmi_channel_list_reply *reply;
+
+	ar = wmi->parent_dev;
+
 	if (len < sizeof(struct wmi_channel_list_reply))
 		return -EINVAL;
+
+	reply = (struct wmi_channel_list_reply*)datap;
+
+#ifdef CONFIG_NL80211_TESTMODE
+	ath6kl_wmicfg_send_channel_list_reply(wmi, reply);
+#endif
+	
+	//check if DFS channels disabled, if so, limit channels to non-DFS and send channel_params
+	if(ar->laird.dfs_mode == DFS_DISABLED) {
+		ar->laird.num_channels = reply->num_ch;
+		memcpy(ar->laird.channel_list, reply->ch_list, sizeof(u16)*WMI_MAX_CHANNELS); 
+
+		__remove_dfs_channels(&ar->laird.num_channels, ar->laird.channel_list);
+		
+		ath6kl_wmi_channel_params_cmd(wmi, 0, 0, ar->laird.phy_mode, ar->laird.num_channels,
+										ar->laird.channel_list);
+	}
 
 	ath6kl_wakeup_event(wmi->parent_dev);
 
@@ -1775,7 +1813,7 @@ int ath6kl_wmi_cmd_send(struct wmi *wmi, u8 if_idx, struct sk_buff *skb,
 		   cmd_id, skb->len, sync_flag);
 	ath6kl_dbg_dump(ATH6KL_DBG_WMI_DUMP, NULL, "wmi tx ",
 			skb->data, skb->len);
-
+	//LAIRD: send all commands to userspace
 	ath6kl_wmi_event_multicast(cmd_id, skb->data, skb->len);
 
 	if (sync_flag >= END_WMIFLAG) {
@@ -1835,6 +1873,7 @@ int ath6kl_wmi_connect_cmd(struct wmi *wmi, u8 if_idx,
 			   u8 *bssid, u16 channel, u32 ctrl_flags,
 			   u8 nw_subtype)
 {
+	struct ath6kl *ar; 
 	struct sk_buff *skb;
 	struct wmi_connect_cmd *cc;
 	int ret;
@@ -1878,6 +1917,11 @@ int ath6kl_wmi_connect_cmd(struct wmi *wmi, u8 if_idx,
 	if (bssid != NULL)
 		memcpy(cc->bssid, bssid, ETH_ALEN);
 
+	//LAIRD: Need to resend radio modes before all connects
+	ar = wmi->parent_dev;
+	ath6kl_wmi_channel_params_cmd(wmi, if_idx, 0, ar->laird.phy_mode, ar->laird.num_channels,
+								ar->laird.channel_list);
+
 	ret = ath6kl_wmi_cmd_send(wmi, if_idx, skb, WMI_CONNECT_CMDID,
 				  NO_SYNC_WMIFLAG);
 
@@ -1887,6 +1931,7 @@ int ath6kl_wmi_connect_cmd(struct wmi *wmi, u8 if_idx,
 int ath6kl_wmi_reconnect_cmd(struct wmi *wmi, u8 if_idx, u8 *bssid,
 			     u16 channel)
 {
+	struct ath6kl *ar; 
 	struct sk_buff *skb;
 	struct wmi_reconnect_cmd *cc;
 	int ret;
@@ -1905,6 +1950,11 @@ int ath6kl_wmi_reconnect_cmd(struct wmi *wmi, u8 if_idx, u8 *bssid,
 
 	if (bssid != NULL)
 		memcpy(cc->bssid, bssid, ETH_ALEN);
+
+	//LAIRD: Need to resend radio modes before all connects
+	ar = wmi->parent_dev;
+	ath6kl_wmi_channel_params_cmd(wmi, if_idx, 0, ar->laird.phy_mode, ar->laird.num_channels,
+								ar->laird.channel_list);
 
 	ret = ath6kl_wmi_cmd_send(wmi, if_idx, skb, WMI_RECONNECT_CMDID,
 				  NO_SYNC_WMIFLAG);
@@ -3980,7 +4030,7 @@ static int ath6kl_wmi_proc_events(struct wmi *wmi, struct sk_buff *skb)
 	ath6kl_dbg(ATH6KL_DBG_WMI, "wmi rx id %d len %d\n", id, len);
 	ath6kl_dbg_dump(ATH6KL_DBG_WMI_DUMP, NULL, "wmi rx ",
 			datap, len);
-
+	//LAIRD: send all events to userspace
 	ath6kl_wmi_event_multicast(id, datap, len);
 
 	switch (id) {
@@ -4125,6 +4175,75 @@ int ath6kl_wmi_control_rx(struct wmi *wmi, struct sk_buff *skb)
 	return ath6kl_wmi_proc_events(wmi, skb);
 }
 
+// LAIRD - function to limit freqs to non-DFS
+static bool __freq_is_dfs(const u16 freq)
+{
+	if((freq >= 5260) && (freq <= 5700))
+		return true;
+	else
+		return false;
+}
+
+static void __remove_dfs_channels(u8 *num_channels, u16 *channel_list)
+{
+	u32 i = 0;
+	u32 lastunused = 0;
+	u32 n_channels = 0;
+
+	//printk(KERN_ERR "Channels before filter (%d):", *num_channels);
+	//for (i = 0; i < *num_channels; i++)
+	//	printk(KERN_ERR " %d",  channel_list[i]);
+	//printk(KERN_ERR "\n");
+	
+
+    // locate any channels that are off band and move others into their 
+	// location.  Adjusting n_channels will prevent any extra values in the list
+	// from being used.  The channels structures are part of the wiphy and 
+	// should not be modified.
+	n_channels = *num_channels;
+	for(i = 0; i < n_channels; i++)
+	{
+		if (__freq_is_dfs(channel_list[i]))
+		{
+			//printk(KERN_ERR "Pruning %d from list\n", channel_list[i]);
+			(*num_channels)--;
+		}
+		else
+		{
+			if (i > lastunused)
+				channel_list[lastunused] = channel_list[i];
+			lastunused++;
+		}
+	}
+
+	//printk(KERN_ERR "Channels after filter (%d):", *num_channels);
+	//for (i = 0; i < *num_channels; i++)
+	//	printk(KERN_ERR " %d",  channel_list[i]);
+	//printk(KERN_ERR "\n");
+}
+
+int ath6kl_wmi_channel_params_cmd(struct wmi *wmi, u8 if_idx, u8 scan_param,
+			    u8 phy_mode, u8 num_channels, u16 *channel_list)
+{
+	struct sk_buff *skb;
+	struct wmi_channel_params_cmd *cmd;
+	int ret;
+
+	skb = ath6kl_wmi_get_new_buf(sizeof(*cmd) + ((num_channels-1)*sizeof(u16)));
+	if (!skb)
+		return -ENOMEM;
+
+	cmd = (struct wmi_channel_params_cmd *)skb->data;
+	cmd->scan_param = cpu_to_le16(scan_param);
+	cmd->phy_mode = cpu_to_le16(phy_mode);
+	cmd->num_channels = cpu_to_le16(num_channels);
+	memcpy(cmd->channel_list, channel_list, (num_channels)*sizeof(u16));
+
+	ret = ath6kl_wmi_cmd_send(wmi, if_idx, skb, WMI_SET_CHANNEL_PARAMS_CMDID,
+				  NO_SYNC_WMIFLAG);
+	return ret;
+}
+
 //LAIRD: structure, definitions, and functions needed for generic netlink events to userspace
 enum {
 	ATHEROS_ATTR_UNSPEC,
@@ -4155,12 +4274,12 @@ static struct genl_family atheros_fam = {
 
 enum {
 	ATHEROS_CMD_UNSPEC,
-	ATHEROS_CMD_TEST_ECHO,
+	ATHEROS_CMD_RESPONSE,
 	ATHEROS_CMD_EVENT,
-	ATHEROS_CMD_SET_LOW_RSSI_PARAMS,
-	ATHEROS_CMD_GET_VERSION,
-	ATHEROS_CMD_SET_CHANNEL_PARAMS,
-	ATHEROS_CMD_SET_POWER_SAVE,
+	ATHEROS_CMD_GET_VALUE,
+	ATHEROS_CMD_SET_PHY_MODE,
+	ATHEROS_CMD_SET_DFS_MODE,
+	ATHEROS_CMD_SEND_WMI,
 	__ATHEROS_CMD_MAX,
 };
 #define ATHEROS_CMD_MAX (__ATHEROS_CMD_MAX - 1)
@@ -4171,28 +4290,71 @@ static struct genl_multicast_group atheros_events_mcgrp = {
 
 static struct wmi *gwmi = NULL;  // get access to wmi pointer for netlink entry point functions  FIXME: find alternative to this global!
 
-int ath6kl_genl_set_power_save (struct sk_buff *skb_2, struct genl_info *info)
-{
-	return 0;
-}
-
-int ath6kl_genl_set_channel_params (struct sk_buff *skb_2, struct genl_info *info)
+int ath6kl_genl_wmi_passthru (struct sk_buff *skb_2, struct genl_info *info)
 {
 	struct nlattr *na;
 	struct sk_buff *skb;
+	void *params;
+	int params_data_len;
+	u32 wmi_cmd;
 	struct ath6kl *ar;  
 	struct wmi *wmi = gwmi;
 
-	typedef struct {
-	    u8     reserved1;
-	    u8     scanParam;              /* set if enable scan */
-	    u8     phyMode;                /* see WMI_PHY_MODE */
-	    u8     numChannels;            /* how many channels follow */
-	    u16    channelList[1];         /* channels in Mhz */
-	} WMI_CHANNEL_PARAMS_CMD;
+	void* p;
+	if ( gwmi == NULL )
+		return -EINVAL;
 
-	WMI_CHANNEL_PARAMS_CMD *params;
-	WMI_CHANNEL_PARAMS_CMD *cmd;
+	ar = wmi->parent_dev;
+		
+	if (info == NULL)
+	{
+		ath6kl_err( "%s: no data received\n", __func__);
+    	return -EINVAL;
+	}
+	
+	na = info->attrs[ATHEROS_ATTR_MSG];
+	if (na) {
+		params = nla_data(na);
+		params_data_len = nla_len(na)-4; //(data follows int cmd
+		if (params == NULL)
+			ath6kl_err("error while receiving data\n");
+		else
+		{
+			skb = ath6kl_wmi_get_new_buf(params_data_len);
+			if (!skb)
+				return -ENOMEM;
+
+			memcpy(&wmi_cmd, params, sizeof(wmi_cmd));
+			p = (u32 *)params+1;
+			switch(wmi_cmd)
+			{
+				// place holder in case other commands need special treatment
+				case WMI_SET_ROAM_CTRL_CMDID: 
+					{
+					struct low_rssi_scan_params *t = (struct low_rssi_scan_params *)p; 
+					ar->lrssi_roam_threshold = t->lrssi_roam_threshold; // place holder 
+					}
+					break;
+				default:
+					break;
+			}
+			memcpy(skb->data, (u32 *)params+1, params_data_len);
+			ath6kl_wmi_cmd_send(wmi, 0, skb, wmi_cmd, NO_SYNC_WMIFLAG);
+		}
+	}
+	else
+		ath6kl_err("%s: no info->attrs \n", __func__);
+
+	return 0;
+}
+
+int ath6kl_genl_set_phy_mode(struct sk_buff *skb_2, struct genl_info *info)
+{
+	struct nlattr *na;
+	struct ath6kl *ar;  
+	struct wmi *wmi = gwmi;
+	struct wmi_channel_params_cmd *params;
+	
 	if ( gwmi == NULL )
 		return 0;
 
@@ -4210,28 +4372,15 @@ int ath6kl_genl_set_channel_params (struct sk_buff *skb_2, struct genl_info *inf
 	na = info->attrs[ATHEROS_ATTR_MSG];
     
 	if (na) {
-		params = (WMI_CHANNEL_PARAMS_CMD*)nla_data(na);
+		params = (struct wmi_channel_params_cmd*)nla_data(na);
 		if (params == NULL)
 			printk("error while receiving data\n");
 		else
 		{
-#if 0
-			printk("received:\n\phyMode: %d\n", params->phyMode);
-#endif
+			ar->laird.phy_mode = params->phy_mode;
 
-			skb = ath6kl_wmi_get_new_buf(sizeof(*cmd));
-			if (!skb)
-				return -ENOMEM;
-
-			cmd = (WMI_CHANNEL_PARAMS_CMD *) skb->data;
-
-			memset(cmd, 0, sizeof(*cmd));
-			cmd->phyMode = params->phyMode;
-			// number of channels == 0 means use default channels which is what we want
-
-			ath6kl_wmi_cmd_send(wmi, 0, skb, WMI_SET_CHANNEL_PARAMS_CMDID,
-					    NO_SYNC_WMIFLAG);
-			
+			ath6kl_wmi_channel_params_cmd(wmi, 0, 0, ar->laird.phy_mode, ar->laird.num_channels,
+										ar->laird.channel_list);
 		}
 	}
 	else
@@ -4240,25 +4389,49 @@ int ath6kl_genl_set_channel_params (struct sk_buff *skb_2, struct genl_info *inf
 	return 0;
 }
 
-int ath6kl_genl_get_version (struct sk_buff *skb_2, struct genl_info *info)
+int ath6kl_genl_get_value (struct sk_buff *skb_2, struct genl_info *info)
 {
 	struct sk_buff *skb;
-	int rc;
+	int rc=0;
 	void *msg_head;
-	/* send a message back*/
+	int *c=NULL;
+	struct ath6kl *ar;  
+	struct wmi *wmi = gwmi;	
+	struct nlattr *na;
+
+	if ( gwmi == NULL )
+		return 0;
+
+	ar = wmi->parent_dev;
+
+	na = info->attrs[ATHEROS_ATTR_MSG];
+	if (na) 
+		c = (int*)nla_data(na);
+
 	/* allocate some memory, since the size is not yet known use NLMSG_GOODSIZE*/	
 	skb = genlmsg_new(NLMSG_GOODSIZE, GFP_KERNEL);
 	if (skb == NULL)
 		goto out;
 
-	msg_head = genlmsg_put(skb, 0, info->snd_seq+1, &atheros_fam, 0, ATHEROS_CMD_TEST_ECHO);
+	msg_head = genlmsg_put(skb, 0, info->snd_seq+1, &atheros_fam, 0, ATHEROS_CMD_RESPONSE);
 	if (msg_head == NULL) {
 		rc = -ENOMEM;
 		goto out;
 	}
 	
-	/* add a ATHEROS_ATTR_MSG attribute (actual value to be sent) */
-	rc = nla_put_s32( skb, ATHEROS_ATTR_MSG, LAIRD_DRV_VERSION );
+	if (c)
+	{
+		switch (*c)
+		{
+			/* add a ATHEROS_ATTR_MSG attribute (actual value to be sent) */
+			case 0 :
+				rc = nla_put_s32( skb, ATHEROS_ATTR_MSG, LAIRD_DRV_VERSION );
+				break;
+			case 1 :	
+				rc = nla_put_s32( skb, ATHEROS_ATTR_MSG, ar->tx_pwr );
+				break;
+		}
+	}
 	if (rc != 0)
 		goto out;
 	
@@ -4273,19 +4446,16 @@ int ath6kl_genl_get_version (struct sk_buff *skb_2, struct genl_info *info)
 
  	out:
     	ath6kl_err("an error occured in %s\n", __func__);
-  
-	return 0;
 
+	return 0;
 }
 
-int ath6kl_genl_set_low_rssi_params (struct sk_buff *skb_2, struct genl_info *info)
+int ath6kl_genl_set_dfs_mode(struct sk_buff *skb_2, struct genl_info *info)
 {
 	struct nlattr *na;
-	struct sk_buff *skb;
-	struct low_rssi_scan_params *params;
-	struct roam_ctrl_cmd *cmd;
-	struct ath6kl *ar;  // How to get ?  //efb
+	struct ath6kl *ar;  
 	struct wmi *wmi = gwmi;
+	enum wmi_dfs_mode *mode;
 
 	if ( gwmi == NULL )
 		return 0;
@@ -4304,99 +4474,19 @@ int ath6kl_genl_set_low_rssi_params (struct sk_buff *skb_2, struct genl_info *in
 	na = info->attrs[ATHEROS_ATTR_MSG];
     
 	if (na) {
-		params = (struct low_rssi_scan_params *)nla_data(na);
-		if (params == NULL)
+		mode = (enum wmi_dfs_mode*)nla_data(na);
+		if (mode == NULL)
 			printk("error while receiving data\n");
 		else
 		{
-#if 0
-			printk("received:\n\trssi_scan_period: %d\n", params->lrssi_scan_period);
-			printk("\trssi_scan_threshold: %d\n", params->lrssi_scan_threshold);
-			printk("\trssi_roam_threshold: %d\n", params->lrssi_roam_threshold);
-			printk("\troam_rssi_floor: %d\n", params->roam_rssi_floor);
-#endif
-
-			ar->lrssi_roam_threshold = params->lrssi_roam_threshold; // place holder 
-
-			skb = ath6kl_wmi_get_new_buf(sizeof(*cmd));
-			if (!skb)
-				return -ENOMEM;
-
-			cmd = (struct roam_ctrl_cmd *) skb->data;
-
-			cmd->info.params.lrssi_scan_period = cpu_to_le16(params->lrssi_scan_period);
-			cmd->info.params.lrssi_scan_threshold = a_cpu_to_sle16(params->lrssi_scan_threshold);
-			cmd->info.params.lrssi_roam_threshold = a_cpu_to_sle16(params->lrssi_roam_threshold);
-			cmd->info.params.roam_rssi_floor = params->roam_rssi_floor;
-			cmd->roam_ctrl = WMI_SET_LRSSI_SCAN_PARAMS;
-
-			ath6kl_wmi_cmd_send(wmi, 0, skb, WMI_SET_ROAM_CTRL_CMDID,
-					    NO_SYNC_WMIFLAG);
+			ar->laird.dfs_mode = *mode; 
 			
+			ath6kl_wmi_simple_cmd(wmi, 0, WMI_GET_CHANNEL_LIST_CMDID);
 		}
 	}
 	else
 		printk("%s: no info->attrs %i\n", __func__, ATHEROS_ATTR_MSG);
 
-	return 0;
-}
-
-/* an echo test command, receives a message, prints it and sends another message back */
-int ath6kl_genl_echo(struct sk_buff *skb_2, struct genl_info *info)
-{
-	struct nlattr *na;
-	struct sk_buff *skb;
-	int rc;
-	void *msg_head;
-	char * mydata;
-
-	if (info == NULL)
-    	goto out;
-  
-	/*for each attribute there is an index in info->attrs which points to a nlattr structure
-     *in this structure the data is given
-     */
-	na = info->attrs[ATHEROS_ATTR_MSG];
-    
-	if (na) {
-		mydata = (char *)nla_data(na);
-		if (mydata == NULL)
-			printk("error while receiving data\n");
-		else
-			printk("received: %s\n", mydata);
-		}
-	else
-		printk("no info->attrs %i\n", ATHEROS_ATTR_MSG);
-
-	/* send a message back*/
-	/* allocate some memory, since the size is not yet known use NLMSG_GOODSIZE*/	
-	skb = genlmsg_new(NLMSG_GOODSIZE, GFP_KERNEL);
-	if (skb == NULL)
-		goto out;
-
-	msg_head = genlmsg_put(skb, 0, info->snd_seq+1, &atheros_fam, 0, ATHEROS_CMD_TEST_ECHO);
-	if (msg_head == NULL) {
-		rc = -ENOMEM;
-		goto out;
-	}
-	
-	/* add a ATHEROS_ATTR_MSG attribute (actual value to be sent) */
-	rc = nla_put_string(skb, ATHEROS_ATTR_MSG, "atheros netlink message to kernel worked");
-	if (rc != 0)
-		goto out;
-	
-	/* finalize the message */
-	genlmsg_end(skb, msg_head);
-
-   	/* send the message back */
-	rc = genlmsg_unicast(genl_info_net(info), skb, info->snd_portid);
-	if (rc != 0)
-		goto out;
-	return 0;
-
- 	out:
-    	ath6kl_err("an error occured in atheros_echo\n");
-  
 	return 0;
 }
 
@@ -4444,36 +4534,30 @@ nla_put_failure:
 /* commands: mapping between the command enumeration and the actual function*/
 struct genl_ops atheros_ops[] = {
 	{
-		.cmd = ATHEROS_CMD_TEST_ECHO,
+		.cmd = ATHEROS_CMD_GET_VALUE,
 		.flags = 0,
 		.policy = atheros_policy,
-		.doit = ath6kl_genl_echo,
-		.dumpit = NULL,
-	},	{
-		.cmd = ATHEROS_CMD_SET_LOW_RSSI_PARAMS,
-		.flags = 0,
-		.policy = atheros_policy,
-		.doit = ath6kl_genl_set_low_rssi_params,
+		.doit = ath6kl_genl_get_value,
 		.dumpit = NULL,
 	}, {
-		.cmd = ATHEROS_CMD_GET_VERSION,
+		.cmd = ATHEROS_CMD_SET_PHY_MODE,
 		.flags = 0,
 		.policy = atheros_policy,
-		.doit = ath6kl_genl_get_version,
+		.doit = ath6kl_genl_set_phy_mode,
+		.dumpit = NULL,
+	}, { 
+		.cmd = ATHEROS_CMD_SET_DFS_MODE,
+		.flags = 0,
+		.policy = atheros_policy,
+		.doit = ath6kl_genl_set_dfs_mode,
 		.dumpit = NULL,
 	}, {
-		.cmd = ATHEROS_CMD_SET_CHANNEL_PARAMS,
+		.cmd = ATHEROS_CMD_SEND_WMI,
 		.flags = 0,
 		.policy = atheros_policy,
-		.doit = ath6kl_genl_set_channel_params,
+		.doit = ath6kl_genl_wmi_passthru,
 		.dumpit = NULL,
-	}, {
-		.cmd = ATHEROS_CMD_SET_POWER_SAVE,
-		.flags = 0,
-		.policy = atheros_policy,
-		.doit = ath6kl_genl_set_power_save,
-		.dumpit = NULL,
-	}, 
+	},
 };
 
 int ath6kl_genl_init(void) 
