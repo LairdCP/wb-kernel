@@ -86,21 +86,6 @@
 		};
 	};
 
-	leds {
-		compatible = "gpio-leds";
-
-		pc8 {
-			label = "pc8";
-			gpios = <&pioC 8 1>;
-			linux,default-trigger = "heartbeat";
-		};
-
-		pc14 {
-			label = "pc14";
-			gpios = <&pioC 14 0>;
-		};
-	};
-
 	gpio_keys {
 		compatible = "gpio-keys";
 		#address-cells = <1>;
