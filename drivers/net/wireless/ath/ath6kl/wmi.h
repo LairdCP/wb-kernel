@@ -1233,7 +1233,7 @@ enum wmi_dfs_mode {
 	DFS_ENABLED,
 };
 
-#define WMI_MAX_CHANNELS        32
+#define WMI_MAX_CHANNELS        64
 
 struct wmi_channel_params_cmd {
     u8     reserved1;
