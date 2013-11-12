@@ -32,7 +32,7 @@
 #include "hif-ops.h"
 #include "htc-ops.h"
 
-#include "laird.h"
+#include "../../laird_fips/laird.h"
 
 static const struct ath6kl_hw hw_list[] = {
 	{

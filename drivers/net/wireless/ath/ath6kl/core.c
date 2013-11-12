@@ -27,7 +27,7 @@
 #include "htc-ops.h"
 #include "cfg80211.h"
 
-#include "laird.h"
+#include "../../laird_fips/laird.h"
 
 unsigned int debug_mask;
 static unsigned int suspend_mode;

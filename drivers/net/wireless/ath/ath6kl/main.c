@@ -23,7 +23,7 @@
 #include "target.h"
 #include "debug.h"
 #include "wmiconfig.h"
-#include "laird.h"
+#include "../../laird_fips/laird.h"
 
 struct ath6kl_sta *ath6kl_find_sta(struct ath6kl_vif *vif, u8 *node_addr)
 {

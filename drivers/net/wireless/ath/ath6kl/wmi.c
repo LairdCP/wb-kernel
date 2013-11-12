@@ -23,7 +23,7 @@
 #include "testmode.h"
 #include "../regd.h"
 #include "../regd_common.h"
-#include "laird.h"
+#include "../../laird_fips/laird.h"
 #include "wmiconfig.h"
 
 static int ath6kl_wmi_sync_point(struct wmi *wmi, u8 if_idx);

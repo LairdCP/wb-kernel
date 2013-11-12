@@ -21,7 +21,7 @@
 #include "debug.h"
 #include "htc-ops.h"
 
-#include "laird.h"
+#include "../../laird_fips/laird.h"
 
 /*
  * tid - tid_mux0..tid_mux3
