@@ -1227,12 +1227,6 @@ enum wmi_phy_mode {
 	WMI_11G_HT20	= 0x6,
 };
 
-/* LAIRD addition to support DFS modes */
-enum wmi_dfs_mode {
-	DFS_DISABLED,
-	DFS_ENABLED,
-};
-
 #define WMI_MAX_CHANNELS        64
 
 struct wmi_channel_params_cmd {
@@ -2687,6 +2681,9 @@ int ath6kl_wmi_set_txe_notify(struct wmi *wmi, u8 idx,
 int ath6kl_wmi_set_regdomain_cmd(struct wmi *wmi, const char *alpha2);
 int ath6kl_wmi_channel_params_cmd(struct wmi *wmi, u8 if_idx, u8 scan_param,
 			    				u8 phy_mode, u8 num_channels, u16 *channel_list);
+int ath6kl_wmi_send_buf_cmd(struct wmi *wmi, u8 if_idx, enum wmi_cmd_id cmd_id,
+							u32 size, u8 *buf);
+void ath6kl_wmi_send_radio_mode(struct wmi *wmi, u8 if_idx);
 
 /* AP mode uAPSD */
 int ath6kl_wmi_ap_set_apsd(struct wmi *wmi, u8 if_idx, u8 enable);
