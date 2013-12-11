@@ -84,6 +84,21 @@
 				reg = <0x7fa0000 0x60000>;
 			};
 		};
+
+
+		apb {
+			usart3: serial@f8028000 {
+				compatible = "atmel,at91sam9260-usart";
+				reg = <0xf8028000 0x200>;
+				interrupts = <8 4 5>;
+				pinctrl-names = "default";
+				pinctrl-0 = <&pinctrl_usart3
+					&pinctrl_usart3_rts
+					&pinctrl_usart3_cts
+					>;
+				status = "okay";
+			};
+		};
 	};
 
 	gpio_keys {

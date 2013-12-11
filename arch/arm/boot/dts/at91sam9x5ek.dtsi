@@ -52,14 +52,6 @@
 				status = "okay";
 			};
 
-			usart1: serial@f8020000 {
-				status = "okay";
-			};
-
-			usart2: serial@f8024000 {
-				status = "okay";
-			};
-
 			macb0: ethernet@f802c000 {
 				phy-mode = "rmii";
 				status = "okay";
