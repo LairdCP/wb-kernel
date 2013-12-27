@@ -1003,6 +1003,9 @@ static int ath6kl_wmi_disconnect_event_rx(struct wmi *wmi, u8 *datap, int len,
 	struct wmi_disconnect_event *ev;
 	wmi->traffic_class = 100;
 
+	__lrd_set_AP_Name(wmi, NULL); // clear existing
+	__lrd_set_AP_IP(wmi, NULL);  // clear existing
+
 	if (len < sizeof(struct wmi_disconnect_event))
 		return -EINVAL;
 
