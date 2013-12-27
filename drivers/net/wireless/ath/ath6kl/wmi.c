@@ -4322,6 +4322,7 @@ enum {
 	ATHEROS_CMD_GET_VALUE,
 	ATHEROS_CMD_SET_PHY_MODE,
 	ATHEROS_CMD_SEND_WMI,
+	ATHEROS_CMD_QUITTING,
 	__ATHEROS_CMD_MAX,
 };
 #define ATHEROS_CMD_MAX (__ATHEROS_CMD_MAX - 1)
@@ -4637,10 +4638,24 @@ void *ath6kl_wmi_init(struct ath6kl *dev)
 
 void ath6kl_wmi_shutdown(struct wmi *wmi)
 {
+	struct sk_buff *msg;
+	void *hdr;
+
 	if (!wmi)
 		return;
  	
 	gwmi = NULL;
+
+	/* Announce our shutdown */
+	msg = genlmsg_new(NLMSG_DEFAULT_SIZE, GFP_KERNEL);
+	if (msg)
+		hdr = genlmsg_put(msg, 0, 0, &atheros_fam, 0, ATHEROS_CMD_QUITTING);
+	if (!hdr)
+		nlmsg_free(msg);
+	else {
+		genlmsg_end(msg, hdr);
+		genlmsg_multicast(msg, 0, atheros_events_mcgrp.id, GFP_KERNEL);
+	}
 
  	/* unregister the atheros family*/
  	if (genl_unregister_family(&atheros_fam) != 0) 
