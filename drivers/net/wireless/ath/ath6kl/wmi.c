@@ -4027,6 +4027,8 @@ static int ath6kl_wmi_proc_events_vif(struct wmi *wmi, u16 if_idx, u16 cmd_id,
 
 static int ath6kl_wmi_proc_events(struct wmi *wmi, struct sk_buff *skb)
 {
+	struct ath6kl *ar = wmi->parent_dev;
+	struct ath6kl_vif *vif;
 	struct wmi_cmd_hdr *cmd;
 	int ret = 0;
 	u32 len;
@@ -4037,6 +4039,7 @@ static int ath6kl_wmi_proc_events(struct wmi *wmi, struct sk_buff *skb)
 	cmd = (struct wmi_cmd_hdr *) skb->data;
 	id = le16_to_cpu(cmd->cmd_id);
 	if_idx = le16_to_cpu(cmd->info1) & WMI_CMD_HDR_IF_ID_MASK;
+	vif = ath6kl_get_vif_by_index(ar, if_idx);
 
 	skb_pull(skb, sizeof(struct wmi_cmd_hdr));
 	datap = skb->data;
@@ -4071,6 +4074,8 @@ static int ath6kl_wmi_proc_events(struct wmi *wmi, struct sk_buff *skb)
 		break;
 	case WMI_REGDOMAIN_EVENTID:
 		ath6kl_dbg(ATH6KL_DBG_WMI, "WMI_REGDOMAIN_EVENTID\n");
+		if(vif && vif->sme_state != SME_CONNECTED)
+			ath6kl_wmi_send_radio_mode(wmi, if_idx);
 		ath6kl_wmi_regdomain_event(wmi, datap, len);
 		break;
 	case WMI_PSTREAM_TIMEOUT_EVENTID:
