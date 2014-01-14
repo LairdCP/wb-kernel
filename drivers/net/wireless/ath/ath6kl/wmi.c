@@ -84,6 +84,7 @@ enum { // keep this list in sync with the one from ath_access.c from the SDK
 	GETTXPOWER,
 	GETAPNAME,
 	GETAPIP,
+	GETFWSTR,
 } ATHEROS_CMD_GET_VALUES;
 
 #define AIRONET_CCX_IE   0x85
@@ -4463,6 +4464,7 @@ static int ath6kl_genl_get_value (struct sk_buff *skb_2, struct genl_info *info)
 	struct ath6kl *ar;  
 	struct wmi *wmi = gwmi;	
 	struct nlattr *na;
+	char fwStr[80];
 
 	if ( gwmi == NULL )
 		return 0;
@@ -4504,6 +4506,14 @@ static int ath6kl_genl_get_value (struct sk_buff *skb_2, struct genl_info *info)
 						ar->laird.AP_IP[1] << 16 |
 						ar->laird.AP_IP[2] << 8 |
 						ar->laird.AP_IP[3]);
+				break;
+			case GETFWSTR:
+				snprintf(fwStr, 80, "%s fw %s api %d%s",
+						ar->hw.name,
+						ar->wiphy->fw_version,
+						ar->fw_api,
+						test_bit(TESTMODE, &ar->flag) ? " testmode" : "");
+				rc = nla_put_string(skb, ATHEROS_ATTR_MSG, fwStr);
 				break;
 		}
 	}
