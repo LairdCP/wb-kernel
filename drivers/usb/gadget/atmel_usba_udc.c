@@ -2244,7 +2244,6 @@ err_add_udc:
 err_device_add:
 	free_irq(irq, udc);
 err_request_irq:
-	kfree(usba_ep);
 err_alloc_ep:
 	iounmap(udc->fifo);
 err_map_fifo:
@@ -2282,7 +2281,6 @@ static int __exit usba_udc_remove(struct platform_device *pdev)
 	}
 
 	free_irq(udc->irq, udc);
-	kfree(usba_ep);
 	iounmap(udc->fifo);
 	iounmap(udc->regs);
 	clk_put(udc->hclk);
