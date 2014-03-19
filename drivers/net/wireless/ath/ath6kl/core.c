@@ -308,7 +308,7 @@ struct ath6kl *ath6kl_core_create(struct device *dev)
 	ar->laird.phy_mode = 0;  //init to zero (invalid) so we can tell if we receive a mode later
 	ar->laird.num_channels = 0;
 	memset(ar->laird.channel_list, 0, sizeof(u16) * WMI_MAX_CHANNELS);
-	memset(&(ar->laird.rates32), 0, sizeof(struct wmi_set_tx_select_rates32_cmd));
+	memset(&(ar->laird.rates64), 0, sizeof(struct wmi_set_tx_select_rates64_cmd));
 	memset(&(ar->laird.htcap_params_2ghz), 0, sizeof(struct wmi_set_htcap_cmd));
 	memset(&(ar->laird.htcap_params_5ghz), 0, sizeof(struct wmi_set_htcap_cmd));
 

@@ -4284,7 +4284,7 @@ void ath6kl_wmi_send_radio_mode(struct wmi *wmi, u8 if_idx)
 		return;
 
 	ath6kl_wmi_send_buf_cmd(wmi, if_idx, WMI_SET_TX_SELECT_RATES_CMDID,
-							sizeof(struct wmi_set_tx_select_rates32_cmd), (u8*)&(ar->laird.rates32));
+							sizeof(struct wmi_set_tx_select_rates64_cmd), (u8*)&(ar->laird.rates64));
 	ath6kl_wmi_send_buf_cmd(wmi, if_idx, WMI_SET_HT_CAP_CMDID, sizeof(struct wmi_set_htcap_cmd),
 							(u8*)&(ar->laird.htcap_params_2ghz));
 	ath6kl_wmi_send_buf_cmd(wmi, if_idx, WMI_SET_HT_CAP_CMDID, sizeof(struct wmi_set_htcap_cmd),
@@ -4386,8 +4386,8 @@ static int ath6kl_genl_wmi_passthru (struct sk_buff *skb_2, struct genl_info *in
 					break;
 				case WMI_SET_TX_SELECT_RATES_CMDID:
 					{
-					struct wmi_set_tx_select_rates32_cmd *rates = (struct wmi_set_tx_select_rates32_cmd*)p;
-					memcpy(&ar->laird.rates32, rates, sizeof(struct wmi_set_tx_select_rates32_cmd));
+					struct wmi_set_tx_select_rates64_cmd *rates = (struct wmi_set_tx_select_rates64_cmd*)p;
+					memcpy(&ar->laird.rates64, rates, sizeof(struct wmi_set_tx_select_rates64_cmd));
 					}
 					break;
 				case WMI_SET_HT_CAP_CMDID:
