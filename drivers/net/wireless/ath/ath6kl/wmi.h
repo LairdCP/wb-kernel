@@ -2748,5 +2748,6 @@ struct ath6kl_vif *ath6kl_get_vif_by_index(struct ath6kl *ar, u8 if_idx);
 void *ath6kl_wmi_init(struct ath6kl *devt);
 void ath6kl_wmi_shutdown(struct wmi *wmi);
 void ath6kl_wmi_reset(struct wmi *wmi);
+int ath6kl_get_txpower(struct wiphy *wiphy, int *dbm);
 
 #endif /* WMI_H */

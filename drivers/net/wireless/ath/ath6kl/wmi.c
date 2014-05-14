@@ -4495,7 +4495,8 @@ static int ath6kl_genl_get_value (struct sk_buff *skb_2, struct genl_info *info)
 				rc = nla_put_s32( skb, ATHEROS_ATTR_MSG, LAIRD_DRV_VERSION );
 				break;
 			case GETTXPOWER:
-				rc = nla_put_s32( skb, ATHEROS_ATTR_MSG, ar->tx_pwr );
+				ath6kl_get_txpower( ar->wiphy, c);
+				rc = nla_put_s32( skb, ATHEROS_ATTR_MSG, *c );
 				break;
 			case GETAPNAME:
 				rc = nla_put_string(skb, ATHEROS_ATTR_MSG, ar->laird.AP_Name);
