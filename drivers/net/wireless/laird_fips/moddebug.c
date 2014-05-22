@@ -19,7 +19,6 @@
 #include <linux/sched.h>
 #include <linux/spinlock.h>
 
-#include <asm/system.h>		/* cli(), *_flags */
 #include <asm/uaccess.h>	/* copy_*_user */
 
 #include "moddebug.h"
