@@ -4319,6 +4319,7 @@ static struct genl_family atheros_fam = {
 	.maxattr = ATHEROS_ATTR_MAX,
 };
 
+/* This structure needs to be in sync with ath_access.h in the sdk */
 enum {
 	ATHEROS_CMD_UNSPEC,
 	ATHEROS_CMD_RESPONSE,
@@ -4327,6 +4328,7 @@ enum {
 	ATHEROS_CMD_SET_PHY_MODE,
 	ATHEROS_CMD_SEND_WMI,
 	ATHEROS_CMD_QUITTING,
+	ATHEROS_CMD_QOS,
 	__ATHEROS_CMD_MAX,
 };
 #define ATHEROS_CMD_MAX (__ATHEROS_CMD_MAX - 1)
@@ -4569,6 +4571,43 @@ nla_put_failure:
 }
 
 
+
+static int ath6kl_genl_qos(struct sk_buff *skb_2, struct genl_info *info)
+{
+	struct ath6kl *ar;
+	struct wmi *wmi = gwmi;
+	struct nlattr *na;
+	struct ath6kl_vif *vif;
+	struct wmi_create_pstream_cmd *new_pstream;
+	struct wmi_delete_pstream_cmd *del_pstream;
+
+	if(gwmi == NULL)
+		return 0;
+
+	ar = wmi->parent_dev;
+
+	vif = ath6kl_vif_first(ar);
+
+	if (!vif)
+	{
+		ath6kl_err("unable to get vif in %s\n", __func__);
+		return 0;
+	}
+
+	na = info->attrs[ATHEROS_ATTR_MSG];
+
+	if (nla_len(na) == sizeof(struct wmi_create_pstream_cmd)) {
+		new_pstream = (struct wmi_create_pstream_cmd*)nla_data(na);
+		ath6kl_wmi_create_pstream_cmd(ar->wmi, vif->fw_vif_idx, new_pstream);
+	} else if (nla_len(na) == sizeof(struct wmi_delete_pstream_cmd)) {
+		del_pstream = (struct wmi_delete_pstream_cmd*)nla_data(na);
+		ath6kl_wmi_delete_pstream_cmd(ar->wmi, vif->fw_vif_idx, del_pstream->traffic_class, del_pstream->tsid);
+	} else
+		ath6kl_err("invalid atheros netlink qos cmd\n");
+
+	return 0;
+}
+
 /* commands: mapping between the command enumeration and the actual function*/
 struct genl_ops atheros_ops[] = {
 	{
@@ -4588,6 +4627,12 @@ struct genl_ops atheros_ops[] = {
 		.flags = 0,
 		.policy = atheros_policy,
 		.doit = ath6kl_genl_wmi_passthru,
+		.dumpit = NULL,
+	}, {
+		.cmd = ATHEROS_CMD_QOS,
+		.flags = 0,
+		.policy = atheros_policy,
+		.doit = ath6kl_genl_qos,
 		.dumpit = NULL,
 	},
 };
@@ -4647,7 +4692,7 @@ void *ath6kl_wmi_init(struct ath6kl *dev)
 void ath6kl_wmi_shutdown(struct wmi *wmi)
 {
 	struct sk_buff *msg;
-	void *hdr;
+	void *hdr= NULL;
 
 	if (!wmi)
 		return;
