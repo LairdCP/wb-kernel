@@ -358,10 +358,12 @@ int laird_skb_tx_prep(struct sk_buff *skbin, struct net_device *dev, int wmm,
 		return -1;
 	}
 
-	/* TBD: move this into the other routine... */
-	if (skb_cloned(skb) || skb_tailroom(skb) < 8) {
-		/* tailroom is too small -- try making a copy with more tailroom */
-		skb = skb_copy_expand(skb, skb_headroom(skb), 8, GFP_ATOMIC);
+	if (skb_cloned(skb) ||
+		skb_headroom(skb) < dev->needed_headroom ||
+		skb_tailroom(skb) < dev->needed_tailroom)
+	{
+		/* make a copy -- cloned, or insufficient head/tail room */
+		skb = skb_copy_expand(skb, dev->needed_headroom, dev->needed_tailroom, GFP_ATOMIC);
 		if (!skb) {
 			skb = skbin;
 			res = -ENOMEM;
