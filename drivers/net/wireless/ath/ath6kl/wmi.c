@@ -4319,20 +4319,6 @@ static struct genl_family atheros_fam = {
 	.maxattr = ATHEROS_ATTR_MAX,
 };
 
-/* This structure needs to be in sync with ath_access.h in the sdk */
-enum {
-	ATHEROS_CMD_UNSPEC,
-	ATHEROS_CMD_RESPONSE,
-	ATHEROS_CMD_EVENT,
-	ATHEROS_CMD_GET_VALUE,
-	ATHEROS_CMD_SET_PHY_MODE,
-	ATHEROS_CMD_SEND_WMI,
-	ATHEROS_CMD_QUITTING,
-	ATHEROS_CMD_QOS,
-	__ATHEROS_CMD_MAX,
-};
-#define ATHEROS_CMD_MAX (__ATHEROS_CMD_MAX - 1)
-
 static struct genl_multicast_group atheros_events_mcgrp = {
 	.name = "events",
 };
@@ -4570,6 +4556,28 @@ nla_put_failure:
 	nlmsg_free(msg);
 }
 
+void ath6kl_drv_event_multicast(enum atheros_cmd_id cmd_id, unsigned int reason)
+{
+	struct sk_buff *msg;
+	void *hdr;
+
+	msg = genlmsg_new(NLMSG_DEFAULT_SIZE, GFP_KERNEL);
+	if (msg)
+		hdr = genlmsg_put(msg, 0, 0, &atheros_fam, 0, cmd_id);
+	if (!hdr)
+		nlmsg_free(msg);
+	else {
+		nla_put_u32(msg, ATHEROS_ATTR_MSG, reason);
+		genlmsg_end(msg, hdr);
+		genlmsg_multicast(msg, 0, atheros_events_mcgrp.id, GFP_KERNEL);
+	}
+
+	return;
+
+nla_put_failure:
+	genlmsg_cancel(msg, hdr);
+	nlmsg_free(msg);
+}
 
 
 static int ath6kl_genl_qos(struct sk_buff *skb_2, struct genl_info *info)
@@ -4691,24 +4699,12 @@ void *ath6kl_wmi_init(struct ath6kl *dev)
 
 void ath6kl_wmi_shutdown(struct wmi *wmi)
 {
-	struct sk_buff *msg;
-	void *hdr= NULL;
-
 	if (!wmi)
 		return;
  	
 	gwmi = NULL;
 
-	/* Announce our shutdown */
-	msg = genlmsg_new(NLMSG_DEFAULT_SIZE, GFP_KERNEL);
-	if (msg)
-		hdr = genlmsg_put(msg, 0, 0, &atheros_fam, 0, ATHEROS_CMD_QUITTING);
-	if (!hdr)
-		nlmsg_free(msg);
-	else {
-		genlmsg_end(msg, hdr);
-		genlmsg_multicast(msg, 0, atheros_events_mcgrp.id, GFP_KERNEL);
-	}
+	ath6kl_drv_event_multicast(ATHEROS_CMD_QUITTING, 0);
 
  	/* unregister the atheros family*/
  	if (genl_unregister_family(&atheros_fam) != 0) 
