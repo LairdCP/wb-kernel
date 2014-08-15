@@ -4558,8 +4558,8 @@ nla_put_failure:
 
 void ath6kl_drv_event_multicast(enum atheros_cmd_id cmd_id, unsigned int reason)
 {
-	struct sk_buff *msg;
-	void *hdr;
+	struct sk_buff *msg = NULL;
+	void *hdr = NULL;
 
 	msg = genlmsg_new(NLMSG_DEFAULT_SIZE, GFP_KERNEL);
 	if (msg)
@@ -4567,7 +4567,8 @@ void ath6kl_drv_event_multicast(enum atheros_cmd_id cmd_id, unsigned int reason)
 	if (!hdr)
 		nlmsg_free(msg);
 	else {
-		nla_put_u32(msg, ATHEROS_ATTR_MSG, reason);
+		if(nla_put_u32(msg, ATHEROS_ATTR_MSG, reason))
+			goto nla_put_failure;
 		genlmsg_end(msg, hdr);
 		genlmsg_multicast(msg, 0, atheros_events_mcgrp.id, GFP_KERNEL);
 	}
