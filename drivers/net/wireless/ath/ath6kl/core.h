@@ -852,7 +852,7 @@ struct ath6kl {
 		struct wmi_set_htcap_cmd htcap_params_2ghz;
 		struct wmi_set_htcap_cmd htcap_params_5ghz;
 		char AP_Name[17];
-		char AP_IP[4];
+		unsigned char AP_IP[4];
 	} laird;
 };
 
