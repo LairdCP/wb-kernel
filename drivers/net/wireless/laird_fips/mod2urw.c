@@ -6,24 +6,13 @@
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/init.h>
-
-#include <linux/kernel.h>
-#include <linux/slab.h>
-#include <linux/fs.h>
-#include <linux/errno.h>	/* error codes */
-#include <linux/types.h>	/* size_t */
-#include <linux/proc_fs.h>
-#include <linux/fcntl.h>	/* O_ACCMODE */
-#include <linux/seq_file.h>
 #include <linux/cdev.h>
-#include <linux/sched.h>
-#include <linux/spinlock.h>
-
-#include <asm/system.h>		/* cli(), *_flags */
-#include <asm/uaccess.h>	/* copy_*_user */
 
 #include "laird_i.h"
 #include "moddebug.h"
+#include "touser.h"
+#include "mod2urw.h"
+#include "mod2ufn.h"
 
 static int cmd_to_host(char __user * buf, size_t count);
 static int cmd_from_host(const char __user * buf, size_t count);
@@ -48,7 +37,6 @@ static unsigned short mod2urw_read_ready;
 
 static void __mod2urw_read_wake(void)
 {
-	DEBUG_TRACE;
 	mod2urw_read_ready = 1;
 	wake_up_interruptible(&wq_read);	/* update poll status */
 }
@@ -58,7 +46,6 @@ static ssize_t mod2urw_read(struct file *filp, char __user * buf, size_t count,
 {
 	int res;
 	/* TBD: device mutex ? */
-	DEBUG_TRACE;
 	while (1) {
 		mod2urw_read_ready = 0;
 		res = cmd_to_host(buf, count);
@@ -75,7 +62,6 @@ static ssize_t mod2urw_read(struct file *filp, char __user * buf, size_t count,
 static ssize_t mod2urw_write(struct file *filp, const char __user * buf,
 			size_t count, loff_t * f_pos)
 {
-	DEBUG_TRACE;
 	cmd_from_host(buf, count);
 	return count;
 }
@@ -107,7 +93,6 @@ void mod2urw_cleanup_module(void)
 	int i;
 	dev_t devno = MKDEV(mod2urw_major, mod2urw_minor);
 
-	DEBUG_TRACE;
 	/* Get rid of our char dev entries */
 	if (mod2urw_devices) {
 		for (i = 0; i < mod2urw_nr_devs; i++) {
@@ -127,7 +112,6 @@ static void mod2urw_setup_cdev(struct mod2urw_dev *dev, int index)
 {
 	int err, devno = MKDEV(mod2urw_major, mod2urw_minor + index);
 
-	DEBUG_TRACE;
 	cdev_init(&dev->cdev, &mod2urw_fops);
 	dev->cdev.owner = THIS_MODULE;
 	dev->cdev.ops = &mod2urw_fops;
@@ -141,7 +125,6 @@ static int mod2urw_init_module(void)
 {
 	int result, i;
 	dev_t dev = 0;
-	DEBUG_TRACE;
 
 	/*
 	 * Get a range of minor numbers to work with, asking for a dynamic
@@ -184,15 +167,11 @@ fail:
 }
 
 /* driver register data -- pointer to functions */
-#include "touser.h"
-#include "mod2urw.h"
-
 #define VERSION_STRING "1.0"
 
 /* initialization */
 static int __init sdclkm_init(void)
 {
-	DEBUG_TRACE;
 	printk(KERN_INFO "%s.ko: version %s\n", MYDEVSTR, VERSION_STRING);
 	if (mod2urw_init_module() < 0)
 		goto failure;
@@ -204,7 +183,6 @@ failure:
 /* cleanup and exit */
 static void __exit sdclkm_exit(void)
 {
-	DEBUG_TRACE;
 	mod2urw_cleanup_module();
 }
 
@@ -218,24 +196,6 @@ MODULE_VERSION(VERSION_STRING);
 
 /*======================================================================*/
 /*======================================================================*/
-
-/* defines the cmd -- number of parameters and handling for each
- * this will be constant for a given command
- */
-typedef struct {		/* command control handling */
-	int cmd;
-	int numit;
-	int flags[MAXIT];
-#define ITEM_TO_HOST 1
-#define ITEM_FROM_HOST 2
-#define ITEM_SKB 4
-} cmd_def_t;
-
-typedef struct {
-	void *p;		/* pointer to item */
-	int len;		/* length of item */
-	void *skb;		/* for socket buffers passed to/from user space */
-} item_ptr_t;
 
 /* command control */
 typedef struct cmd_ctl_s {
@@ -275,7 +235,6 @@ static inline void cmd_ctl_free(cmd_ctl_t * ctl)
  */
 static int cmd_ctl_submit(cmd_ctl_t * ctl)
 {
-	DEBUG_TRACE;
 	ctl->next = NULL;
 	spin_lock_bh(&cmdq_lock);
 	if (!cmd_glob.enabled) {
@@ -299,7 +258,6 @@ static int cmd_ctl_submit(cmd_ctl_t * ctl)
 static cmd_ctl_t *cmd_ctl_get_next(void)
 {
 	cmd_ctl_t *ctl;
-	DEBUG_TRACE;
 	spin_lock_bh(&cmdq_lock);
 	ctl = cmd_glob.first;
 	if (ctl) {
@@ -316,14 +274,12 @@ static cmd_ctl_t *cmd_ctl_get_next(void)
 /* called only at process level in write */
 static cmd_ctl_t *cmd_ctl_get_active(void)
 {
-	DEBUG_TRACE;
 	/* don't need spinlock here */
 	return cmd_glob.active;
 }
 
 static void cmd_ctl_free_active(void)
 {
-	DEBUG_TRACE;
 	if (cmd_glob.active) {
 		cmd_ctl_free(cmd_glob.active);
 		cmd_glob.active = NULL;
@@ -341,7 +297,6 @@ static int cmd_to_host(char __user * buf, size_t count)
 	int i;
 	int err = 0;
 
-	DEBUG_TRACE;
 	ctl = cmd_ctl_get_next();
 	if (!ctl) {
 		return 0;	/* no command to pass to user space */
@@ -380,7 +335,6 @@ static inline int __skb_from_user(struct sk_buff *skb,
 	headchg = oldoff - newoff;
 	tailchg = newlen - skb->len - headchg;
 
-	DEBUG_TRACE;
 	headroom = skb_headroom(skb);
 	tailroom = skb_tailroom(skb);
 	if (headroom < headchg) {
@@ -417,7 +371,6 @@ static int cmd_from_host(const char __user * buf, size_t count)
 	int res;
 	int err = 0;
 
-	DEBUG_TRACE;
 	ctl = cmd_ctl_get_active();
 	if (!ctl) {
 		printk(KERN_ALERT "%s: ERROR!! unsolicited cmd\n",
@@ -472,7 +425,6 @@ static int cmd_from_host(const char __user * buf, size_t count)
 static void cmd_fail_all(void)
 {
 	cmd_ctl_t *ctl;
-	DEBUG_TRACE;
 	do {
 		ctl = cmd_ctl_get_active();
 		if (!ctl)
@@ -491,7 +443,6 @@ static void cmd_fail_all(void)
 /* set enabled when user-space processing is available */
 static void cmd_set_state(int enabled)
 {
-	DEBUG_TRACE;
 	spin_lock_bh(&cmdq_lock);
 	cmd_glob.enabled = enabled;
 	spin_unlock_bh(&cmdq_lock);
@@ -512,7 +463,6 @@ typedef struct {
 static void callback_wait(void *din, int res)
 {
 	defcb_data *data = (defcb_data *) din;
-	DEBUG_TRACE;
 	/* save result */
 	data->res = res;
 	/* signal the waiting thread */
@@ -527,7 +477,6 @@ static int cmd_ctl_submit_and_wait(cmd_ctl_t * ctl)
 	defcb_data *data;
 	int res;
 
-	DEBUG_TRACE;
 	data = kmalloc(sizeof(*data), GFP_ATOMIC);
 	if (!data) {
 		printk(KERN_ALERT "%s: alloc failed\n", __FUNCTION__);
@@ -571,7 +520,7 @@ static int cmd_ctl_submit_and_wait(cmd_ctl_t * ctl)
  * input: itp - data items (pointer, length)
  * output: command is enqueued for transfer to user space
  */
-static int sdclkm_command(sdclkm_cb_t * cbd,
+int sdclkm_command(sdclkm_cb_t * cbd,
 			  const cmd_def_t * def, item_ptr_t * itp)
 {
 	cmd_ctl_t *ctl;		/* command control */
@@ -579,7 +528,6 @@ static int sdclkm_command(sdclkm_cb_t * cbd,
 	int i;
 	int offset;
 
-	DEBUG_TRACE;
 
 	ctl = cmd_ctl_alloc();
 	if (!ctl) {
@@ -622,181 +570,3 @@ static int sdclkm_command(sdclkm_cb_t * cbd,
 	return cmd_ctl_submit_and_wait(ctl);
 }
 
-static const cmd_def_t def_ecb = {
-	SDCCMD_ECB_ENCRYPT, 2,
-	{
-	 ITEM_TO_HOST,			/* key */
-	 ITEM_TO_HOST | ITEM_FROM_HOST,	/* data */
-	 0}
-};
-
-int sdclkm_fnecbencrypt(sdclkm_cb_t * cbd,
-			fips_ccm_key_t * pkey, void *text, int len)
-{
-	item_ptr_t it[2];
-	DEBUG_TRACE;
-	it[0].p = pkey;
-	it[0].len = sizeof(*pkey);
-	it[1].p = text;
-	it[1].len = len;
-	return sdclkm_command(cbd, &def_ecb, it);
-}
-
-static const cmd_def_t def_ccmencrypt = {
-	SDCCMD_CCM_ENCRYPT, 5,
-	{
-	 ITEM_TO_HOST,			/* key */
-	 ITEM_TO_HOST,			/* n */
-	 ITEM_TO_HOST,			/* a */
-	 ITEM_TO_HOST | ITEM_FROM_HOST,	/* m */
-	 ITEM_FROM_HOST,		/* t */
-	 0}
-};
-
-int sdclkm_fnccmencrypt_ex(sdclkm_cb_t * cbd,
-			   fips_ccm_key_t * pkey,
-			   void *n, int ln,
-			   void *a, int la, void *m, int lm, void *t, int lt)
-{
-	item_ptr_t it[5];
-	DEBUG_TRACE;
-	it[0].p = pkey;
-	it[0].len = sizeof(*pkey);
-	it[1].p = n;
-	it[1].len = ln;
-	it[2].p = a;
-	it[2].len = la;
-	it[3].p = m;
-	it[3].len = lm;
-	it[4].p = t;
-	it[4].len = lt;
-	return sdclkm_command(cbd, &def_ccmencrypt, it);
-}
-
-static const cmd_def_t def_ccmdecrypt = {
-	SDCCMD_CCM_DECRYPT, 5,
-	{
-	 ITEM_TO_HOST,			/* key */
-	 ITEM_TO_HOST,			/* n */
-	 ITEM_TO_HOST,			/* a */
-	 ITEM_TO_HOST | ITEM_FROM_HOST,	/* m */
-	 ITEM_TO_HOST,			/* t */
-	 0}
-};
-
-int sdclkm_fnccmdecrypt_ex(sdclkm_cb_t * cbd,
-			   fips_ccm_key_t * pkey,
-			   void *n, int ln,
-			   void *a, int la, void *m, int lm, void *t, int lt)
-{
-	item_ptr_t it[5];
-	DEBUG_TRACE;
-	it[0].p = pkey;
-	it[0].len = sizeof(*pkey);
-	it[1].p = n;
-	it[1].len = ln;
-	it[2].p = a;
-	it[2].len = la;
-	it[3].p = m;
-	it[3].len = lm;
-	it[4].p = t;
-	it[4].len = lt;
-	return sdclkm_command(cbd, &def_ccmdecrypt, it);
-}
-
-EXPORT_SYMBOL(sdclkm_fnecbencrypt);
-EXPORT_SYMBOL(sdclkm_fnccmencrypt_ex);
-EXPORT_SYMBOL(sdclkm_fnccmdecrypt_ex);
-
-/*======================================================================*/
-#define DVR_HEADROOM 64
-static const cmd_def_t def_skb_receive = {
-	SDCCMD_DVR_RECEIVE, 2,
-	{
-	 0,			/* socket buffer wrapper (with head/tail) */
-	 ITEM_TO_HOST | ITEM_FROM_HOST | ITEM_SKB,	/* socket buffer data */
-	 0}
-};
-
-int sdclkm_skb_receive(sdclkm_cb_t * cbd, struct sk_buff *skb)
-{
-	item_ptr_t it[2];
-	int headroom;
-	DEBUG_TRACE;
-	headroom = (skb_headroom(skb) & 3) + DVR_HEADROOM;
-	it[0].p = skb->data - headroom;
-	it[0].len = 2048;
-	it[1].p = skb->data;
-	it[1].len = skb->len;
-	it[1].skb = skb;
-	return sdclkm_command(cbd, &def_skb_receive, it);
-}
-
-static const cmd_def_t def_skb_transmit = {
-	SDCCMD_DVR_TRANSMIT, 3,
-	{
-	 0,			/* socket buffer wrapper (with head/tail) */
-	 ITEM_TO_HOST | ITEM_FROM_HOST | ITEM_SKB,	/* socket buffer data */
-	 ITEM_TO_HOST,		/* up (user priority) */
-	 0}
-};
-
-int sdclkm_skb_transmit(sdclkm_cb_t * cbd, struct sk_buff *skb, int *up)
-{
-	item_ptr_t it[3];
-	int headroom;
-	DEBUG_TRACE;
-	headroom = (skb_headroom(skb) & 3) + DVR_HEADROOM;
-	it[0].p = skb->data - headroom;
-	it[0].len = 2048;
-	it[1].p = skb->data;
-	it[1].len = skb->len;
-	it[1].skb = skb;
-	it[2].p = up;
-	it[2].len = sizeof(*up);
-	return sdclkm_command(cbd, &def_skb_transmit, it);
-}
-
-static const cmd_def_t def_addkey = {
-	SDCCMD_DVR_ADDKEY, 3,
-	{
-	 ITEM_TO_HOST,		/* key_index, pairwise */
-	 ITEM_TO_HOST,		/* key */
-	 ITEM_TO_HOST,		/* seq */
-	 0}
-};
-
-int sdclkm_addkey(sdclkm_cb_t * cbd,
-		  u32 * key_index, u8 * key, int keylen, u8 * seq, int seqlen)
-{
-	item_ptr_t it[3];
-	DEBUG_TRACE;
-	it[0].p = key_index;
-	it[0].len = sizeof(*key_index);
-	it[1].p = key;
-	it[1].len = keylen;
-	it[2].p = seq;
-	it[2].len = seqlen;
-	return sdclkm_command(cbd, &def_addkey, it);
-}
-
-static const cmd_def_t def_setbssid = {
-	SDCCMD_DVR_SETBSSID, 1,
-	{
-	 ITEM_TO_HOST,		/* bssid */
-	 0}
-};
-
-int sdclkm_setbssid(sdclkm_cb_t * cbd, u8 * bssid, int bssidlen)
-{
-	item_ptr_t it[1];
-	DEBUG_TRACE;
-	it[0].p = bssid;
-	it[0].len = bssidlen;
-	return sdclkm_command(cbd, &def_setbssid, it);
-}
-
-EXPORT_SYMBOL(sdclkm_skb_receive);
-EXPORT_SYMBOL(sdclkm_skb_transmit);
-EXPORT_SYMBOL(sdclkm_addkey);
-EXPORT_SYMBOL(sdclkm_setbssid);

@@ -4,10 +4,11 @@
  */
 
 #include <linux/moduleparam.h>
-#include <linux/stat.h>
+#include <linux/interrupt.h>
 #include "laird_i.h"
 #include "moddebug.h"
 #include "touser.h"
+#include "mod2urw.h"
 
 #define ETHTYPE_IP     0x0800
 
@@ -38,15 +39,17 @@ FIPS_STAT_DEF(tx_encrypt_fail);
 FIPS_STAT_DEF(tx_encrypt_no_key);
 FIPS_STAT_DEF(tx_unspecified_error);
 
-#if 0
-#define DEBUG_IDX(p,res) \
-	printk(KERN_ALERT "%s: index %d, line %d, status=%d\n", \
-	       __FUNCTION__, laird_skb_idx((p)), __LINE__, res);
-#define DEBUG_DUMP(skb) \
-	_printkhexs(__FUNCTION__, "skb", skb->data, skb->len);
+#ifdef LAIRD_DEBUG
+static void debug_skb_trace(const char *fn, int line,
+							struct sk_buff *skb, int status);
+#define DEBUG_SKB_TRACE(skb,res) \
+	debug_skb_trace(__FUNCTION__, __LINE__, skb, res)
+static void debug_skb_dump(const char *fn, struct sk_buff *skb);
+#define DEBUG_SKB_DUMP(skb) \
+	debug_skb_dump(__FUNCTION__, skb);
 #else
-#define DEBUG_IDX(p,res)
-#define DEBUG_DUMP(skb)
+#define DEBUG_SKB_TRACE(skb,res)
+#define DEBUG_SKB_DUMP(skb)
 #endif
 
 typedef unsigned long long lrd_seq_t;
@@ -132,8 +135,6 @@ static void error_stat_tx(int res)
 	*perr += 1;
 }
 
-#include "mod2urw.h"
-
 static struct {
 	struct sk_buff_head skbq_tx;
 	struct sk_buff_head skbq_rx;
@@ -172,7 +173,6 @@ static laird_skb_priv_t *laird_skb_priv_set(struct sk_buff *skb,
 					    struct net_device *dev, int up)
 {
 	laird_skb_priv_t *pd = (void *)skb->cb;
-	DEBUG_TRACE;
 	pd->res = -1;
 	pd->done = 0;
 	pd->fn.pfn = pfn;
@@ -198,7 +198,6 @@ static inline int laird_skb_idx(struct sk_buff *skb)
 static inline int __crypqs_empty(void)
 {
 	int res = 1;
-	DEBUG_TRACE;
 	spin_lock_bh(&skbq_tx_lock);
 	if (!skb_queue_empty(&__glob.skbq_tx))
 		res = 0;
@@ -215,7 +214,6 @@ static inline int __crypqs_empty(void)
  */
 static int __cryp_wait_txrx_completed(void)
 {
-	DEBUG_TRACE;
 	mutex_lock(&mutex_stopping_txrx);
 	__glob.stopping_txrx = 1;
 	if (!__crypqs_empty()) {
@@ -235,7 +233,6 @@ static int __cryp_wait_txrx_completed(void)
 /* if we are stopping txrx and queues are empty signal */
 static void inline __cryp_signal_if_txrx_completed(void)
 {
-	DEBUG_TRACE;
 	if (!__glob.stopping_txrx)
 		return;
 	if (!__crypqs_empty())
@@ -246,7 +243,6 @@ static void inline __cryp_signal_if_txrx_completed(void)
 	}
 }
 
-#include "linux/interrupt.h"
 /* multiprocessor system can execute multiple tasklets simultaneously
  * so only use one tasklet for both rx/tx processing
  * tasklet for post-crypto operation processing
@@ -265,18 +261,17 @@ int laird_skb_rx_prep(struct sk_buff *skb, pfn_laird_skb_rx_continue pfn)
 	int res;
 	sdclkm_cb_t cbd;
 
-	DEBUG_TRACE;
 	if (__glob.stopping_txrx) {
 		return -1;
 	}
 	laird_skb_priv_set(skb, pfn, NULL, 0);
-	DEBUG_IDX(skb, 0);
-	DEBUG_DUMP(skb);
+	DEBUG_SKB_TRACE(skb, 0);
+	DEBUG_SKB_DUMP(skb);
 	cbd.pfn = __callback_rx;
 	cbd.pdata = skb;
 	res = sdclkm_skb_receive(&cbd, skb);
 	if (res != 0) {
-		DEBUG_IDX(skb, res);
+		DEBUG_SKB_TRACE(skb, res);
 		error_stat_rx(res);
 		return res;
 	}
@@ -296,8 +291,8 @@ static void __callback_rx(void *din, int res)
 {
 	struct sk_buff *skb = din;
 	laird_skb_priv_t *pd = laird_skb_priv_get(skb);
-	DEBUG_IDX(skb, res);
-	DEBUG_DUMP(skb);
+	DEBUG_SKB_TRACE(skb, res);
+	DEBUG_SKB_DUMP(skb);
 	pd->res = res;
 	pd->done = 1;
 	tasklet_schedule(&__tasklet);
@@ -372,12 +367,11 @@ int laird_skb_tx_prep(struct sk_buff *skbin, struct net_device *dev, int wmm,
 	}
 
 	pd = laird_skb_priv_set(skb, pfn, dev, laird_skb_up(skb, wmm));
-	DEBUG_IDX(skb, 0);
-	DEBUG_DUMP(skb);
+	DEBUG_SKB_TRACE(skb, 0);
+	DEBUG_SKB_DUMP(skb);
 	cbd.pfn = __callback_tx;
 	cbd.pdata = skb;
 	res = sdclkm_skb_transmit(&cbd, skb, &pd->up);
-	DEBUG_TRACE;
 	if (res != 0) {
 		goto fail;
 	}
@@ -390,7 +384,7 @@ int laird_skb_tx_prep(struct sk_buff *skbin, struct net_device *dev, int wmm,
 	res = 0; /* success */
 fail:
 	if (res) {
-		DEBUG_IDX(skb, res);
+		DEBUG_SKB_TRACE(skb, res);
 	}
 	if (skb != skbin) {
 		/* if we made a copy of the skb...
@@ -410,8 +404,8 @@ static void __callback_tx(void *din, int res)
 {
 	struct sk_buff *skb = din;
 	laird_skb_priv_t *pd = laird_skb_priv_get(skb);
-	DEBUG_IDX(skb, res);
-	DEBUG_DUMP(skb);
+	DEBUG_SKB_TRACE(skb, res);
+	DEBUG_SKB_DUMP(skb);
 	pd->res = res;
 	pd->done = 1;
 	tasklet_schedule(&__tasklet);
@@ -427,7 +421,6 @@ static void __tasklet_exec(unsigned long unused)
 	struct sk_buff *skb;
 	laird_skb_priv_t *pd;
 
-	DEBUG_TRACE;
 	spin_lock_bh(&skbq_tx_lock);
 	while (1) {
 		if (__glob.tx_stop_tasklet) {
@@ -441,7 +434,7 @@ static void __tasklet_exec(unsigned long unused)
 		if (!pd->done)
 			break;
 		(void)skb_dequeue(&__glob.skbq_tx);
-		DEBUG_IDX(skb, pd->res);
+		DEBUG_SKB_TRACE(skb, pd->res);
 		error_stat_tx(pd->res);
 		spin_unlock_bh(&skbq_tx_lock);
 		(*(pd->fn.txcontinue)) (skb, pd->dev, pd->res < 0 ? -1 : 1);
@@ -458,7 +451,7 @@ static void __tasklet_exec(unsigned long unused)
 		if (!pd->done)
 			break;
 		(void)skb_dequeue(&__glob.skbq_rx);
-		DEBUG_IDX(skb, pd->res);
+		DEBUG_SKB_TRACE(skb, pd->res);
 		error_stat_rx(pd->res);
 		spin_unlock_bh(&skbq_rx_lock);
 		(*(pd->fn.rxcontinue)) (skb, pd->res < 0 ? -1 : 1);
@@ -475,7 +468,6 @@ static void __tasklet_exec(unsigned long unused)
 static DEFINE_SPINLOCK(tx_stop_tasklet_lock);
 void laird_stop_queue(struct net_device *dev)
 {
-	DEBUG_TRACE;
 	spin_lock_bh(&tx_stop_tasklet_lock);
 	__glob.tx_stop_tasklet = 1;
 	spin_unlock_bh(&tx_stop_tasklet_lock);
@@ -485,14 +477,12 @@ void laird_stop_queue(struct net_device *dev)
 void laird_wake_queue(struct net_device *dev)
 {
 	int val;
-	DEBUG_TRACE;
 	spin_lock_bh(&tx_stop_tasklet_lock);
 	val = __glob.tx_stop_tasklet;
 	__glob.tx_stop_tasklet = 0;
 	spin_unlock_bh(&tx_stop_tasklet_lock);
 	if (val) {
 		/* transmit was unblocked */
-		DEBUG_TRACE;
 		tasklet_schedule(&__tasklet);
 	}
 }
@@ -500,7 +490,6 @@ void laird_wake_queue(struct net_device *dev)
 /* callback called at process level when crypto operation completes */
 static void __callback_del_data(void *din, int res)
 {
-	DEBUG_TRACE;
 	kfree(din);
 	(void)res;
 }
@@ -521,7 +510,6 @@ void laird_addkey(struct net_device *ndev,
 		u8 seq[8];
 	} *p;
 
-	DEBUG_TRACE;
 
 	if (key_index >= 4)
 		return;
@@ -555,7 +543,6 @@ void laird_addkey(struct net_device *ndev,
 
 void laird_delkey(struct net_device *ndev, u8 key_index)
 {
-	DEBUG_TRACE;
 	laird_addkey(ndev, key_index, 0, NULL, NULL, 0, NULL, 0);
 }
 
@@ -567,7 +554,6 @@ void laird_setbssid(const u8 * bssid)
 		u8 bssid[6];
 	} *p;
 
-	DEBUG_TRACE;
 	_printkhexs(__FUNCTION__, "bssid", bssid, bssid ? 6 : 0);
 
 	/* store data in allocated memory */
@@ -592,7 +578,6 @@ void laird_setbssid(const u8 * bssid)
 int laird_stop_txrx(void)
 {
 	int res;
-	DEBUG_TRACE;
 	res = __cryp_wait_txrx_completed();
 	return res;
 }
@@ -603,6 +588,20 @@ int laird_txrx_init(void)
 	skb_queue_head_init(&__glob.skbq_rx);
 	return 0;
 }
+
+#ifdef LAIRD_DEBUG
+static void debug_skb_trace(const char *fn, int line,
+							struct sk_buff *skb, int status)
+{
+	printk(KERN_ALERT "%s: index %d, line %d, status=%d\n",
+		   fn, laird_skb_idx(skb), line, status);
+}
+
+static void debug_skb_dump(const char *fn, struct sk_buff *skb)
+{
+	_printkhexs(fn, "skb", skb->data, skb->len);
+}
+#endif
 
 const laird_register_data_t register_data = {
 	.pfn_rx_prep = &laird_skb_rx_prep,

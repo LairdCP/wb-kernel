@@ -3,27 +3,10 @@
  * Licensed under GPLv2.
  */
 
-#include <linux/module.h>
-#include <linux/moduleparam.h>
-#include <linux/init.h>
-
 #include <linux/kernel.h>
-#include <linux/slab.h>
-#include <linux/fs.h>
-#include <linux/errno.h>	/* error codes */
-#include <linux/types.h>	/* size_t */
-#include <linux/proc_fs.h>
-#include <linux/fcntl.h>	/* O_ACCMODE */
-#include <linux/seq_file.h>
-#include <linux/cdev.h>
-#include <linux/sched.h>
-#include <linux/spinlock.h>
-
-#include <asm/uaccess.h>	/* copy_*_user */
-
 #include "moddebug.h"
 
-#ifndef _printkhexs
+#ifdef LAIRD_DEBUG
 static char _dnib2hex(int x)
 {
 	if (x < 10)
