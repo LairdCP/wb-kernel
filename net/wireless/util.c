@@ -809,7 +809,6 @@ int cfg80211_change_iface(struct cfg80211_registered_device *rdev,
 	/* if it's part of a bridge, reject changing type to station/ibss */
 	if ((dev->priv_flags & IFF_BRIDGE_PORT) &&
 	    (ntype == NL80211_IFTYPE_ADHOC ||
-	     ntype == NL80211_IFTYPE_STATION ||
 	     ntype == NL80211_IFTYPE_P2P_CLIENT))
 		return -EBUSY;
 
@@ -852,14 +851,11 @@ int cfg80211_change_iface(struct cfg80211_registered_device *rdev,
 	if (!err) {
 		dev->priv_flags &= ~IFF_DONT_BRIDGE;
 		switch (ntype) {
-		case NL80211_IFTYPE_STATION:
-			if (dev->ieee80211_ptr->use_4addr)
-				break;
-			/* fall through */
 		case NL80211_IFTYPE_P2P_CLIENT:
 		case NL80211_IFTYPE_ADHOC:
 			dev->priv_flags |= IFF_DONT_BRIDGE;
 			break;
+		case NL80211_IFTYPE_STATION:
 		case NL80211_IFTYPE_P2P_GO:
 		case NL80211_IFTYPE_AP:
 		case NL80211_IFTYPE_AP_VLAN:

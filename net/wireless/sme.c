@@ -467,6 +467,7 @@ void __cfg80211_connect_result(struct net_device *dev, const u8 *bssid,
 		wdev->conn->state = CFG80211_CONN_IDLE;
 
 	if (status != WLAN_STATUS_SUCCESS) {
+WLAN_NOT_SUCCESSFUL:
 		wdev->sme_state = CFG80211_SME_IDLE;
 		if (wdev->conn)
 			kfree(wdev->conn->ie);
@@ -486,6 +487,18 @@ void __cfg80211_connect_result(struct net_device *dev, const u8 *bssid,
 				       wdev->ssid, wdev->ssid_len,
 				       WLAN_CAPABILITY_ESS,
 				       WLAN_CAPABILITY_ESS);
+
+	if(!bss)
+	{
+/*
+		We occasionally get to this point where cfg80211 thinks we are connected
+		but we have no BSSID.  In order to resync the state machine of cfg80211
+		and the driver, we move to the IDLE state.  This allows the supplicant 
+		to reissue a connect.  Note that we did try calling the device's 
+		disconnect function but that did not help the reconnection speed.
+*/
+		goto WLAN_NOT_SUCCESSFUL;
+	}
 
 	if (WARN_ON(!bss))
 		return;
