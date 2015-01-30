@@ -924,6 +924,18 @@ static const struct mmc_host_ops at91_mci_ops = {
 	.enable_sdio_irq = at91_mci_enable_sdio_irq,
 };
 
+#ifdef CONFIG_MMC_AT91_F_MAX
+static int mmc_at91_f_max = CONFIG_MMC_AT91_F_MAX;
+#else
+static int mmc_at91_f_max = 25000000;
+#endif
+static int __init mmc_at91_f_max_setup(char *options)
+{
+	mmc_at91_f_max = simple_strtol(options, NULL, 0);
+	return 0;
+}
+__setup("sdio_fmax=", mmc_at91_f_max_setup);
+
 /*
  * Probe for the device
  */
@@ -950,7 +962,8 @@ static int __init at91_mci_probe(struct platform_device *pdev)
 
 	mmc->ops = &at91_mci_ops;
 	mmc->f_min = 375000;
-	mmc->f_max = 25000000;
+	printk(KERN_INFO "%s: Setting SDIO bus speed to %d\n", pdev->name, mmc_at91_f_max);
+	mmc->f_max = mmc_at91_f_max;
 	mmc->ocr_avail = MMC_VDD_32_33 | MMC_VDD_33_34;
 	mmc->caps = 0;
 

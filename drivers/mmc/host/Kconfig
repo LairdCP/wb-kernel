@@ -297,6 +297,13 @@ config MMC_ATMELMCI
 
 endchoice
 
+config MMC_AT91_F_MAX
+	int "Maximum SDIO clock speed"
+	depends on MMC_AT91
+	default 25000000
+	help
+	  This sets the upper limit of the SDIO bus speed.
+
 config MMC_ATMELMCI_DMA
 	bool "Atmel MCI DMA support"
 	depends on MMC_ATMELMCI && (AVR32 || ARCH_AT91SAM9G45) && DMA_ENGINE
