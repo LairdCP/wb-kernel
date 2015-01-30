@@ -31,12 +31,11 @@ at91sam9_alt_reset:	mrc	p15, 0, r0, c1, c0, 0
 			ldr	r1, .at91_va_base_rstc_cr
 
 			mov	r2, #1
-			mov	r3, #AT91_SDRAMC_LPCB_POWER_DOWN
+			mov	r3, #AT91_SDRAMC_LPCB_DISABLE
 			ldr	r4, =AT91_RSTC_KEY | AT91_RSTC_PERRST | AT91_RSTC_PROCRST
 
 			.balign	32				@ align to cache line
 
-			str	r2, [r0, #AT91_SDRAMC_TR]	@ disable SDRAM access
 			str	r3, [r0, #AT91_SDRAMC_LPR]	@ power down SDRAM
 			str	r4, [r1]			@ reset processor
 
