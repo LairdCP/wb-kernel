@@ -62,6 +62,7 @@ obj-$(CONFIG_MACH_AT91SAM9RLEK)	+= board-sam9rlek.o
 
 # AT91SAM9G20 board-specific support
 obj-$(CONFIG_MACH_AT91SAM9G20EK) += board-sam9g20ek.o
+obj-$(CONFIG_MACH_WB40N)	+= board-wb40n.o
 obj-$(CONFIG_MACH_CPU9G20)	+= board-cpu9krea.o
 obj-$(CONFIG_MACH_ACMENETUSFOXG20) += board-foxg20.o
 obj-$(CONFIG_MACH_STAMP9G20)	+= board-stamp9g20.o

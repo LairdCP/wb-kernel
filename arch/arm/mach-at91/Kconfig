@@ -342,6 +342,26 @@ config MACH_AT91SAM9G20EK_2MMC
 	  with 2 SD/MMC Slots. This is the case for AT91SAM9G20-EK rev. C and
 	  onwards.
 
+config MACH_WB40N
+	bool "Summit Data Communications Workgroup Bridge"
+	help
+	  Select this if you are using Summit Data Communication's 40N-series
+	  Workgroup Bridge.
+	  <http://www.summitdatacom.com>
+
+choice
+	prompt "Select WB40N board revision"
+	depends on MACH_WB40N
+	default MACH_WB40N_REV3
+
+config MACH_WB40N_REV2
+	bool "Rev2"
+
+config MACH_WB40N_REV3
+	bool "Rev3"
+
+endchoice
+
 config MACH_CPU9G20
 	bool "Eukrea CPU9G20 board"
 	help
@@ -506,6 +526,7 @@ config AT91_TIMER_HZ
 	  On AT91sam926x chips, or otherwise when using a higher precision
 	  system clock (of at least several MHz), rounding is less of a
 	  problem so it can be safer to use a decimal values like 100.
+	  default y
 
 choice
 	prompt "Select a UART for early kernel messages"
