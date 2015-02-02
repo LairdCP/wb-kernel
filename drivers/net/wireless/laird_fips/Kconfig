@@ -1,0 +1,5 @@
+config LAIRD_FIPS
+    tristate "Laird FIPS support"
+    depends on m
+    ---help---
+        Laird FIPS support.
