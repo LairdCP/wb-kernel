@@ -41,6 +41,8 @@ static void ath6kl_recovery_work(struct work_struct *work)
 
 void ath6kl_recovery_err_notify(struct ath6kl *ar, enum ath6kl_fw_err reason)
 {
+	ath6kl_drv_event_multicast(ATHEROS_CMD_FW_ERROR, reason);
+
 	if (!ar->fw_recovery.enable)
 		return;
 
