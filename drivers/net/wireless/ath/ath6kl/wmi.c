@@ -17,6 +17,7 @@
 
 #include <linux/ip.h>
 #include <linux/in.h>
+#include <net/genetlink.h>
 #include "core.h"
 #include "debug.h"
 #include "testmode.h"
@@ -27,6 +28,8 @@
 #include "wmiconfig.h"
 
 static int ath6kl_wmi_sync_point(struct wmi *wmi, u8 if_idx);
+
+static void ath6kl_wmi_event_multicast(enum wmi_cmd_id cmd_id, u8 *datap, int len);
 
 static const s32 wmi_rate_tbl[][2] = {
 	/* {W/O SGI, with SGI} */
@@ -121,6 +124,21 @@ static const u8 up_to_ac[] = {
 	WMM_AC_VO,
 	WMM_AC_VO,
 };
+
+static void __lrd_remove_channels(struct ath6kl *ar, u8 *num_channels, u16 *channel_list);
+static void __lrd_set_AP_Name(struct wmi *wmi, const char *apname);
+static void __lrd_set_AP_IP(struct wmi *wmi, const char *apip);
+
+enum { // keep this list in sync with the one from ath_access.c from the SDK
+	GETVERSION=0,
+	GETTXPOWER,
+	GETAPNAME,
+	GETAPIP,
+	GETFWSTR,
+} ATHEROS_CMD_GET_VALUES;
+
+#define AIRONET_CCX_IE   0x85
+#define AIRONET_AP_IP_IE 0x95
 
 void ath6kl_wmi_set_control_ep(struct wmi *wmi, enum htc_endpoint_id ep_id)
 {
@@ -930,6 +948,8 @@ static int ath6kl_wmi_connect_event_rx(struct wmi *wmi, u8 *datap, int len,
 	peie = ev->assoc_info + ev->beacon_ie_len + ev->assoc_req_len +
 	    ev->assoc_resp_len;
 
+	__lrd_set_AP_Name(wmi, NULL); // clear existing
+	__lrd_set_AP_IP(wmi, NULL);  // clear existing
 	while (pie < peie) {
 		switch (*pie) {
 		case WLAN_EID_VENDOR_SPECIFIC:
@@ -941,10 +961,13 @@ static int ath6kl_wmi_connect_event_rx(struct wmi *wmi, u8 *datap, int len,
 					wmi->is_wmm_enabled = true;
 			}
 			break;
-		}
-
-		if (wmi->is_wmm_enabled)
+		case AIRONET_CCX_IE:
+			__lrd_set_AP_Name(wmi, pie+12);
 			break;
+		case AIRONET_AP_IP_IE:
+			__lrd_set_AP_IP(wmi, pie+6);
+			break;
+		}
 
 		pie += pie[1] + 2;
 	}
@@ -1042,6 +1065,9 @@ static int ath6kl_wmi_disconnect_event_rx(struct wmi *wmi, u8 *datap, int len,
 {
 	struct wmi_disconnect_event *ev;
 	wmi->traffic_class = 100;
+
+	__lrd_set_AP_Name(wmi, NULL); // clear existing
+	__lrd_set_AP_IP(wmi, NULL);  // clear existing
 
 	if (len < sizeof(struct wmi_disconnect_event))
 		return -EINVAL;
@@ -1839,6 +1865,8 @@ int ath6kl_wmi_cmd_send(struct wmi *wmi, u8 if_idx, struct sk_buff *skb,
 	ath6kl_dbg_dump(ATH6KL_DBG_WMI_DUMP, NULL, "wmi tx ",
 			skb->data, skb->len);
 
+	ath6kl_wmi_event_multicast(cmd_id, skb->data, skb->len);
+
 	if (sync_flag >= END_WMIFLAG) {
 		dev_kfree_skb(skb);
 		return -EINVAL;
@@ -1939,6 +1967,8 @@ int ath6kl_wmi_connect_cmd(struct wmi *wmi, u8 if_idx,
 	if (bssid != NULL)
 		memcpy(cc->bssid, bssid, ETH_ALEN);
 
+	ath6kl_wmi_send_radio_mode(wmi, if_idx);
+
 	ret = ath6kl_wmi_cmd_send(wmi, if_idx, skb, WMI_CONNECT_CMDID,
 				  NO_SYNC_WMIFLAG);
 
@@ -1966,6 +1996,8 @@ int ath6kl_wmi_reconnect_cmd(struct wmi *wmi, u8 if_idx, u8 *bssid,
 
 	if (bssid != NULL)
 		memcpy(cc->bssid, bssid, ETH_ALEN);
+
+	ath6kl_wmi_send_radio_mode(wmi, if_idx);
 
 	ret = ath6kl_wmi_cmd_send(wmi, if_idx, skb, WMI_RECONNECT_CMDID,
 				  NO_SYNC_WMIFLAG);
@@ -2052,8 +2084,14 @@ int ath6kl_wmi_beginscan_cmd(struct wmi *wmi, u8 if_idx,
 	s8 size, *supp_rates;
 	int i, band, ret;
 	struct ath6kl *ar = wmi->parent_dev;
+	struct ath6kl_vif *vif = ath6kl_get_vif_by_index(ar, if_idx);
 	int num_rates;
 	u32 ratemask;
+
+	__lrd_remove_channels(ar, &num_chan, ch_list);
+
+	if(vif && vif->sme_state != SME_CONNECTED)
+		ath6kl_wmi_send_radio_mode(wmi, if_idx);
 
 	if (!test_bit(ATH6KL_FW_CAPABILITY_STA_P2PDEV_DUPLEX,
 		      ar->fw_capabilities)) {
@@ -3966,6 +4004,7 @@ static int ath6kl_wmi_proc_events_vif(struct wmi *wmi, u16 if_idx, u16 cmd_id,
 		return ath6kl_wmi_connect_event_rx(wmi, datap, len, vif);
 	case WMI_DISCONNECT_EVENTID:
 		ath6kl_dbg(ATH6KL_DBG_WMI, "WMI_DISCONNECT_EVENTID\n");
+		ath6kl_wmi_send_radio_mode(wmi, if_idx);
 		return ath6kl_wmi_disconnect_event_rx(wmi, datap, len, vif);
 	case WMI_TKIP_MICERR_EVENTID:
 		ath6kl_dbg(ATH6KL_DBG_WMI, "WMI_TKIP_MICERR_EVENTID\n");
@@ -3979,6 +4018,8 @@ static int ath6kl_wmi_proc_events_vif(struct wmi *wmi, u16 if_idx, u16 cmd_id,
 							   vif);
 	case WMI_SCAN_COMPLETE_EVENTID:
 		ath6kl_dbg(ATH6KL_DBG_WMI, "WMI_SCAN_COMPLETE_EVENTID\n");
+		if(vif->sme_state != SME_CONNECTED)
+			ath6kl_wmi_send_radio_mode(wmi, if_idx);
 		return ath6kl_wmi_scan_complete_rx(wmi, datap, len, vif);
 	case WMI_REPORT_STATISTICS_EVENTID:
 		ath6kl_dbg(ATH6KL_DBG_WMI, "WMI_REPORT_STATISTICS_EVENTID\n");
@@ -4032,6 +4073,8 @@ static int ath6kl_wmi_proc_events_vif(struct wmi *wmi, u16 if_idx, u16 cmd_id,
 
 static int ath6kl_wmi_proc_events(struct wmi *wmi, struct sk_buff *skb)
 {
+	struct ath6kl *ar = wmi->parent_dev;
+	struct ath6kl_vif *vif;
 	struct wmi_cmd_hdr *cmd;
 	int ret = 0;
 	u32 len;
@@ -4042,6 +4085,7 @@ static int ath6kl_wmi_proc_events(struct wmi *wmi, struct sk_buff *skb)
 	cmd = (struct wmi_cmd_hdr *) skb->data;
 	id = le16_to_cpu(cmd->cmd_id);
 	if_idx = le16_to_cpu(cmd->info1) & WMI_CMD_HDR_IF_ID_MASK;
+	vif = ath6kl_get_vif_by_index(ar, if_idx);
 
 	skb_pull(skb, sizeof(struct wmi_cmd_hdr));
 	datap = skb->data;
@@ -4050,6 +4094,8 @@ static int ath6kl_wmi_proc_events(struct wmi *wmi, struct sk_buff *skb)
 	ath6kl_dbg(ATH6KL_DBG_WMI, "wmi rx id %d len %d\n", id, len);
 	ath6kl_dbg_dump(ATH6KL_DBG_WMI_DUMP, NULL, "wmi rx ",
 			datap, len);
+
+	ath6kl_wmi_event_multicast(id, datap, len);
 
 	switch (id) {
 	case WMI_GET_BITRATE_CMDID:
@@ -4074,6 +4120,8 @@ static int ath6kl_wmi_proc_events(struct wmi *wmi, struct sk_buff *skb)
 		break;
 	case WMI_REGDOMAIN_EVENTID:
 		ath6kl_dbg(ATH6KL_DBG_WMI, "WMI_REGDOMAIN_EVENTID\n");
+		if(vif && vif->sme_state != SME_CONNECTED)
+			ath6kl_wmi_send_radio_mode(wmi, if_idx);
 		ath6kl_wmi_regdomain_event(wmi, datap, len);
 		break;
 	case WMI_PSTREAM_TIMEOUT_EVENTID:
@@ -4195,6 +4243,448 @@ int ath6kl_wmi_control_rx(struct wmi *wmi, struct sk_buff *skb)
 	return ath6kl_wmi_proc_events(wmi, skb);
 }
 
+static bool __freq_is_specified(struct ath6kl *ar, const u16 freq)
+{
+	u32 i;
+	u32 n_channels = ar->laird.num_channels;
+
+	for(i = 0; i < n_channels; i++)
+		if(freq == ar->laird.channel_list[i])
+			return true;
+
+	return false;
+}
+
+static void __lrd_remove_channels(struct ath6kl *ar, u8 *num_channels, u16 *channel_list)
+{
+	u32 i = 0;
+	u32 lastunused = 0;
+	u32 n_channels = 0;
+
+	//If phy_mode == 0, then we haven't set this information yet so don't prune list
+	if(ar->laird.phy_mode == 0)
+		return;
+
+	n_channels = *num_channels;
+	for(i = 0; i < n_channels; i++)
+	{
+		if (!__freq_is_specified(ar, channel_list[i]))
+		{
+			(*num_channels)--;
+		}
+		else
+		{
+			if (i > lastunused)
+				channel_list[lastunused] = channel_list[i];
+			lastunused++;
+		}
+	}
+}
+
+int ath6kl_wmi_channel_params_cmd(struct wmi *wmi, u8 if_idx, u8 scan_param,
+			    u8 phy_mode, u8 num_channels, u16 *channel_list)
+{
+	struct sk_buff *skb;
+	struct wmi_channel_params_cmd *cmd;
+	int ret;
+
+	skb = ath6kl_wmi_get_new_buf(sizeof(*cmd) + ((num_channels-1)*sizeof(u16)));
+	if (!skb)
+		return -ENOMEM;
+
+	cmd = (struct wmi_channel_params_cmd *)skb->data;
+	cmd->scan_param = cpu_to_le16(scan_param);
+	cmd->phy_mode = cpu_to_le16(phy_mode);
+	cmd->num_channels = cpu_to_le16(num_channels);
+	memcpy(cmd->channel_list, channel_list, (num_channels)*sizeof(u16));
+
+	ret = ath6kl_wmi_cmd_send(wmi, if_idx, skb, WMI_SET_CHANNEL_PARAMS_CMDID,
+				  NO_SYNC_WMIFLAG);
+	return ret;
+}
+
+int ath6kl_wmi_send_buf_cmd(struct wmi *wmi, u8 if_idx, enum wmi_cmd_id cmd_id,
+							u32 size, u8 *buf)
+{
+	struct sk_buff *skb;
+	int ret;
+
+	skb = ath6kl_wmi_get_new_buf(size);
+	if (!skb)
+		return -ENOMEM;
+
+	memcpy(skb->data, buf, size);
+
+	ret = ath6kl_wmi_cmd_send(wmi, if_idx, skb, cmd_id, NO_SYNC_WMIFLAG);
+	return ret;
+}
+
+void ath6kl_wmi_send_radio_mode(struct wmi *wmi, u8 if_idx)
+{
+	struct ath6kl *ar;
+
+	ar = wmi->parent_dev;
+
+	//If phy_mode == 0, then we haven't set this information yet so don't send
+	if(ar->laird.phy_mode == 0)
+		return;
+
+	ath6kl_wmi_send_buf_cmd(wmi, if_idx, WMI_SET_HT_CAP_CMDID, sizeof(struct wmi_set_htcap_cmd),
+							(u8*)&(ar->laird.htcap_params_2ghz));
+	ath6kl_wmi_send_buf_cmd(wmi, if_idx, WMI_SET_HT_CAP_CMDID, sizeof(struct wmi_set_htcap_cmd),
+							(u8*)&(ar->laird.htcap_params_5ghz));
+	ath6kl_wmi_channel_params_cmd(wmi, if_idx, 0, ar->laird.phy_mode, ar->laird.num_channels,
+								ar->laird.channel_list);
+}
+
+enum {
+	ATHEROS_ATTR_UNSPEC,
+	ATHEROS_ATTR_MSG,
+	ATHEROS_ATTR_EVENT,
+	ATHEROS_ATTR_CMDID,
+	ATHEROS_ATTR_DATA,
+    __ATHEROS_ATTR_MAX,
+};
+#define ATHEROS_ATTR_MAX (__ATHEROS_ATTR_MAX - 1)
+
+static struct nla_policy atheros_policy[ATHEROS_ATTR_MAX + 1] = {
+	[ATHEROS_ATTR_MSG] = { .type = NLA_NUL_STRING },
+	[ATHEROS_ATTR_EVENT] = { .type = NLA_NESTED },
+	[ATHEROS_ATTR_CMDID] = { .type = NLA_U32 },
+	[ATHEROS_ATTR_DATA] = { .type = NLA_BINARY },
+};
+
+#define ATHEROS_EVENT_VERSION 1
+#define ATHEROS_GENL_HDR_SZ 0
+static struct genl_family atheros_fam = {
+	.id = GENL_ID_GENERATE,
+	.hdrsize = ATHEROS_GENL_HDR_SZ,
+	.name = "atheros",
+	.version = ATHEROS_EVENT_VERSION,
+	.maxattr = ATHEROS_ATTR_MAX,
+};
+
+enum ath_multicast_groups {
+	ATH_MCGRP_EVENTS,
+};
+
+static struct genl_multicast_group atheros_events_mcgrp[] = {
+	[ATH_MCGRP_EVENTS] = { .name = "events", },
+};
+
+static struct wmi *gwmi = NULL;  // get access to wmi pointer for netlink entry point functions  FIXME: find alternative to this global!
+
+static int ath6kl_genl_wmi_passthru (struct sk_buff *skb_2, struct genl_info *info)
+{
+	struct nlattr *na;
+	struct sk_buff *skb;
+	void *params;
+	int params_data_len;
+	u32 wmi_cmd;
+	struct ath6kl *ar;
+	struct wmi *wmi = gwmi;
+	void* p;
+
+	if ( gwmi == NULL )
+		return -EINVAL;
+
+	ar = wmi->parent_dev;
+
+	if (info == NULL)
+	{
+		ath6kl_err( "%s: no data received\n", __func__);
+		return -EINVAL;
+	}
+
+	na = info->attrs[ATHEROS_ATTR_MSG];
+	if (na) {
+		params = nla_data(na);
+		params_data_len = nla_len(na)-4;
+		if (params == NULL)
+			ath6kl_err("error while receiving data\n");
+		else
+		{
+			skb = ath6kl_wmi_get_new_buf(params_data_len);
+			if (!skb)
+				return -ENOMEM;
+
+			memcpy(&wmi_cmd, params, sizeof(wmi_cmd));
+			p = (u32 *)params+1;
+			switch(wmi_cmd)
+			{
+				case WMI_SET_HT_CAP_CMDID:
+					{
+					struct wmi_set_htcap_cmd *htcap = (struct wmi_set_htcap_cmd*)p;
+					if(htcap->band == NL80211_BAND_2GHZ)
+						memcpy(&ar->laird.htcap_params_2ghz, htcap, sizeof(struct wmi_set_htcap_cmd));
+					else if(htcap->band == NL80211_BAND_5GHZ)
+						memcpy(&ar->laird.htcap_params_5ghz, htcap, sizeof(struct wmi_set_htcap_cmd));
+					}
+					break;
+				default:
+					break;
+			}
+			memcpy(skb->data, (u32 *)params+1, params_data_len);
+			ath6kl_wmi_cmd_send(wmi, 0, skb, wmi_cmd, NO_SYNC_WMIFLAG);
+		}
+	}
+	else
+		ath6kl_err("%s: no info->attrs \n", __func__);
+
+	return 0;
+}
+
+static int ath6kl_genl_set_phy_mode(struct sk_buff *skb_2, struct genl_info *info)
+{
+	struct nlattr *na;
+	struct ath6kl *ar;
+	struct wmi *wmi = gwmi;
+	struct wmi_channel_params_cmd *params;
+
+	if ( gwmi == NULL )
+		return 0;
+
+	ar = wmi->parent_dev;
+
+	if (info == NULL)
+	{
+		printk("%s: no data received\n", __func__);
+		return 0;
+	}
+
+	na = info->attrs[ATHEROS_ATTR_MSG];
+
+	if (na) {
+		params = (struct wmi_channel_params_cmd*)nla_data(na);
+		if (params == NULL)
+			printk("error while receiving data\n");
+		else
+		{
+			ar->laird.phy_mode = params->phy_mode;
+			ar->laird.num_channels = params->num_channels;
+			memcpy(&ar->laird.channel_list, params->channel_list, sizeof(uint16_t) * params->num_channels);
+
+			ath6kl_wmi_channel_params_cmd(wmi, 0, 0, ar->laird.phy_mode, ar->laird.num_channels,
+										ar->laird.channel_list);
+		}
+	}
+	else
+		printk("%s: no info->attrs %i\n", __func__, ATHEROS_ATTR_MSG);
+
+	return 0;
+}
+
+static int ath6kl_genl_get_value (struct sk_buff *skb_2, struct genl_info *info)
+{
+	struct sk_buff *skb;
+	int rc=0;
+	void *msg_head;
+	int *c=NULL;
+	struct ath6kl *ar;
+	struct wmi *wmi = gwmi;
+	struct nlattr *na;
+	char fwStr[80];
+
+	if ( gwmi == NULL )
+		return 0;
+
+	ar = wmi->parent_dev;
+
+	na = info->attrs[ATHEROS_ATTR_MSG];
+	if (na)
+		c = (int*)nla_data(na);
+
+	skb = genlmsg_new(NLMSG_GOODSIZE, GFP_KERNEL);
+	if (skb == NULL)
+		goto out;
+
+	msg_head = genlmsg_put(skb, 0, info->snd_seq+1, &atheros_fam, 0, ATHEROS_CMD_RESPONSE);
+	if (msg_head == NULL) {
+		rc = -ENOMEM;
+		goto out;
+	}
+
+	if (c)
+	{
+		switch (*c)
+		{
+			case GETVERSION:
+				rc = nla_put_s32( skb, ATHEROS_ATTR_MSG, LAIRD_DRV_VERSION );
+				break;
+			case GETTXPOWER:
+				ath6kl_get_txpower( ar->wiphy, c);
+				rc = nla_put_s32( skb, ATHEROS_ATTR_MSG, *c );
+				break;
+			case GETAPNAME:
+				rc = nla_put_string(skb, ATHEROS_ATTR_MSG, ar->laird.AP_Name);
+				break;
+			case GETAPIP:
+				rc = nla_put_s32(skb, ATHEROS_ATTR_MSG,
+						ar->laird.AP_IP[0] << 24 |
+						ar->laird.AP_IP[1] << 16 |
+						ar->laird.AP_IP[2] << 8 |
+						ar->laird.AP_IP[3]);
+				break;
+			case GETFWSTR:
+				snprintf(fwStr, 80, "%s fw %s api %d%s",
+						ar->hw.name,
+						ar->wiphy->fw_version,
+						ar->fw_api,
+						test_bit(TESTMODE, &ar->flag) ? " testmode" : "");
+				rc = nla_put_string(skb, ATHEROS_ATTR_MSG, fwStr);
+				break;
+		}
+	}
+	if (rc != 0)
+		goto out;
+
+	genlmsg_end(skb, msg_head);
+
+	rc = genlmsg_unicast(genl_info_net(info), skb, info->snd_portid);
+	if (rc != 0)
+		goto out;
+	return 0;
+
+	out:
+		ath6kl_err("an error occured in %s\n", __func__);
+
+	return 0;
+}
+
+static void ath6kl_wmi_event_multicast(enum wmi_cmd_id cmd_id, u8 *datap, int len)
+{
+    struct sk_buff *msg;
+	void *hdr;
+
+    msg = genlmsg_new(NLMSG_DEFAULT_SIZE, GFP_KERNEL);
+	if (!msg)
+		return;
+
+    hdr = genlmsg_put(msg, 0, 0, &atheros_fam, 0, ATHEROS_CMD_EVENT);
+	if (!hdr) {
+		nlmsg_free(msg);
+		return;
+	}
+
+	if (nla_put_u32(msg, ATHEROS_ATTR_CMDID, cmd_id) ||
+		nla_put(msg, ATHEROS_ATTR_DATA, len, datap))
+		goto nla_put_failure;
+
+	genlmsg_end(msg, hdr);
+
+	genlmsg_multicast(&atheros_fam, msg, 0, ATH_MCGRP_EVENTS, GFP_KERNEL);
+
+	return;
+
+nla_put_failure:
+	genlmsg_cancel(msg, hdr);
+	nlmsg_free(msg);
+}
+
+void ath6kl_drv_event_multicast(enum atheros_cmd_id cmd_id, unsigned int reason)
+{
+	struct sk_buff *msg = NULL;
+	void *hdr = NULL;
+
+	msg = genlmsg_new(NLMSG_DEFAULT_SIZE, GFP_KERNEL);
+	if (msg)
+		hdr = genlmsg_put(msg, 0, 0, &atheros_fam, 0, cmd_id);
+	if (!hdr)
+		nlmsg_free(msg);
+	else {
+		if(nla_put_u32(msg, ATHEROS_ATTR_MSG, reason))
+			goto nla_put_failure;
+		genlmsg_end(msg, hdr);
+		genlmsg_multicast(&atheros_fam, msg, 0, ATH_MCGRP_EVENTS, GFP_KERNEL);
+	}
+
+	return;
+
+nla_put_failure:
+	genlmsg_cancel(msg, hdr);
+	nlmsg_free(msg);
+}
+
+
+static int ath6kl_genl_qos(struct sk_buff *skb_2, struct genl_info *info)
+{
+	struct ath6kl *ar;
+	struct wmi *wmi = gwmi;
+	struct nlattr *na;
+	struct ath6kl_vif *vif;
+	struct wmi_create_pstream_cmd *new_pstream;
+	struct wmi_delete_pstream_cmd *del_pstream;
+
+	if(gwmi == NULL)
+		return 0;
+
+	ar = wmi->parent_dev;
+
+	vif = ath6kl_vif_first(ar);
+
+	if (!vif)
+	{
+		ath6kl_err("unable to get vif in %s\n", __func__);
+		return 0;
+	}
+
+	na = info->attrs[ATHEROS_ATTR_MSG];
+
+	if (nla_len(na) == sizeof(struct wmi_create_pstream_cmd)) {
+		new_pstream = (struct wmi_create_pstream_cmd*)nla_data(na);
+		ath6kl_wmi_create_pstream_cmd(ar->wmi, vif->fw_vif_idx, new_pstream);
+	} else if (nla_len(na) == sizeof(struct wmi_delete_pstream_cmd)) {
+		del_pstream = (struct wmi_delete_pstream_cmd*)nla_data(na);
+		ath6kl_wmi_delete_pstream_cmd(ar->wmi, vif->fw_vif_idx, del_pstream->traffic_class, del_pstream->tsid);
+	} else
+		ath6kl_err("invalid atheros netlink qos cmd\n");
+
+	return 0;
+}
+
+struct genl_ops atheros_ops[] = {
+	{
+		.cmd = ATHEROS_CMD_GET_VALUE,
+		.flags = 0,
+		.policy = atheros_policy,
+		.doit = ath6kl_genl_get_value,
+		.dumpit = NULL,
+	}, {
+		.cmd = ATHEROS_CMD_SET_PHY_MODE,
+		.flags = 0,
+		.policy = atheros_policy,
+		.doit = ath6kl_genl_set_phy_mode,
+		.dumpit = NULL,
+	}, {
+		.cmd = ATHEROS_CMD_SEND_WMI,
+		.flags = 0,
+		.policy = atheros_policy,
+		.doit = ath6kl_genl_wmi_passthru,
+		.dumpit = NULL,
+	}, {
+		.cmd = ATHEROS_CMD_QOS,
+		.flags = 0,
+		.policy = atheros_policy,
+		.doit = ath6kl_genl_qos,
+		.dumpit = NULL,
+	},
+};
+
+static int ath6kl_genl_init(void)
+{
+	int rc;
+
+	ath6kl_warn("initializing atheros generic netlink family\n");
+
+	if ((rc = _genl_register_family_with_ops_grps(&atheros_fam, atheros_ops,
+			ARRAY_SIZE(atheros_ops), atheros_events_mcgrp,
+			ARRAY_SIZE(atheros_events_mcgrp))) != 0) {
+		ath6kl_err("cannot register atheros netlink family\n");
+	}
+
+	return rc;
+}
+
 void ath6kl_wmi_reset(struct wmi *wmi)
 {
 	spin_lock_bh(&wmi->lock);
@@ -4213,6 +4703,9 @@ void *ath6kl_wmi_init(struct ath6kl *dev)
 	if (!wmi)
 		return NULL;
 
+	if (ath6kl_genl_init() != 0)
+		ath6kl_err("failed to initialize atheros generic netlink family\n");
+
 	spin_lock_init(&wmi->lock);
 
 	wmi->parent_dev = dev;
@@ -4220,6 +4713,8 @@ void *ath6kl_wmi_init(struct ath6kl *dev)
 	wmi->pwr_mode = REC_POWER;
 
 	ath6kl_wmi_reset(wmi);
+
+	gwmi = wmi;
 
 	return wmi;
 }
@@ -4229,6 +4724,55 @@ void ath6kl_wmi_shutdown(struct wmi *wmi)
 	if (!wmi)
 		return;
 
+	gwmi = NULL;
+
+	ath6kl_drv_event_multicast(ATHEROS_CMD_QUITTING, 0);
+
+	/* unregister the atheros family*/
+	if (genl_unregister_family(&atheros_fam) != 0)
+		ath6kl_err("failed to unregister atheros generic netlink family\n");
+
 	kfree(wmi->last_mgmt_tx_frame);
 	kfree(wmi);
+}
+
+/*
+	apname is a pointer to the location in the ie where the AP name
+	is located.  Some of the Cisco docs indicate this is 16 bytes
+	without null termination, so our version is 17 in length with
+	the last being 0x00.
+
+	if apname is NULL, clear our saved copy of the apname
+*/
+static void __lrd_set_AP_Name(struct wmi *wmi, const char *apname)
+{
+	struct ath6kl *ar;
+	ar = wmi->parent_dev;
+
+	if (apname==NULL)
+	{
+		memset(ar->laird.AP_Name, 0, 17);
+	}
+	else
+	{
+		memcpy(ar->laird.AP_Name, apname, 16);
+	}
+}
+
+/*
+	if apip is NULL, clear our saved copy of the AP IP address
+*/
+static void __lrd_set_AP_IP(struct wmi *wmi, const char *apip)
+{
+	struct ath6kl *ar;
+	ar = wmi->parent_dev;
+
+	if (apip==NULL)
+	{
+		memset(ar->laird.AP_IP, 0, 4);
+	}
+	else
+	{
+		memcpy(ar->laird.AP_IP, apip, 4);
+	}
 }

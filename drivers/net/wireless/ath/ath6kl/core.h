@@ -872,6 +872,16 @@ struct ath6kl {
 		u8 disc_timeout;
 	} debug;
 #endif /* CONFIG_ATH6KL_DEBUG */
+
+	struct {
+		enum wmi_phy_mode phy_mode;
+		u8 num_channels;
+		u16 channel_list[WMI_MAX_CHANNELS];
+		struct wmi_set_htcap_cmd htcap_params_2ghz;
+		struct wmi_set_htcap_cmd htcap_params_5ghz;
+		char AP_Name[17];
+		unsigned char AP_IP[4];
+	} laird;
 };
 
 static inline struct ath6kl *ath6kl_priv(struct net_device *dev)
@@ -891,6 +901,21 @@ static inline u32 ath6kl_get_hi_item_addr(struct ath6kl *ar,
 
 	return addr;
 }
+
+/* This structure needs to be in sync with ath_access.h in the sdk */
+enum atheros_cmd_id {
+	ATHEROS_CMD_UNSPEC,
+	ATHEROS_CMD_RESPONSE,
+	ATHEROS_CMD_EVENT,
+	ATHEROS_CMD_GET_VALUE,
+	ATHEROS_CMD_SET_PHY_MODE,
+	ATHEROS_CMD_SEND_WMI,
+	ATHEROS_CMD_QUITTING,
+	ATHEROS_CMD_FW_ERROR,
+	ATHEROS_CMD_QOS,
+	__ATHEROS_CMD_MAX,
+};
+#define ATHEROS_CMD_MAX (__ATHEROS_CMD_MAX - 1)
 
 int ath6kl_configure_target(struct ath6kl *ar);
 void ath6kl_detect_error(unsigned long ptr);
@@ -932,6 +957,7 @@ void aggr_reset_state(struct aggr_info_conn *aggr_conn);
 struct ath6kl_sta *ath6kl_find_sta(struct ath6kl_vif *vif, u8 *node_addr);
 struct ath6kl_sta *ath6kl_find_sta_by_aid(struct ath6kl *ar, u8 aid);
 
+void ath6kl_drv_event_multicast(enum atheros_cmd_id cmd_id, unsigned int reason);
 void ath6kl_ready_event(void *devt, u8 *datap, u32 sw_ver, u32 abi_ver,
 			enum wmi_phy_cap cap);
 int ath6kl_control_tx(void *devt, struct sk_buff *skb,
