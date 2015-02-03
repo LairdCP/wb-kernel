@@ -1224,7 +1224,15 @@ enum wmi_phy_mode {
 	WMI_11G_HT20	= 0x6,
 };
 
-#define WMI_MAX_CHANNELS        32
+#define WMI_MAX_CHANNELS        64
+
+struct wmi_channel_params_cmd {
+    u8     reserved1;
+    u8     scan_param;              /* set if enable scan */
+    u8     phy_mode;                /* see WMI_PHY_MODE */
+    u8     num_channels;            /* how many channels follow */
+    u16    channel_list[1];         /* channels in Mhz */
+} __attribute__((__packed__));
 
 /*
  *  WMI_RSSI_THRESHOLD_PARAMS_CMDID
@@ -2674,6 +2682,11 @@ int ath6kl_wmi_sta_bmiss_enhance_cmd(struct wmi *wmi, u8 if_idx, bool enable);
 int ath6kl_wmi_set_txe_notify(struct wmi *wmi, u8 idx,
 			      u32 rate, u32 pkts, u32 intvl);
 int ath6kl_wmi_set_regdomain_cmd(struct wmi *wmi, const char *alpha2);
+int ath6kl_wmi_channel_params_cmd(struct wmi *wmi, u8 if_idx, u8 scan_param,
+								u8 phy_mode, u8 num_channels, u16 *channel_list);
+int ath6kl_wmi_send_buf_cmd(struct wmi *wmi, u8 if_idx, enum wmi_cmd_id cmd_id,
+							u32 size, u8 *buf);
+void ath6kl_wmi_send_radio_mode(struct wmi *wmi, u8 if_idx);
 
 /* AP mode uAPSD */
 int ath6kl_wmi_ap_set_apsd(struct wmi *wmi, u8 if_idx, u8 enable);
@@ -2738,5 +2751,6 @@ struct ath6kl_vif *ath6kl_get_vif_by_index(struct ath6kl *ar, u8 if_idx);
 void *ath6kl_wmi_init(struct ath6kl *devt);
 void ath6kl_wmi_shutdown(struct wmi *wmi);
 void ath6kl_wmi_reset(struct wmi *wmi);
+int ath6kl_get_txpower(struct wiphy *wiphy, int *dbm);
 
 #endif /* WMI_H */
