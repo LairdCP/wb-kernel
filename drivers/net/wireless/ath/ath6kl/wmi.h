@@ -2192,6 +2192,17 @@ struct wmi_delba_event {
 	__le16 reason_code;
 } __packed;
 
+#ifdef LAIRD_FIPS
+/* WMI_ALLOW_AGGR_CMDID
+ * Configures tid's to allow ADDBA negotiations
+ * on each tid, in each direction
+ */
+struct wmi_allow_aggr_cmd{
+   u16 tx_allow_aggr; /* 16-bit mask to allow uplink ADDBA negotiation - bit position indicates tid */
+   u16 rx_allow_aggr; /* 16-bit mask to allow downlink ADDBA negotiation - bit position indicates tid */
+} __packed;
+#endif /* LAIRD_FIPS */
+
 #define PEER_NODE_JOIN_EVENT		0x00
 #define PEER_NODE_LEAVE_EVENT		0x01
 #define PEER_FIRST_NODE_JOIN_EVENT	0x10
