@@ -199,6 +199,16 @@ config BRIDGE_EBT_SNAT
 	  source address of frames.
 
 	  To compile it as a module, choose M here.  If unsure, say N.
+
+config BRIDGE_EBT_ARPNAT
+	tristate "ebt: arpnat target support"
+	depends on BRIDGE_NF_EBTABLES
+	help
+	  This option adds the ARP match, which allows ARP and RARP header field
+	  filtering
+
+	  To compile it as a module, choose M here. If unsure, say N.
+
 #
 # watchers
 #
