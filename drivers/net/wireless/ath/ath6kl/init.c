@@ -32,6 +32,8 @@
 #include "hif-ops.h"
 #include "htc-ops.h"
 
+#include "../../laird_fips/laird.h"
+
 static const struct ath6kl_hw hw_list[] = {
 	{
 		.id				= AR6003_HW_2_0_VERSION,
@@ -1894,6 +1896,13 @@ void ath6kl_stop_txrx(struct ath6kl *ar)
 		ath6kl_err("down_interruptible failed\n");
 		return;
 	}
+
+#ifdef LAIRD_FIPS
+	if (fips_mode) {
+		// wait for all fips in progress txrx to complete
+		laird_stop_txrx();
+	}
+#endif
 
 	for (i = 0; i < AP_MAX_NUM_STA; i++)
 		aggr_reset_state(ar->sta_list[i].aggr_conn);

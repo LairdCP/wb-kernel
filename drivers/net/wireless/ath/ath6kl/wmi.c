@@ -23,6 +23,7 @@
 #include "trace.h"
 #include "../regd.h"
 #include "../regd_common.h"
+#include "../../laird_fips/laird.h"
 
 static int ath6kl_wmi_sync_point(struct wmi *wmi, u8 if_idx);
 
@@ -321,6 +322,22 @@ int ath6kl_wmi_implicit_create_pstream(struct wmi *wmi, u8 if_idx,
 	if (!wmm_enabled) {
 		/* If WMM is disabled all traffic goes as BE traffic */
 		usr_pri = 0;
+#ifdef LAIRD_FIPS
+	} else if (fips_mode) {
+		struct ieee80211_qos_hdr *pwh;
+		pwh = (struct ieee80211_qos_hdr *)(datap +
+							 sizeof(struct
+								wmi_data_hdr) +
+							 meta_size);
+		if (le16_to_cpu(pwh->frame_control) & IEEE80211_STYPE_QOS_DATA) {
+			// qos packet, get priority from qos field
+			usr_pri = le16_to_cpu(pwh->qos_ctrl) & IEEE80211_QOS_CTL_TAG1D_MASK;
+		} else {
+			// non-qos, always use 0
+			usr_pri = 0;
+		}
+		// NOTE: wmm_enabled is still true when associated to non-qos AP
+#endif
 	} else {
 		hdr_size = sizeof(struct ethhdr);
 
@@ -3531,11 +3548,35 @@ int ath6kl_wmi_set_rx_frame_format_cmd(struct wmi *wmi, u8 if_idx,
 	struct wmi_rx_frame_format_cmd *cmd;
 	int ret;
 
+#ifdef LAIRD_FIPS
+	if (fips_mode) {
+		// Disable A-MSDU when in FIPS mode
+		struct wmi_allow_aggr_cmd *fips_cmd;
+		skb = ath6kl_wmi_get_new_buf(sizeof(*fips_cmd));
+		if (!skb)
+			return -ENOMEM;
+		fips_cmd = (struct wmi_allow_aggr_cmd *) skb->data;
+		/* Disable aggregation for Tx and Rx on all TIDs (one bit each) */
+		fips_cmd->tx_allow_aggr = 0x00;
+		fips_cmd->rx_allow_aggr = 0x00;
+		ret = ath6kl_wmi_cmd_send(wmi, if_idx, skb, WMI_ALLOW_AGGR_CMDID,
+				  NO_SYNC_WMIFLAG);
+	}
+#endif
+
 	skb = ath6kl_wmi_get_new_buf(sizeof(*cmd));
 	if (!skb)
 		return -ENOMEM;
 
 	cmd = (struct wmi_rx_frame_format_cmd *) skb->data;
+#ifdef LAIRD_FIPS
+	if (fips_mode) {
+        // force FIPS mode
+        rx_dot11_hdr = 1;
+        defrag_on_host =1;
+        cmd->reserved[0] = 1;
+	}
+#endif
 	cmd->dot11_hdr = rx_dot11_hdr ? 1 : 0;
 	cmd->defrag_on_host = defrag_on_host ? 1 : 0;
 	cmd->meta_ver = rx_meta_ver;

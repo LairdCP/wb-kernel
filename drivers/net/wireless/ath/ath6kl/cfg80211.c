@@ -811,6 +811,10 @@ void ath6kl_cfg80211_connect_event(struct ath6kl_vif *vif, u16 channel,
 		cfg80211_roamed_bss(vif->ndev, bss, assoc_req_ie, assoc_req_len,
 				    assoc_resp_ie, assoc_resp_len, GFP_KERNEL);
 	}
+
+#ifdef LAIRD_FIPS
+	if (fips_mode) laird_setbssid(bssid);
+#endif
 }
 
 static int ath6kl_cfg80211_disconnect(struct wiphy *wiphy,
@@ -846,6 +850,12 @@ static int ath6kl_cfg80211_disconnect(struct wiphy *wiphy,
 		memset(vif->req_bssid, 0, sizeof(vif->req_bssid));
 
 	up(&ar->sem);
+
+	vif->sme_state = SME_DISCONNECTED;
+
+#ifdef LAIRD_FIPS
+	if (fips_mode) laird_setbssid(NULL);
+#endif
 
 	return 0;
 }
@@ -1171,6 +1181,13 @@ static int ath6kl_cfg80211_add_key(struct wiphy *wiphy, struct net_device *ndev,
 	memcpy(key->seq, params->seq, key->seq_len);
 	key->cipher = params->cipher;
 
+#ifdef LAIRD_FIPS
+	if (fips_mode) {
+		laird_addkey(ndev, key_index, pairwise, mac_addr,
+					 key->key, key->key_len, key->seq, key->seq_len);
+	}
+#endif
+
 	switch (key->cipher) {
 	case WLAN_CIPHER_SUITE_WEP40:
 	case WLAN_CIPHER_SUITE_WEP104:
@@ -1269,6 +1286,12 @@ static int ath6kl_cfg80211_del_key(struct wiphy *wiphy, struct net_device *ndev,
 	}
 
 	vif->keys[key_index].key_len = 0;
+
+#ifdef LAIRD_FIPS
+	if (fips_mode) {
+		laird_delkey(ndev, key_index);
+	}
+#endif
 
 	return ath6kl_wmi_deletekey_cmd(ar->wmi, vif->fw_vif_idx, key_index);
 }
