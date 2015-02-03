@@ -22,6 +22,7 @@
 #include "cfg80211.h"
 #include "target.h"
 #include "debug.h"
+#include "wmiconfig.h"
 #include "../../laird_fips/laird.h"
 
 struct ath6kl_sta *ath6kl_find_sta(struct ath6kl_vif *vif, u8 *node_addr)
@@ -802,6 +803,10 @@ static void ath6kl_update_target_stats(struct ath6kl_vif *vif, u8 *ptr, u32 len)
 	stats->arp_received = le32_to_cpu(tgt_stats->arp_stats.arp_received);
 	stats->arp_replied = le32_to_cpu(tgt_stats->arp_stats.arp_replied);
 	stats->arp_matched = le32_to_cpu(tgt_stats->arp_stats.arp_matched);
+
+#ifdef CONFIG_NL80211_TESTMODE
+	ath6kl_wmicfg_send_stats(vif, stats);
+#endif
 
 	if (test_bit(STATS_UPDATE_PEND, &vif->flags)) {
 		clear_bit(STATS_UPDATE_PEND, &vif->flags);
