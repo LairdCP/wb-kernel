@@ -395,10 +395,9 @@ static unsigned int ebt_target_arpnat(struct sk_buff *pskb, const struct xt_acti
 		else if (eth_hdr(pskb)->h_proto == __constant_htons(ETH_P_IP))
 		{
 			struct iphdr *iph = ip_hdr(pskb);
-			struct udphdr *uh = NULL;
 			if (bootpnat && (unsigned char)iph->protocol == (unsigned char)IPPROTO_UDP && !(iph->frag_off & htons(IP_OFFSET)))
 			{
-				uh = (struct udphdr*)((u_int32_t *)iph + iph->ihl);
+				struct udphdr *uh = (struct udphdr*)((u_int32_t *)iph + iph->ihl);
 				if(uh->dest == htons(67) || uh->dest == htons(68) )
 				{
 					//do something illegal for BOOTP
@@ -540,13 +539,13 @@ static unsigned int ebt_target_arpnat(struct sk_buff *pskb, const struct xt_acti
 				break;
 			}
 		}
-		else if (bootpnat && eth_hdr(pskb)->h_proto == __constant_htons(ETH_P_IP) && memcmp(out_br_port->br->dev->dev_addr, eth_smac, ETH_ALEN))
+		else if (eth_hdr(pskb)->h_proto == __constant_htons(ETH_P_IP) && memcmp(out_br_port->br->dev->dev_addr, eth_smac, ETH_ALEN))
 		{
 			struct iphdr *iph = ip_hdr(pskb);
-			struct udphdr *uh = NULL;
-			if ( (unsigned char)iph->protocol == (unsigned char)IPPROTO_UDP && !(iph->frag_off & htons(IP_OFFSET)))
+
+			if (bootpnat && (unsigned char)iph->protocol == (unsigned char)IPPROTO_UDP && !(iph->frag_off & htons(IP_OFFSET)))
 			{
-				uh = (struct udphdr*)((u_int32_t *)iph + iph->ihl);
+				struct udphdr *uh = (struct udphdr*)((u_int32_t *)iph + iph->ihl);
 				if (uh->dest == htons(67) || uh->dest == htons(68) )
 				{
 					//do something illegal for BOOTP
@@ -569,14 +568,34 @@ static unsigned int ebt_target_arpnat(struct sk_buff *pskb, const struct xt_acti
 					uh->check = 0;
 					(pskb)->csum = csum_partial((uint8_t*)iph + ihl, size, 0);
 					uh->check = csum_tcpudp_magic(iph->saddr, iph->daddr, size, iph->protocol, (pskb)->csum);
-					
+
 					if (uh->check == 0)
 					{
 						uh->check = 0xFFFF;
 					}
 				}
 			}
+			else
+			{
+				/* use any packet for MAC/IP and update table if necessary */
+				if(!inet_confirm_addr(dev_net(out_br_port->br->dev), __in_dev_get_rcu(out_br_port->br->dev), 0, iph->saddr, RT_SCOPE_HOST))
+				{
+					spin_lock_irqsave(&arpnat_lock, flags);
+					entry = find_ip_nat(&arpnat_table, iph->saddr);
+					if (!entry)
+					{
+						update_arp_nat(&arpnat_table, eth_smac, iph->saddr);
+					}
+					spin_unlock_irqrestore(&arpnat_lock, flags);
+					if (!entry && debug)
+					{
+						printk("OUT ARPNAT ADDED ETH_P_IP: Source "STRMAC"["STRIP"] Destination "STRMAC"["STRIP"]\n"
+						      , MAC2STR(eth_smac), IP2STR(iph->saddr), MAC2STR(eth_dmac), IP2STR(iph->daddr));
+					}
+				}
+			}
 		}
+
 		memcpy(eth_smac, out->dev_addr, ETH_ALEN);
 	}
 	return info->target;
