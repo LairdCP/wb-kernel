@@ -32,7 +32,9 @@
 #include "hif-ops.h"
 #include "htc-ops.h"
 
+#ifdef CONFIG_ATH6KL_LAIRD_FIPS
 #include "../../laird_fips/laird.h"
+#endif
 
 static const struct ath6kl_hw hw_list[] = {
 	{
@@ -1898,7 +1900,7 @@ void ath6kl_stop_txrx(struct ath6kl *ar)
 		return;
 	}
 
-#ifdef LAIRD_FIPS
+#ifdef CONFIG_ATH6KL_LAIRD_FIPS
 	if (fips_mode) {
 		// wait for all fips in progress txrx to complete
 		laird_stop_txrx();

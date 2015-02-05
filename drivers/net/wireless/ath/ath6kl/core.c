@@ -27,7 +27,9 @@
 #include "htc-ops.h"
 #include "cfg80211.h"
 
+#ifdef CONFIG_ATH6KL_LAIRD_FIPS
 #include "../../laird_fips/laird.h"
+#endif
 
 unsigned int debug_mask;
 static unsigned int suspend_mode;
@@ -372,7 +374,7 @@ MODULE_AUTHOR("Qualcomm Atheros");
 MODULE_DESCRIPTION("Core module for AR600x SDIO and USB devices.");
 MODULE_LICENSE("Dual BSD/GPL");
 
-#ifdef LAIRD_FIPS
+#ifdef CONFIG_ATH6KL_LAIRD_FIPS
 // module parameter for enabling fips mode on load
 bool fips_mode = 0;
 module_param(fips_mode, bool, S_IRUGO);

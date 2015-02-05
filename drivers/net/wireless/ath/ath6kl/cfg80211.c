@@ -813,7 +813,7 @@ void ath6kl_cfg80211_connect_event(struct ath6kl_vif *vif, u16 channel,
 				    assoc_resp_ie, assoc_resp_len, GFP_KERNEL);
 	}
 
-#ifdef LAIRD_FIPS
+#ifdef CONFIG_ATH6KL_LAIRD_FIPS
 	if (fips_mode) laird_setbssid(bssid);
 #endif
 }
@@ -854,7 +854,7 @@ static int ath6kl_cfg80211_disconnect(struct wiphy *wiphy,
 
 	vif->sme_state = SME_DISCONNECTED;
 
-#ifdef LAIRD_FIPS
+#ifdef CONFIG_ATH6KL_LAIRD_FIPS
 	if (fips_mode) laird_setbssid(NULL);
 #endif
 
@@ -1182,7 +1182,7 @@ static int ath6kl_cfg80211_add_key(struct wiphy *wiphy, struct net_device *ndev,
 	memcpy(key->seq, params->seq, key->seq_len);
 	key->cipher = params->cipher;
 
-#ifdef LAIRD_FIPS
+#ifdef CONFIG_ATH6KL_LAIRD_FIPS
 	if (fips_mode) {
 		laird_addkey(ndev, key_index, pairwise, mac_addr,
 					 key->key, key->key_len, key->seq, key->seq_len);
@@ -1288,7 +1288,7 @@ static int ath6kl_cfg80211_del_key(struct wiphy *wiphy, struct net_device *ndev,
 
 	vif->keys[key_index].key_len = 0;
 
-#ifdef LAIRD_FIPS
+#ifdef CONFIG_ATH6KL_LAIRD_FIPS
 	if (fips_mode) {
 		laird_delkey(ndev, key_index);
 	}

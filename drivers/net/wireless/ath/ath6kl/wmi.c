@@ -24,7 +24,9 @@
 #include "trace.h"
 #include "../regd.h"
 #include "../regd_common.h"
+#ifdef CONFIG_ATH6KL_LAIRD_FIPS
 #include "../../laird_fips/laird.h"
+#endif
 #include "wmiconfig.h"
 
 static int ath6kl_wmi_sync_point(struct wmi *wmi, u8 if_idx);
@@ -124,6 +126,11 @@ static const u8 up_to_ac[] = {
 	WMM_AC_VO,
 	WMM_AC_VO,
 };
+
+/* Laird version is 32bit value.  Parsed in the form w.x.y.z.
+ * increment y.z as needed for each change
+ */
+#define LAIRD_DRV_VERSION 0x03050001
 
 static void __lrd_remove_channels(struct ath6kl *ar, u8 *num_channels, u16 *channel_list);
 static void __lrd_set_AP_Name(struct wmi *wmi, const char *apname);
@@ -341,7 +348,7 @@ int ath6kl_wmi_implicit_create_pstream(struct wmi *wmi, u8 if_idx,
 	if (!wmm_enabled) {
 		/* If WMM is disabled all traffic goes as BE traffic */
 		usr_pri = 0;
-#ifdef LAIRD_FIPS
+#ifdef CONFIG_ATH6KL_LAIRD_FIPS
 	} else if (fips_mode) {
 		struct ieee80211_qos_hdr *pwh;
 		pwh = (struct ieee80211_qos_hdr *)(datap +
@@ -3609,7 +3616,7 @@ int ath6kl_wmi_set_rx_frame_format_cmd(struct wmi *wmi, u8 if_idx,
 	struct wmi_rx_frame_format_cmd *cmd;
 	int ret;
 
-#ifdef LAIRD_FIPS
+#ifdef CONFIG_ATH6KL_LAIRD_FIPS
 	if (fips_mode) {
 		// Disable A-MSDU when in FIPS mode
 		struct wmi_allow_aggr_cmd *fips_cmd;
@@ -3630,7 +3637,7 @@ int ath6kl_wmi_set_rx_frame_format_cmd(struct wmi *wmi, u8 if_idx,
 		return -ENOMEM;
 
 	cmd = (struct wmi_rx_frame_format_cmd *) skb->data;
-#ifdef LAIRD_FIPS
+#ifdef CONFIG_ATH6KL_LAIRD_FIPS
 	if (fips_mode) {
         // force FIPS mode
         rx_dot11_hdr = 1;
