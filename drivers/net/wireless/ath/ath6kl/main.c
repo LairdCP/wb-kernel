@@ -23,7 +23,9 @@
 #include "target.h"
 #include "debug.h"
 #include "wmiconfig.h"
+#ifdef CONFIG_ATH6KL_LAIRD_FIPS
 #include "../../laird_fips/laird.h"
+#endif
 
 struct ath6kl_sta *ath6kl_find_sta(struct ath6kl_vif *vif, u8 *node_addr)
 {
@@ -1304,7 +1306,7 @@ void init_netdev(struct net_device *dev)
 	dev->destructor = free_netdev;
 	dev->watchdog_timeo = ATH6KL_TX_TIMEOUT;
 
-#ifdef LAIRD_FIPS
+#ifdef CONFIG_ATH6KL_LAIRD_FIPS
 	if (fips_mode) {
 		// TBD: fix with correct header length
 		dev->needed_headroom = 32 + 8;
@@ -1319,7 +1321,7 @@ void init_netdev(struct net_device *dev)
 					WMI_MAX_TX_META_SZ +
 					ATH6KL_HTC_ALIGN_BYTES, 4);
 
-#ifdef LAIRD_FIPS
+#ifdef CONFIG_ATH6KL_LAIRD_FIPS
 	if (!fips_mode)
 		// can only support hardware ip checksum in non-fips mode
 #endif

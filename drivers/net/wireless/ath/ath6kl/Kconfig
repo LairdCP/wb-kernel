@@ -63,3 +63,14 @@ config ATH6KL_REGDOMAIN
 	  are taken into account.
 
 	  If unsure, say N.
+
+config ATH6KL_LAIRD_FIPS
+	bool "Atheros ath6kl Laird based FIPS support"
+	depends on ATH6KL
+	depends on LAIRD_FIPS
+	---help---
+	  Enabling this makes it possible to enable FIPS mode while using
+	  Laird software, firmware, and hardware. This can only be enabled
+	  if the Laird FIPS module is also selected.
+
+	  If unsure, say N.
