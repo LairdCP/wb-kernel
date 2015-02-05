@@ -4563,7 +4563,7 @@ static void ath6kl_wmi_event_multicast(enum wmi_cmd_id cmd_id, u8 *datap, int le
     struct sk_buff *msg;
 	void *hdr;
 
-    msg = genlmsg_new(NLMSG_DEFAULT_SIZE, GFP_KERNEL);
+    msg = genlmsg_new(NLMSG_DEFAULT_SIZE, GFP_ATOMIC);
 	if (!msg)
 		return;
 
@@ -4579,7 +4579,7 @@ static void ath6kl_wmi_event_multicast(enum wmi_cmd_id cmd_id, u8 *datap, int le
 
 	genlmsg_end(msg, hdr);
 
-	genlmsg_multicast(&atheros_fam, msg, 0, ATH_MCGRP_EVENTS, GFP_KERNEL);
+	genlmsg_multicast(&atheros_fam, msg, 0, ATH_MCGRP_EVENTS, GFP_ATOMIC);
 
 	return;
 
@@ -4593,7 +4593,7 @@ void ath6kl_drv_event_multicast(enum atheros_cmd_id cmd_id, unsigned int reason)
 	struct sk_buff *msg = NULL;
 	void *hdr = NULL;
 
-	msg = genlmsg_new(NLMSG_DEFAULT_SIZE, GFP_KERNEL);
+	msg = genlmsg_new(NLMSG_DEFAULT_SIZE, GFP_ATOMIC);
 	if (msg)
 		hdr = genlmsg_put(msg, 0, 0, &atheros_fam, 0, cmd_id);
 	if (!hdr)
@@ -4602,7 +4602,7 @@ void ath6kl_drv_event_multicast(enum atheros_cmd_id cmd_id, unsigned int reason)
 		if(nla_put_u32(msg, ATHEROS_ATTR_MSG, reason))
 			goto nla_put_failure;
 		genlmsg_end(msg, hdr);
-		genlmsg_multicast(&atheros_fam, msg, 0, ATH_MCGRP_EVENTS, GFP_KERNEL);
+		genlmsg_multicast(&atheros_fam, msg, 0, ATH_MCGRP_EVENTS, GFP_ATOMIC);
 	}
 
 	return;
