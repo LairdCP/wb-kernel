@@ -6,12 +6,7 @@
 #ifndef LAIRD_DRIVER_H
 #define LAIRD_DRIVER_H
 
-/* Laird version is 32bit value.  Parsed in the form w.x.y.z.
- * increment y.z as needed for each change
- */
-#define LAIRD_DRV_VERSION 0x03050001
 
-#ifdef LAIRD_FIPS
 #include <linux/etherdevice.h>
 #include "laird_common.h"
 
@@ -104,5 +99,4 @@ static inline void laird_stop_txrx(void)
 	(*(laird_register_data->pfn_stop_txrx)) ();
 }
 
-#endif /* LAIRD_FIPS */
 #endif /* LAIRD_DRIVER_H */
