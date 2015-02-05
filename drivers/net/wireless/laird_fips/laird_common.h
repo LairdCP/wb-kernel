@@ -6,7 +6,6 @@
 #ifndef LAIRD_COMMON_H
 #define LAIRD_COMMON_H
 
-#ifdef LAIRD_FIPS
 
 /* res<0 to fail packet, else continue receive */
 typedef void (*pfn_laird_skb_rx_continue) (struct sk_buff * skb, int res);
@@ -66,5 +65,4 @@ typedef struct {
 /* external driver function that the laird module will call */
 extern int ath6kl_laird_register(const laird_register_data_t * ptr);
 
-#endif /* LAIRD_FIPS */
 #endif /* LAIRD_COMMON_H */
