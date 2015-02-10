@@ -1,7 +1,7 @@
 VERSION = 3
 PATCHLEVEL = 2
 SUBLEVEL = 0
-EXTRAVERSION = -laird01
+EXTRAVERSION = -laird02
 NAME = Saber-toothed Squirrel
 
 # *DOCUMENTATION*
