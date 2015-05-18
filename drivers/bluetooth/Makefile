@@ -10,6 +10,7 @@ obj-$(CONFIG_BT_HCIBFUSB)	+= bfusb.o
 obj-$(CONFIG_BT_HCIDTL1)	+= dtl1_cs.o
 obj-$(CONFIG_BT_HCIBT3C)	+= bt3c_cs.o
 obj-$(CONFIG_BT_HCIBLUECARD)	+= bluecard_cs.o
+obj-$(CONFIG_BT_HCISS1USB)	+= ss1btusb.o
 obj-$(CONFIG_BT_HCIBTUART)	+= btuart_cs.o
 
 obj-$(CONFIG_BT_HCIBTUSB)	+= btusb.o
