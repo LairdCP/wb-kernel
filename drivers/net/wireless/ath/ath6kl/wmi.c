@@ -132,7 +132,6 @@ static const u8 up_to_ac[] = {
  */
 #define LAIRD_DRV_VERSION 0x03050001
 
-static void __lrd_remove_channels(struct ath6kl *ar, u8 *num_channels, u16 *channel_list);
 static void __lrd_set_AP_Name(struct wmi *wmi, const char *apname);
 static void __lrd_set_AP_IP(struct wmi *wmi, const char *apip);
 
@@ -2040,18 +2039,12 @@ static int ath6kl_wmi_startscan_cmd(struct wmi *wmi, u8 if_idx,
 	struct sk_buff *skb;
 	struct wmi_start_scan_cmd *sc;
 	s8 size;
-	int i, ret;
+	int ret;
 
 	size = sizeof(struct wmi_start_scan_cmd);
 
 	if ((scan_type != WMI_LONG_SCAN) && (scan_type != WMI_SHORT_SCAN))
 		return -EINVAL;
-
-	if (num_chan > WMI_MAX_CHANNELS)
-		return -EINVAL;
-
-	if (num_chan)
-		size += sizeof(u16) * (num_chan - 1);
 
 	skb = ath6kl_wmi_get_new_buf(size);
 	if (!skb)
@@ -2063,10 +2056,7 @@ static int ath6kl_wmi_startscan_cmd(struct wmi *wmi, u8 if_idx,
 	sc->is_legacy = cpu_to_le32(is_legacy);
 	sc->home_dwell_time = cpu_to_le32(home_dwell_time);
 	sc->force_scan_intvl = cpu_to_le32(force_scan_interval);
-	sc->num_ch = num_chan;
-
-	for (i = 0; i < num_chan; i++)
-		sc->ch_list[i] = cpu_to_le16(ch_list[i]);
+	sc->num_ch = 0;
 
 	ret = ath6kl_wmi_cmd_send(wmi, if_idx, skb, WMI_START_SCAN_CMDID,
 				  NO_SYNC_WMIFLAG);
@@ -2085,17 +2075,12 @@ int ath6kl_wmi_beginscan_cmd(struct wmi *wmi, u8 if_idx,
 			     u32 home_dwell_time, u32 force_scan_interval,
 			     s8 num_chan, u16 *ch_list, u32 no_cck, u32 *rates)
 {
-	struct ieee80211_supported_band *sband;
 	struct sk_buff *skb;
 	struct wmi_begin_scan_cmd *sc;
-	s8 size, *supp_rates;
-	int i, band, ret;
+	s8 size;
+	int ret;
 	struct ath6kl *ar = wmi->parent_dev;
 	struct ath6kl_vif *vif = ath6kl_get_vif_by_index(ar, if_idx);
-	int num_rates;
-	u32 ratemask;
-
-	__lrd_remove_channels(ar, &num_chan, ch_list);
 
 	if(vif && vif->sme_state != SME_CONNECTED)
 		ath6kl_wmi_send_radio_mode(wmi, if_idx);
@@ -2114,12 +2099,6 @@ int ath6kl_wmi_beginscan_cmd(struct wmi *wmi, u8 if_idx,
 	if ((scan_type != WMI_LONG_SCAN) && (scan_type != WMI_SHORT_SCAN))
 		return -EINVAL;
 
-	if (num_chan > WMI_MAX_CHANNELS)
-		return -EINVAL;
-
-	if (num_chan)
-		size += sizeof(u16) * (num_chan - 1);
-
 	skb = ath6kl_wmi_get_new_buf(size);
 	if (!skb)
 		return -ENOMEM;
@@ -2131,32 +2110,9 @@ int ath6kl_wmi_beginscan_cmd(struct wmi *wmi, u8 if_idx,
 	sc->home_dwell_time = cpu_to_le32(home_dwell_time);
 	sc->force_scan_intvl = cpu_to_le32(force_scan_interval);
 	sc->no_cck = cpu_to_le32(no_cck);
-	sc->num_ch = num_chan;
-
-	for (band = 0; band < NUM_NL80211_BANDS; band++) {
-		sband = ar->wiphy->bands[band];
-
-		if (!sband)
-			continue;
-
-		if (WARN_ON(band >= ATH6KL_NUM_BANDS))
-			break;
-
-		ratemask = rates[band];
-		supp_rates = sc->supp_rates[band].rates;
-		num_rates = 0;
-
-		for (i = 0; i < sband->n_bitrates; i++) {
-			if ((BIT(i) & ratemask) == 0)
-				continue; /* skip rate */
-			supp_rates[num_rates++] =
-			    (u8) (sband->bitrates[i].bitrate / 5);
-		}
-		sc->supp_rates[band].nrates = num_rates;
-	}
-
-	for (i = 0; i < num_chan; i++)
-		sc->ch_list[i] = cpu_to_le16(ch_list[i]);
+	sc->num_ch = 0;
+	sc->supp_rates[A_BAND_24GHZ].nrates = 0;
+	sc->supp_rates[A_BAND_5GHZ].nrates = 0;
 
 	ret = ath6kl_wmi_cmd_send(wmi, if_idx, skb, WMI_BEGIN_SCAN_CMDID,
 				  NO_SYNC_WMIFLAG);
@@ -4260,32 +4216,6 @@ static bool __freq_is_specified(struct ath6kl *ar, const u16 freq)
 			return true;
 
 	return false;
-}
-
-static void __lrd_remove_channels(struct ath6kl *ar, u8 *num_channels, u16 *channel_list)
-{
-	u32 i = 0;
-	u32 lastunused = 0;
-	u32 n_channels = 0;
-
-	//If phy_mode == 0, then we haven't set this information yet so don't prune list
-	if(ar->laird.phy_mode == 0)
-		return;
-
-	n_channels = *num_channels;
-	for(i = 0; i < n_channels; i++)
-	{
-		if (!__freq_is_specified(ar, channel_list[i]))
-		{
-			(*num_channels)--;
-		}
-		else
-		{
-			if (i > lastunused)
-				channel_list[lastunused] = channel_list[i];
-			lastunused++;
-		}
-	}
 }
 
 int ath6kl_wmi_channel_params_cmd(struct wmi *wmi, u8 if_idx, u8 scan_param,
