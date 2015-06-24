@@ -1380,12 +1380,6 @@ static int ath6kl_sdio_probe(struct sdio_func *func,
 
 	ath6kl_sdio_set_mbox_info(ar);
 
-	if( ret = gpio_request_one(PWR_RESET_GPIO, GPIOF_OUT_INIT_HIGH|GPIOF_EXPORT_DIR_FIXED, "WIFI_RESET") ) {
-		ath6kl_err("Unable to get WIFI power gpio: %d\n", ret);
-	} else {
-		ath6kl_dbg(ATH6KL_DBG_SUSPEND, "Setup wifi gpio #%d\n", PWR_RESET_GPIO);
-	}
-
 	ret = ath6kl_sdio_config(ar);
 	if (ret) {
 		ath6kl_err("Failed to config sdio: %d\n", ret);
@@ -1428,7 +1422,6 @@ static void ath6kl_sdio_remove(struct sdio_func *func)
 
 	kfree(ar_sdio->dma_buffer);
 	kfree(ar_sdio);
-	gpio_free(PWR_RESET_GPIO);
 }
 
 static const struct sdio_device_id ath6kl_sdio_devices[] = {
@@ -1453,9 +1446,32 @@ static int __init ath6kl_sdio_init(void)
 {
 	int ret;
 
+	/* Request the reset GPIO, and assert it to make sure we get a 100% clean boot */
+	if(gpio_request_one(PWR_RESET_GPIO, GPIOF_OUT_INIT_LOW|GPIOF_EXPORT_DIR_FIXED, "WIFI_RESET") ) {
+		ath6kl_err("Unable to get WIFI power gpio: %d\n", ret);
+	} else {
+		ath6kl_dbg(ATH6KL_DBG_SUSPEND, "Setup wifi gpio #%d\n", PWR_RESET_GPIO);
+		udelay(10); /* Pin must be asserted at least 5 usec, this usually takes longer, but let's be sure */
+		gpio_set_value(PWR_RESET_GPIO, 1); /* De-assert the pin for normal operation */
+	}
+
+	/* Delay hack to avoid the mmc driver calling the probe on the prior notice of the chip,
+	 * which we just killed. If this is missing, it results in a spurious warning:
+	 * "ath6kl_sdio: probe of mmc0:0001:1 failed with error -110"
+	 */
+	mdelay(150);
+
 	ret = sdio_register_driver(&ath6kl_sdio_driver);
-	if (ret)
+	if (ret) {
 		ath6kl_err("sdio driver registration failed: %d\n", ret);
+		goto err_gpio;
+	}
+
+	return ret;
+
+err_gpio:
+	gpio_set_value(PWR_RESET_GPIO, 0);
+	gpio_free(PWR_RESET_GPIO); /* doesn't need a guard */
 
 	return ret;
 }
@@ -1463,6 +1479,15 @@ static int __init ath6kl_sdio_init(void)
 static void __exit ath6kl_sdio_exit(void)
 {
 	sdio_unregister_driver(&ath6kl_sdio_driver);
+
+	/* Delay hack to avoid pulling the plug on the chip when an irq is pending and then getting
+	 * a spurious message "ath6kl: failed to get pending recv messages: -125"
+	 */
+	mdelay(1000);
+
+	/* Be sure we leave the chip in reset when we unload and also release the GPIO */
+	gpio_set_value(PWR_RESET_GPIO, 0);
+	gpio_free(PWR_RESET_GPIO);
 }
 
 module_init(ath6kl_sdio_init);
