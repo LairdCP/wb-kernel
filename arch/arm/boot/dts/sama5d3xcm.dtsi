@@ -11,12 +11,12 @@
 	compatible = "atmel,sama5d3xcm", "atmel,sama5d3", "atmel,sama5";
 
 	chosen {
-		bootargs = "rootfstype=ubifs ubi.mtd=5 root=ubi0:rootfs";
+		bootargs = "console=ttyS0,115200 earlyprintk loglevel=7 mem=64M rootfstype=ubifs ubi.mtd=5 root=ubi0:rootfs";
 		stdout-path = "serial0:115200n8";
 	};
 
 	memory {
-		reg = <0x20000000 0x20000000>;
+		reg = <0x20000000 0x4000000>;
 	};
 
 	clocks {
@@ -47,32 +47,52 @@
 
 			at91bootstrap@0 {
 				label = "at91bootstrap";
-				reg = <0x0 0x40000>;
+				reg = <0x0 0x20000>;
 			};
 
-			bootloader@40000 {
-				label = "bootloader";
-				reg = <0x40000 0x80000>;
+			uboot@20000 {
+				label = "u-boot";
+				reg = <0x20000 0x80000>;
 			};
 
-			bootloaderenv@c0000 {
-				label = "bootloader env";
-				reg = <0xc0000 0xc0000>;
+			ubootenv@a0000 {
+				label = "U-Boot Env";
+				reg = <0xa0000 0x20000>;
 			};
 
-			dtb@180000 {
-				label = "device tree";
-				reg = <0x180000 0x80000>;
+			ubootenv@c0000 {
+				label = "U-Boot Redund Env";
+				reg = <0xc0000 0x20000>;
 			};
 
-			kernel@200000 {
-				label = "kernel";
-				reg = <0x200000 0x600000>;
+			kernel-a@e0000 {
+				label = "kernel-a";
+				reg = <0xe0000 0x280000>;
 			};
 
-			rootfs@800000 {
-				label = "rootfs";
-				reg = <0x800000 0x0f800000>;
+			kernel-b@360000 {
+				label = "kernel-b";
+				reg = <0x360000 0x280000>;
+			};
+
+			rootfs-a@5e0000 {
+				label = "rootfs-a";
+				reg = <0x5e0000 0x2600000>;
+			};
+
+			rootfs-b@2be0000 {
+				label = "rootfs-b";
+				reg = <0x2be0000 0x2600000>;
+			};
+
+			user@51e0000 {
+				label = "user";
+				reg = <0x51e0000 0x2dc0000>;
+			};
+
+			logs@7fa0000 {
+				label = "logs";
+				reg = <0x7fa0000 0x60000>;
 			};
 		};
 	};
