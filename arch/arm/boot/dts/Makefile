@@ -43,7 +43,8 @@ dtb-$(CONFIG_SOC_AT91SAM9) += \
 	at91sam9g25ek.dtb \
 	at91sam9g35ek.dtb \
 	at91sam9x25ek.dtb \
-	at91sam9x35ek.dtb
+	at91sam9x35ek.dtb \
+	wb45n.dtb
 dtb-$(CONFIG_SOC_SAM_V7) += \
 	at91-kizbox2.dtb \
 	at91-sama5d2_xplained.dtb \
