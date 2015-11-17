@@ -1295,8 +1295,44 @@ static int ath6kl_sdio_pm_resume(struct device *device)
 	return 0;
 }
 
-static SIMPLE_DEV_PM_OPS(ath6kl_sdio_pm_ops, ath6kl_sdio_pm_suspend,
-			 ath6kl_sdio_pm_resume);
+/* Below handlers leverage the PM system to make sure we turn on and off
+ * the power gpio at the right time. If we do it in the earlier power on
+ * and off handlers for the sdio, we get errors from the mmc subsystem.
+ */
+static int ath6kl_sdio_pm_suspend_late(struct device *device)
+{
+	ath6kl_dbg(ATH6KL_DBG_SUSPEND, "sdio pm ath6kl_sdio_pm_suspend_late\n");
+
+	if (gpio_is_valid(reset_pwd_gpio))
+		gpio_set_value(reset_pwd_gpio, 0);
+
+	return 0;
+}
+
+static int ath6kl_sdio_pm_resume_early(struct device *device)
+{
+	ath6kl_dbg(ATH6KL_DBG_SUSPEND, "sdio pm ath6kl_sdio_pm_resume_early\n");
+
+	if (gpio_is_valid(reset_pwd_gpio)) {
+		gpio_set_value(reset_pwd_gpio, 1);
+		usleep_range(1000, 5000); /* wait for power up */
+	}
+	return 0;
+}
+
+/* The GPIO version requires the more complex dev_pm_ops setup */
+const struct dev_pm_ops ath6kl_sdio_pm_ops = {
+	.suspend = ath6kl_sdio_pm_suspend,
+	.suspend_late = ath6kl_sdio_pm_suspend_late,
+	.resume_early = ath6kl_sdio_pm_resume_early,
+	.resume = ath6kl_sdio_pm_resume,
+	.freeze = ath6kl_sdio_pm_suspend,
+	.thaw = ath6kl_sdio_pm_resume,
+	.poweroff = ath6kl_sdio_pm_suspend,
+	.poweroff_late = ath6kl_sdio_pm_suspend_late,
+	.restore_early = ath6kl_sdio_pm_resume_early,
+	.restore = ath6kl_sdio_pm_resume,
+};
 
 #define ATH6KL_SDIO_PM_OPS (&ath6kl_sdio_pm_ops)
 
