@@ -108,7 +108,7 @@ static bool ath6kl_process_uapsdq(struct ath6kl_sta *conn,
 {
 	struct ath6kl *ar = vif->ar;
 	bool is_apsdq_empty = false;
-	struct ethhdr *datap = (struct ethhdr *) skb->data;
+	struct ethhdr *datap = (struct ethhdr *)skb->data;
 	u8 up = 0, traffic_class, *ip_hdr;
 	u16 ether_type;
 	struct ath6kl_llc_snap_hdr *llc_hdr;
@@ -1368,6 +1368,33 @@ static void ath6kl_uapsd_trigger_frame_rx(struct ath6kl_vif *vif,
 
 // for forward reference
 void laird_skb_rx_continue(struct sk_buff *skb, int res);
+#ifdef CONFIG_ATH6KL_LAIRD_FIPS
+typedef struct {
+	struct htc_target *target;
+	bool is_amsdu;
+	u16 seq_no;
+	u8 tid;
+	u8 if_idx;
+} rx_stash_t; /* save receive information for later */
+
+static inline void laird_skb_put_stash(struct sk_buff *skb, rx_stash_t *pstash)
+{
+	rx_stash_t **ppstash;
+
+	ppstash = (rx_stash_t **)((u8 *)skb->cb +
+				  sizeof(skb->cb) - sizeof(*ppstash));
+	*ppstash = pstash;
+}
+
+static inline rx_stash_t *laird_skb_get_stash(struct sk_buff *skb)
+{
+	rx_stash_t **ppstash;
+
+	ppstash = (rx_stash_t **)((u8 *)skb->cb +
+				  sizeof(skb->cb) - sizeof(*ppstash));
+	return *ppstash;
+}
+#endif
 
 void ath6kl_rx(struct htc_target *target, struct htc_packet *packet)
 {
@@ -1616,11 +1643,29 @@ void ath6kl_rx(struct htc_target *target, struct htc_packet *packet)
 #ifdef CONFIG_ATH6KL_LAIRD_FIPS
 	if (fips_mode) {
 		int res;
+		rx_stash_t *stash;
+
+		/* stash fields for use in callback */
+		stash = kmalloc(sizeof(*stash), GFP_ATOMIC);
+		laird_skb_put_stash(skb, stash);
+		if (!stash) {
+			dev_kfree_skb(skb);
+			return;
+		}
+		stash->target = target;
+		stash->if_idx = if_idx;
+		stash->is_amsdu = is_amsdu;
+		stash->tid = tid;
+		stash->seq_no = seq_no;
+
 		res = laird_skb_rx_prep(skb, &laird_skb_rx_continue);
 		if (res == 0) {
 			// will continue in laird_skb_rx_continue
 			return;
 		}
+
+		kfree(stash);
+
 		if (res < 0) {
 			// failed -- delete packet
 			dev_kfree_skb(skb);
@@ -1712,13 +1757,61 @@ void ath6kl_rx(struct htc_target *target, struct htc_packet *packet)
 // continue receive packet processing
 void laird_skb_rx_continue(struct sk_buff *skb, int res)
 {
+	rx_stash_t *stash;
+	struct htc_target *target;
+	struct ath6kl *ar;
+	bool is_amsdu;
+	u16 seq_no;
+	u8 tid, if_idx;
+	struct ethhdr *datap;
+	struct ath6kl_vif *vif;
+	struct aggr_info_conn *aggr_conn;
+
+	/* restore data from stash */
+	stash = laird_skb_get_stash(skb);
+	target = stash->target;
+	if_idx = stash->if_idx;
+	is_amsdu = stash->is_amsdu;
+	tid = stash->tid;
+	seq_no = stash->seq_no;
+	kfree(stash);
+
 	if (res < 0) {
 		// failed decrypt -- free buffer
 		dev_kfree_skb(skb);
-	} else {
-		// TBD: above is now using vif->ndev ???
-		ath6kl_deliver_frames_to_nw_stack(skb->dev, skb);
+		return;
 	}
+
+	ar = target->dev->ar;
+	vif = ath6kl_get_vif_by_index(ar, if_idx);
+	if (!vif) {
+		dev_kfree_skb(skb);
+		return;
+	}
+
+	/* following is copied from above with
+	 * deletion of AP_NETWORK
+	 */
+	if (!(vif->ndev->flags & IFF_UP)) {
+		dev_kfree_skb(skb);
+		return;
+	}
+
+	datap = (struct ethhdr *)skb->data;
+
+	if (is_unicast_ether_addr(datap->h_dest)) {
+			aggr_conn = vif->aggr_cntxt->aggr_conn;
+
+		if (aggr_process_recv_frm(aggr_conn, tid, seq_no,
+					  is_amsdu, skb)) {
+			/* aggregation code will handle the skb */
+			return;
+		}
+	} else if (!is_broadcast_ether_addr(datap->h_dest)) {
+		vif->net_stats.multicast++;
+	}
+
+	ath6kl_deliver_frames_to_nw_stack(vif->ndev, skb);
 }
 #endif
 
