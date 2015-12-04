@@ -699,6 +699,29 @@ static int ath6kl_get_fw(struct ath6kl *ar, const char *filename,
 	return ret;
 }
 
+static int ath6kl_get_fw_vm(struct ath6kl *ar, const char *filename,
+			 u8 **fw, size_t *fw_len)
+{
+	const struct firmware *fw_entry;
+	int ret;
+
+	ret = request_firmware(&fw_entry, filename, ar->dev);
+	if (ret)
+		return ret;
+
+	*fw_len = fw_entry->size;
+	*fw = vmalloc(*fw_len);
+
+	if (*fw == NULL)
+		ret = -ENOMEM;
+
+	memcpy(*fw, fw_entry->data, *fw_len);
+
+	release_firmware(fw_entry);
+
+	return ret;
+}
+
 #ifdef CONFIG_OF
 /*
  * Check the device tree for a board-id and use it to construct
@@ -846,7 +869,7 @@ static int ath6kl_fetch_testmode_file(struct ath6kl *ar)
 
 	set_bit(TESTMODE, &ar->flag);
 
-	ret = ath6kl_get_fw(ar, filename, &ar->fw, &ar->fw_len);
+	ret = ath6kl_get_fw_vm(ar, filename, &ar->fw, &ar->fw_len);
 	if (ret) {
 		ath6kl_err("Failed to get testmode %d firmware file %s: %d\n",
 			   ar->testmode, filename, ret);
@@ -871,7 +894,7 @@ static int ath6kl_fetch_fw_file(struct ath6kl *ar)
 	snprintf(filename, sizeof(filename), "%s/%s",
 		 ar->hw.fw.dir, ar->hw.fw.fw);
 
-	ret = ath6kl_get_fw(ar, filename, &ar->fw, &ar->fw_len);
+	ret = ath6kl_get_fw_vm(ar, filename, &ar->fw, &ar->fw_len);
 	if (ret) {
 		ath6kl_err("Failed to get firmware file %s: %d\n",
 			   filename, ret);
