@@ -139,6 +139,12 @@
 			spi1: spi@f8008000 {
 				cs-gpios = <&pioC 25 0>, <0>, <0>, <0>;
 				status = "okay";
+
+			        spidev@0 {
+				          compatible = "spidev";
+				          reg = <0>;
+				          spi-max-frequency = <8000000>;
+			         };
 			};
 
 			watchdog@fffffe40 {
