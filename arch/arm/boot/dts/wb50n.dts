@@ -37,6 +37,14 @@
 				main: mainck {
 					clock-frequency = <12000000>;
 				};
+
+				periphck {
+					usart1_clk: usart1_clk {
+						#clock-cells = <0>;
+						reg = <13>;
+						atmel,clk-output-range = <0 132000000>;
+					};
+				};
 			};
 
 			pinctrl@fffff200 {
