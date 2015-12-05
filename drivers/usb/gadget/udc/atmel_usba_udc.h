@@ -238,6 +238,7 @@
 #define DBG_FIFO	0x0040  /* debug FIFO contents */
 #define DBG_DMA		0x0080  /* debug DMA handling */
 #define DBG_REQ		0x0100	/* print out queued request length */
+#define DBG_PM		0x0200  /* debug power management */
 #define DBG_ALL		0xffff
 #define DBG_NONE	0x0000
 
