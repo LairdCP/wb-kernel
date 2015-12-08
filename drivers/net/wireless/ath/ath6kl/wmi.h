@@ -2205,9 +2205,13 @@ struct wmi_delba_event {
  * Configures tid's to allow ADDBA negotiations
  * on each tid, in each direction
  */
-struct wmi_allow_aggr_cmd{
-   u16 tx_allow_aggr; /* 16-bit mask to allow uplink ADDBA negotiation - bit position indicates tid */
-   u16 rx_allow_aggr; /* 16-bit mask to allow downlink ADDBA negotiation - bit position indicates tid */
+struct wmi_allow_aggr_cmd {
+	u16 tx_allow_aggr; /* 16-bit mask to allow uplink ADDBA negotiation
+			    * bit position indicates tid
+			    */
+	u16 rx_allow_aggr; /* 16-bit mask to allow downlink ADDBA negotiation
+			    * bit position indicates tid
+			    */
 } __packed;
 #endif /* CONFIG_ATH6KL_LAIRD_FIPS */
 

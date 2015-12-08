@@ -1308,9 +1308,8 @@ void init_netdev(struct net_device *dev)
 
 #ifdef CONFIG_ATH6KL_LAIRD_FIPS
 	if (fips_mode) {
-		// TBD: fix with correct header length
 		dev->needed_headroom = 32 + 8;
-		// need tailroom for adding ICV
+		/* need tailroom for adding ICV */
 		dev->needed_tailroom = 8;
 	} else
 #endif
@@ -1323,7 +1322,7 @@ void init_netdev(struct net_device *dev)
 
 #ifdef CONFIG_ATH6KL_LAIRD_FIPS
 	if (!fips_mode)
-		// can only support hardware ip checksum in non-fips mode
+		/* can only support hardware ip checksum in non-fips mode */
 #endif
 	if (!test_bit(ATH6KL_FW_CAPABILITY_NO_IP_CHECKSUM,
 		      ar->fw_capabilities))
