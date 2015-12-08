@@ -375,11 +375,11 @@ MODULE_DESCRIPTION("Core module for AR600x SDIO and USB devices.");
 MODULE_LICENSE("Dual BSD/GPL");
 
 #ifdef CONFIG_ATH6KL_LAIRD_FIPS
-// module parameter for enabling fips mode on load
+/* module parameter for enabling fips mode on load */
 bool fips_mode = 0;
 module_param(fips_mode, bool, S_IRUGO);
 
-// function called by external module to register fips support
+/* function called by external module to register fips support */
 const laird_register_data_t *laird_register_data;
 int ath6kl_laird_register(const laird_register_data_t *ptr)
 {
