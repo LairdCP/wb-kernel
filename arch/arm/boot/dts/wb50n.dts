@@ -151,10 +151,11 @@
 				status = "okay";
 			};
 
-
-
-
-
+			sckc@fffffe50 {
+				slow_osc: slow_osc {
+					atmel,osc-bypass;
+				};
+			};
 		};
 
 		nand0: nand@60000000 {
