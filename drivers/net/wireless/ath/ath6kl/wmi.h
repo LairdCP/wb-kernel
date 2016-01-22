@@ -2476,6 +2476,39 @@ struct wmi_p2p_probe_response_cmd {
 	u8 data[0];
 } __packed;
 
+
+/*
+ * ------- BT Coexistence definitions --------------
+ */
+
+enum wmi_btcoex_dev_type {
+	WMI_BTCOEX_NO_COEX    = 0,
+	WMI_BTCOEX_QCOM_3WIRE = 1,
+	WMI_BTCOEX_CSR_3WIRE  = 2,
+	WMI_BTCOEX_ATH_3WIRE  = 3,
+	WMI_BTCOEX_STE_4WIRE  = 4,
+	WMI_BTCOEX_ATH_4WIRE  = 5,
+};
+
+enum wmi_btcoex_fe_ant_type {
+	WMI_BTCOEX_NOT_ENABLED   = 0,
+	WMI_BTCOEX_FE_ANT_SINGLE = 1,
+	WMI_BTCOEX_FE_ANT_DUAL   = 2,
+	WMI_BTCOEX_FE_ANT_DUAL_HIGH_ISO       = 3,
+	WMI_BTCOEX_FE_ANT_DUAL_SH_BT_LOW_ISO  = 4,
+	WMI_BTCOEX_FE_ANT_DUAL_SH_BT_HIGH_ISO = 5,
+	WMI_BTCOEX_FE_ANT_TRIPLE = 6,
+	WMI_BTCOEX_FE_ANT_TYPE_MAX,
+};
+
+struct wmi_set_btcoex_fe_ant_cmd {
+    u8 btcoex_fe_ant_type;
+} __packed;
+
+struct wmi_set_btcoex_colocated_bt_dev_cmd {
+    u8 btcoex_colocated_btdev;
+} __packed;
+
 /* Extended WMI (WMIX)
  *
  * Extended WMIX commands are encapsulated in a WMI message with
@@ -2746,6 +2779,12 @@ int ath6kl_wmi_set_appie_cmd(struct wmi *wmi, u8 if_idx, u8 mgmt_frm_type,
 			     const u8 *ie, u8 ie_len);
 
 int ath6kl_wmi_set_inact_period(struct wmi *wmi, u8 if_idx, int inact_timeout);
+
+int ath6kl_wmi_set_btcoex_fe_ant_cmd(struct wmi *wmi, u8 if_idx,
+                                     u8 btcoex_fe_ant_type);
+
+int ath6kl_wmi_set_btcoex_colocated_bt_dev_cmd(struct wmi *wmi, u8 if_idx,
+                                               u8 btcoex_colocated_btdev);
 
 void ath6kl_wmi_sscan_timer(unsigned long ptr);
 
