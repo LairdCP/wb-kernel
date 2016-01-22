@@ -873,6 +873,9 @@ struct ath6kl {
 	} debug;
 #endif /* CONFIG_ATH6KL_DEBUG */
 
+	u8 btcoex_chip_type;
+	u8 btcoex_ant_config;
+
 	struct {
 		enum wmi_phy_mode phy_mode;
 		u8 num_channels;

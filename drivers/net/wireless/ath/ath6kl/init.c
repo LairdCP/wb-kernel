@@ -460,6 +460,22 @@ static int ath6kl_target_config_wlan_params(struct ath6kl *ar, int idx)
 {
 	int ret;
 
+	/* Set up Bluetooth coexistence */
+	if (ar->btcoex_chip_type && ar->btcoex_ant_config) {
+		ret = ath6kl_wmi_set_btcoex_colocated_bt_dev_cmd(ar->wmi, idx,
+	                                                     ar->btcoex_chip_type);
+		if (ret) {
+			ath6kl_err("unable to set the bt coexist chip type: %d\n", ret);
+			return ret;
+		}
+
+		ret = ath6kl_wmi_set_btcoex_fe_ant_cmd(ar->wmi, idx, ar->btcoex_ant_config);
+		if (ret) {
+			ath6kl_err("unable to set the bt coexist antenna config: %d\n", ret);
+			return ret;
+		}
+	}
+
 	/*
 	 * Configure the device for rx dot11 header rules. "0,0" are the
 	 * default values. Required if checksum offload is needed. Set

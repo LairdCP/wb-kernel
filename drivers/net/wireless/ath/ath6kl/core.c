@@ -40,6 +40,8 @@ static unsigned int ath6kl_p2p;
 static unsigned int testmode;
 static unsigned int recovery_enable;
 static unsigned int heart_beat_poll;
+static unsigned int btcoex_chip_type;
+static unsigned int btcoex_ant_config;
 
 module_param(debug_mask, uint, 0644);
 module_param(suspend_mode, uint, 0644);
@@ -50,10 +52,15 @@ module_param(ath6kl_p2p, uint, 0644);
 module_param(testmode, uint, 0644);
 module_param(recovery_enable, uint, 0644);
 module_param(heart_beat_poll, uint, 0644);
+module_param(btcoex_chip_type, byte, 0444);
+module_param(btcoex_ant_config, byte, 0444);
 MODULE_PARM_DESC(recovery_enable, "Enable recovery from firmware error");
 MODULE_PARM_DESC(heart_beat_poll,
 		 "Enable fw error detection periodic polling in msecs - Also set recovery_enable for this to be effective");
-
+MODULE_PARM_DESC(btcoex_chip_type,
+		 "bt coex chip type: 1-QCOM 3wire, 2-CSR 3wire, 3-ATH 3wire, 4-STE 4wire, 5-ATH 4wire. Must also specify antenna config to enable.");
+MODULE_PARM_DESC(btcoex_ant_config,
+		 "bt coex ant config: 0-disable coex, 1-shared single, 2-dual low iso, 3-dual high iso, 4-shared dual low iso, 5-shared dual high iso, 6-triple");
 
 void ath6kl_core_tx_complete(struct ath6kl *ar, struct sk_buff *skb)
 {
@@ -187,6 +194,9 @@ int ath6kl_core_init(struct ath6kl *ar, enum ath6kl_htc_type htc_type)
 	if (uart_debug)
 		ar->conf_flags |= ATH6KL_CONF_UART_DEBUG;
 	ar->hw.uarttx_rate = uart_rate;
+
+	ar->btcoex_chip_type = btcoex_chip_type;
+	ar->btcoex_ant_config = btcoex_ant_config;
 
 	set_bit(FIRST_BOOT, &ar->flag);
 

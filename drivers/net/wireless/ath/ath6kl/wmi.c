@@ -3900,6 +3900,44 @@ int ath6kl_wmi_set_inact_period(struct wmi *wmi, u8 if_idx, int inact_timeout)
 				   NO_SYNC_WMIFLAG);
 }
 
+int ath6kl_wmi_set_btcoex_fe_ant_cmd(struct wmi *wmi, u8 if_idx,
+                                     u8 btcoex_fe_ant_type)
+{
+	struct sk_buff *skb;
+	struct wmi_set_btcoex_fe_ant_cmd *cmd;
+	int ret;
+
+	skb = ath6kl_wmi_get_new_buf(sizeof(*cmd));
+	if (!skb)
+		return -ENOMEM;
+
+	cmd = (struct wmi_set_btcoex_fe_ant_cmd *)skb->data;
+	cmd->btcoex_fe_ant_type = btcoex_fe_ant_type;
+
+	ret = ath6kl_wmi_cmd_send(wmi, if_idx, skb, WMI_SET_BTCOEX_FE_ANT_CMDID,
+				  NO_SYNC_WMIFLAG);
+	return ret;
+}
+
+int ath6kl_wmi_set_btcoex_colocated_bt_dev_cmd(struct wmi *wmi, u8 if_idx,
+                                               u8 btcoex_colocated_btdev)
+{
+	struct sk_buff *skb;
+	struct wmi_set_btcoex_colocated_bt_dev_cmd *cmd;
+	int ret;
+
+	skb = ath6kl_wmi_get_new_buf(sizeof(*cmd));
+	if (!skb)
+		return -ENOMEM;
+
+	cmd = (struct wmi_set_btcoex_colocated_bt_dev_cmd *)skb->data;
+	cmd->btcoex_colocated_btdev = btcoex_colocated_btdev;
+
+	ret = ath6kl_wmi_cmd_send(wmi, if_idx, skb, WMI_SET_BTCOEX_COLOCATED_BT_DEV_CMDID,
+				  NO_SYNC_WMIFLAG);
+	return ret;
+}
+
 static void ath6kl_wmi_hb_challenge_resp_event(struct wmi *wmi, u8 *datap,
 					       int len)
 {
