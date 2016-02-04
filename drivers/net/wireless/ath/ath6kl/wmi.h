@@ -803,10 +803,11 @@ struct wmi_delete_cipher_key_cmd {
 } __packed;
 
 #define WMI_KRK_LEN     16
+#define WMI_CCKM_IE_LEN 26
 
 /* WMI_ADD_KRK_CMDID */
 struct wmi_add_krk_cmd {
-	u8 krk[WMI_KRK_LEN];
+	u8 krk[WMI_CCKM_IE_LEN]; //firmware wmi.h has size set to WMI_CCKM_IE_LEN
 } __packed;
 
 /* WMI_SETPMKID_CMDID */
