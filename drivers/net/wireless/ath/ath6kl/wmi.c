@@ -4254,18 +4254,6 @@ int ath6kl_wmi_control_rx(struct wmi *wmi, struct sk_buff *skb)
 	return ath6kl_wmi_proc_events(wmi, skb);
 }
 
-static bool __freq_is_specified(struct ath6kl *ar, const u16 freq)
-{
-	u32 i;
-	u32 n_channels = ar->laird.num_channels;
-
-	for(i = 0; i < n_channels; i++)
-		if(freq == ar->laird.channel_list[i])
-			return true;
-
-	return false;
-}
-
 int ath6kl_wmi_channel_params_cmd(struct wmi *wmi, u8 if_idx, u8 scan_param,
 			    u8 phy_mode, u8 num_channels, u16 *channel_list)
 {
