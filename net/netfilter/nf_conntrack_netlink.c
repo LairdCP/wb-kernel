@@ -1107,13 +1107,13 @@ static int ctnetlink_flush_conntrack(struct net *net,
 				     u32 portid, int report)
 {
 	struct ctnetlink_filter *filter = NULL;
-
+#ifdef CONFIG_NF_CONNTRACK_MARK
 	if (cda[CTA_MARK] && cda[CTA_MARK_MASK]) {
 		filter = ctnetlink_alloc_filter(cda);
 		if (IS_ERR(filter))
 			return PTR_ERR(filter);
 	}
-
+#endif
 	nf_ct_iterate_cleanup(net, ctnetlink_filter_match, filter,
 			      portid, report);
 	kfree(filter);
@@ -1192,7 +1192,7 @@ static int ctnetlink_get_conntrack(struct net *net, struct sock *ctnl,
 			.dump = ctnetlink_dump_table,
 			.done = ctnetlink_done,
 		};
-
+#ifdef CONFIG_NF_CONNTRACK_MARK
 		if (cda[CTA_MARK] && cda[CTA_MARK_MASK]) {
 			struct ctnetlink_filter *filter;
 
@@ -1202,6 +1202,7 @@ static int ctnetlink_get_conntrack(struct net *net, struct sock *ctnl,
 
 			c.data = filter;
 		}
+#endif
 		return netlink_dump_start(ctnl, skb, nlh, &c);
 	}
 
