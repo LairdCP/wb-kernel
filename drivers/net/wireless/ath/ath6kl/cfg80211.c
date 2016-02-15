@@ -3677,6 +3677,7 @@ void ath6kl_cfg80211_vif_cleanup(struct ath6kl_vif *vif)
 		kfree(mc_filter);
 	}
 
+	cfg80211_disconnected(vif->ndev, 0, NULL, 0, true, GFP_KERNEL);
 	unregister_netdevice(vif->ndev);
 
 	ar->num_vif--;
