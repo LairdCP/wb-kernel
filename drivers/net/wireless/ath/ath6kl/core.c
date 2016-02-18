@@ -40,8 +40,8 @@ static unsigned int ath6kl_p2p;
 static unsigned int testmode;
 static unsigned int recovery_enable;
 static unsigned int heart_beat_poll;
-static unsigned int btcoex_chip_type;
-static unsigned int btcoex_ant_config;
+static unsigned char btcoex_chip_type;
+static unsigned char btcoex_ant_config;
 
 module_param(debug_mask, uint, 0644);
 module_param(suspend_mode, uint, 0644);
