@@ -549,7 +549,7 @@ static unsigned int ebt_target_arpnat(struct sk_buff *pskb, const struct xt_acti
 				if (uh->dest == htons(67) || uh->dest == htons(68) )
 				{
 					//do something illegal for BOOTP
-					uint32_t giaddr = inet_select_addr(out_br_port->br->dev, iph->daddr, RT_SCOPE_LINK);
+					uint32_t giaddr = inet_confirm_addr(dev_net(out), __in_dev_get_rcu(out), 0, 0, RT_SCOPE_LINK);
 					uint32_t* giaddrp = (uint32_t*)(((uint8_t*)uh) + sizeof(*uh) + GIADDR_OFFSET);
 					uint8_t *chaddrp = (uint8_t*)(((uint8_t*)uh) + sizeof(*uh) + CHADDR_OFFSET);
 					uint32_t ihl = iph->ihl << 2;
