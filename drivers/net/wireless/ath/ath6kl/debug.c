@@ -631,7 +631,11 @@ static ssize_t read_file_tgt_stats(struct file *file, char __user *user_buf,
 	len += scnprintf(buf + len, buf_len - len, "%20s %10llu\n",
 			 "Ucast packets", tgt_stats->rx_ucast_pkt);
 	len += scnprintf(buf + len, buf_len - len, "%20s %10d\n",
-			 "Ucast Rate", tgt_stats->rx_ucast_rate);
+			 "Rx Legacy Rate", tgt_stats->rxrate.legacy);
+	len += scnprintf(buf + len, buf_len - len, "%20s %10d\n",
+			 "Rx MCS Pointer", tgt_stats->rxrate.mcs);
+	len += scnprintf(buf + len, buf_len - len, "%20s %10d\n",
+			 "Short Guard Interval", tgt_stats->rxrate.sgi);
 	len += scnprintf(buf + len, buf_len - len, "%20s %10llu\n",
 			 "Bcast packets", tgt_stats->rx_bcast_pkt);
 	len += scnprintf(buf + len, buf_len - len, "%20s %10llu\n",
