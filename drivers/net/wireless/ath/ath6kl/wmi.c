@@ -66,55 +66,6 @@ static const s32 wmi_rate_tbl[][2] = {
 	{0, 0}
 };
 
-static const s32 wmi_rate_tbl_mcs15[][2] = {
-	/* {W/O SGI, with SGI} */
-	{1000, 1000},
-	{2000, 2000},
-	{5500, 5500},
-	{11000, 11000},
-	{6000, 6000},
-	{9000, 9000},
-	{12000, 12000},
-	{18000, 18000},
-	{24000, 24000},
-	{36000, 36000},
-	{48000, 48000},
-	{54000, 54000},
-	{6500, 7200},     /* HT 20, MCS 0 */
-	{13000, 14400},
-	{19500, 21700},
-	{26000, 28900},
-	{39000, 43300},
-	{52000, 57800},
-	{58500, 65000},
-	{65000, 72200},
-	{13000, 14400},   /* HT 20, MCS 8 */
-	{26000, 28900},
-	{39000, 43300},
-	{52000, 57800},
-	{78000, 86700},
-	{104000, 115600},
-	{117000, 130000},
-	{130000, 144400}, /* HT 20, MCS 15 */
-	{13500, 15000},   /*HT 40, MCS 0 */
-	{27000, 30000},
-	{40500, 45000},
-	{54000, 60000},
-	{81000, 90000},
-	{108000, 120000},
-	{121500, 135000},
-	{135000, 150000},
-	{27000, 30000},   /*HT 40, MCS 8 */
-	{54000, 60000},
-	{81000, 90000},
-	{108000, 120000},
-	{162000, 180000},
-	{216000, 240000},
-	{243000, 270000},
-	{270000, 300000}, /*HT 40, MCS 15 */
-	{0, 0}
-};
-
 /* 802.1d to AC mapping. Refer pg 57 of WMM-test-plan-v1.2 */
 static const u8 up_to_ac[] = {
 	WMM_AC_BE,
@@ -3353,35 +3304,38 @@ int ath6kl_wmi_set_regdomain_cmd(struct wmi *wmi, const char *alpha2)
 				   NO_SYNC_WMIFLAG);
 }
 
-s32 ath6kl_wmi_get_rate(struct wmi *wmi, s8 rate_index)
+struct ath6kl_rate_info ath6kl_wmi_get_rate(s8 rate_index)
 {
-	struct ath6kl *ar = wmi->parent_dev;
-	u8 sgi = 0;
-	s32 ret;
+	struct ath6kl_rate_info info;
 
-	if (rate_index == RATE_AUTO)
-		return 0;
+	info.sgi = 0;
+	info.mcs = 0;
+	info.legacy = 0;
+	info.ht40 = 0;
+
+	if (rate_index == RATE_AUTO) {
+		return info;
+	}
 
 	/* SGI is stored as the MSB of the rate_index */
 	if (rate_index & RATE_INDEX_MSB) {
 		rate_index &= RATE_INDEX_WITHOUT_SGI_MASK;
-		sgi = 1;
+		info.sgi = 1;
 	}
-
-	if (test_bit(ATH6KL_FW_CAPABILITY_RATETABLE_MCS15,
-		     ar->fw_capabilities)) {
-		if (WARN_ON(rate_index >= ARRAY_SIZE(wmi_rate_tbl_mcs15)))
-			return 0;
-
-		ret = wmi_rate_tbl_mcs15[(u32) rate_index][sgi];
+	/* Legacy Data Rate */
+	if (rate_index < ATH6KL_HT20_RATE_OFFSET) {
+		info.legacy = wmi_rate_tbl[(u32) rate_index][0];
+		return info;
+	/* 20Mhz MCS Rate */
+	} else if (rate_index < ATH6KL_HT40_RATE_OFFSET) {
+		info.mcs = (u8)rate_index - ATH6KL_HT20_RATE_OFFSET;
+		return info;
+	/* 40Mhz MCS Rate */
 	} else {
-		if (WARN_ON(rate_index >= ARRAY_SIZE(wmi_rate_tbl)))
-			return 0;
-
-		ret = wmi_rate_tbl[(u32) rate_index][sgi];
+		info.mcs = (u8)rate_index - ATH6KL_HT40_RATE_OFFSET;
+		info.ht40 = ATH6KL_IS_HT40_MCS_RATE;
+		return info;
 	}
-
-	return ret;
 }
 
 static int ath6kl_wmi_get_pmkid_list_event_rx(struct wmi *wmi, u8 *datap,
