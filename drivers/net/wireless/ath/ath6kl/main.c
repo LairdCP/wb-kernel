@@ -737,7 +737,7 @@ static void ath6kl_update_target_stats(struct ath6kl_vif *vif, u8 *ptr, u32 len)
 		le32_to_cpu(tgt_stats->stats.tx.rts_fail_cnt);
 
 	rate = a_sle32_to_cpu(tgt_stats->stats.tx.ucast_rate);
-	stats->tx_ucast_rate = ath6kl_wmi_get_rate(ar->wmi, rate);
+	stats->txrate = ath6kl_wmi_get_rate(rate);
 
 	stats->rx_pkt += le32_to_cpu(tgt_stats->stats.rx.pkt);
 	stats->rx_byte += le32_to_cpu(tgt_stats->stats.rx.byte);
@@ -756,7 +756,7 @@ static void ath6kl_update_target_stats(struct ath6kl_vif *vif, u8 *ptr, u32 len)
 	stats->rx_dupl_frame += le32_to_cpu(tgt_stats->stats.rx.dupl_frame);
 
 	rate = a_sle32_to_cpu(tgt_stats->stats.rx.ucast_rate);
-	stats->rx_ucast_rate = ath6kl_wmi_get_rate(ar->wmi, rate);
+	stats->rxrate = ath6kl_wmi_get_rate(rate);
 
 	ccmp_stats = &tgt_stats->stats.tkip_ccmp_stats;
 

@@ -1729,77 +1729,16 @@ static const u32 cipher_suites[] = {
 	WLAN_CIPHER_SUITE_SMS4,
 };
 
-static bool is_rate_legacy(s32 rate)
-{
-	static const s32 legacy[] = { 1000, 2000, 5500, 11000,
-		6000, 9000, 12000, 18000, 24000,
-		36000, 48000, 54000
-	};
-	u8 i;
-
-	for (i = 0; i < ARRAY_SIZE(legacy); i++)
-		if (rate == legacy[i])
-			return true;
-
-	return false;
-}
-
-static bool is_rate_ht20(s32 rate, u8 *mcs, bool *sgi)
-{
-	static const s32 ht20[] = { 6500, 13000, 19500, 26000, 39000,
-		52000, 58500, 65000, 72200
-	};
-	u8 i;
-
-	for (i = 0; i < ARRAY_SIZE(ht20); i++) {
-		if (rate == ht20[i]) {
-			if (i == ARRAY_SIZE(ht20) - 1)
-				/* last rate uses sgi */
-				*sgi = true;
-			else
-				*sgi = false;
-
-			*mcs = i;
-			return true;
-		}
-	}
-	return false;
-}
-
-static bool is_rate_ht40(s32 rate, u8 *mcs, bool *sgi)
-{
-	static const s32 ht40[] = { 13500, 27000, 40500, 54000,
-		81000, 108000, 121500, 135000,
-		150000
-	};
-	u8 i;
-
-	for (i = 0; i < ARRAY_SIZE(ht40); i++) {
-		if (rate == ht40[i]) {
-			if (i == ARRAY_SIZE(ht40) - 1)
-				/* last rate uses sgi */
-				*sgi = true;
-			else
-				*sgi = false;
-
-			*mcs = i;
-			return true;
-		}
-	}
-
-	return false;
-}
-
 static int ath6kl_get_station(struct wiphy *wiphy, struct net_device *dev,
 			      const u8 *mac, struct station_info *sinfo)
 {
 	struct ath6kl *ar = ath6kl_priv(dev);
 	struct ath6kl_vif *vif = netdev_priv(dev);
 	long left;
-	bool sgi;
-	s32 rate;
+	u8 sgi;
+	s32 legacy;
+	u8 ht40;
 	int ret;
-	u8 mcs;
 
 	if (memcmp(mac, vif->bssid, ETH_ALEN) != 0)
 		return -ENOENT;
@@ -1845,33 +1784,28 @@ static int ath6kl_get_station(struct wiphy *wiphy, struct net_device *dev,
 	sinfo->signal = vif->target_stats.cs_rssi;
 	sinfo->filled |= BIT(NL80211_STA_INFO_SIGNAL);
 
-	rate = vif->target_stats.tx_ucast_rate;
+	sgi = vif->target_stats.txrate.sgi;
+	legacy = vif->target_stats.txrate.legacy;
+	ht40 = vif->target_stats.txrate.ht40;
 
-	if (is_rate_legacy(rate)) {
-		sinfo->txrate.legacy = rate / 100;
-	} else if (is_rate_ht20(rate, &mcs, &sgi)) {
-		if (sgi) {
-			sinfo->txrate.flags |= RATE_INFO_FLAGS_SHORT_GI;
-			sinfo->txrate.mcs = mcs - 1;
-		} else {
-			sinfo->txrate.mcs = mcs;
-		}
-
+	if (legacy != 0) {
+		sinfo->txrate.legacy = legacy / 100;
+	} else if (vif->target_stats.txrate.mcs != 0) {
 		sinfo->txrate.flags |= RATE_INFO_FLAGS_MCS;
-		sinfo->txrate.bw = RATE_INFO_BW_20;
-	} else if (is_rate_ht40(rate, &mcs, &sgi)) {
-		if (sgi) {
-			sinfo->txrate.flags |= RATE_INFO_FLAGS_SHORT_GI;
-			sinfo->txrate.mcs = mcs - 1;
-		} else {
-			sinfo->txrate.mcs = mcs;
-		}
 
-		sinfo->txrate.bw = RATE_INFO_BW_40;
-		sinfo->txrate.flags |= RATE_INFO_FLAGS_MCS;
+		if (ht40 != ATH6KL_IS_HT40_MCS_RATE) {
+			sinfo->txrate.bw = RATE_INFO_BW_20;
+		} else {
+			sinfo->txrate.bw = RATE_INFO_BW_40;
+		}
+		/* Set short guard interval flag */
+		if (sgi != 0) {
+			sinfo->txrate.flags |= RATE_INFO_FLAGS_SHORT_GI;
+		}
+		sinfo->txrate.mcs = vif->target_stats.txrate.mcs;
 	} else {
 		ath6kl_dbg(ATH6KL_DBG_WLAN_CFG,
-			   "invalid rate from stats: %d\n", rate);
+			   "invalid rate from stats\n");
 		ath6kl_debug_war(ar, ATH6KL_WAR_INVALID_RATE);
 		return 0;
 	}
@@ -3751,7 +3685,7 @@ static void ath6kl_get_stats(struct net_device *dev,
 	data[i++] = tgt_stats->tkip_cnter_measures_invoked;
 
 	data[i++] = tgt_stats->rx_ucast_pkt;
-	data[i++] = tgt_stats->rx_ucast_rate;
+	data[i++] = tgt_stats->rxrate.legacy;
 	data[i++] = tgt_stats->rx_bcast_pkt;
 	data[i++] = tgt_stats->rx_ucast_byte;
 	data[i++] = tgt_stats->rx_bcast_byte;

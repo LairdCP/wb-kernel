@@ -443,6 +443,32 @@ struct ath6kl_bmi {
 	u32 max_cmd_size;
 };
 
+/*
+ * Firmware reports back mcs values as a single table index
+ * Index values 0 - 11 refer to legacy data rates. Index values
+ * 12 - 28 are HT20. HT40 starts at 29
+ */
+#define ATH6KL_HT20_RATE_OFFSET 12
+#define ATH6KL_HT40_RATE_OFFSET 28
+
+#define ATH6KL_IS_HT40_MCS_RATE	1
+
+/*
+ * struct rate_info - bitrate information
+ *
+ * Information about a receiving or transmitting bitrate
+ *
+ * @sgi: bitflag if struct is single gaurd interval
+ * @mcs: mcs index if struct describes a 802.11n bitrate
+ * @legacy: bitrate in 100kbit/s for 802.11abg
+ */
+struct ath6kl_rate_info {
+	u8 sgi;
+	u8 mcs;
+	u32 legacy;
+	u8 ht40;
+};
+
 struct target_stats {
 	u64 tx_pkt;
 	u64 tx_byte;
@@ -491,8 +517,8 @@ struct target_stats {
 	u64 cs_connect_cnt;
 	u64 cs_discon_cnt;
 
-	s32 tx_ucast_rate;
-	s32 rx_ucast_rate;
+	struct ath6kl_rate_info txrate;
+	struct ath6kl_rate_info rxrate;
 
 	u32 lq_val;
 
