@@ -3944,6 +3944,8 @@ int ath6kl_cfg80211_init(struct ath6kl *ar)
 		NL80211_PROBE_RESP_OFFLOAD_SUPPORT_WPS2 |
 		NL80211_PROBE_RESP_OFFLOAD_SUPPORT_P2P;
 
+	ar->wiphy->regulatory_flags = REGULATORY_WIPHY_SELF_MANAGED;
+
 	ret = wiphy_register(wiphy);
 	if (ret < 0) {
 		ath6kl_err("couldn't register wiphy device\n");
