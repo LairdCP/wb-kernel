@@ -235,12 +235,18 @@
 		compatible = "gpio-keys";
 		#address-cells = <1>;
 		#size-cells = <0>;
+		btn0@pa10 {
+			label = "BTNESC";
+			linux,code = <1>; /* ESC button */
+			gpios = <&pioA 10 GPIO_ACTIVE_LOW>;
+			gpio-key,wakeup = <1>;
+		};
+
 		irqbtn@pe31 {
 			label = "IRQBTN";
-			linux,code = <99>;
+			linux,code = <99>; /* SysReq button */
 			gpios = <&pioE 31 GPIO_ACTIVE_LOW>;
 			gpio-key,wakeup = <1>;
 		};
 	};
-
 };
