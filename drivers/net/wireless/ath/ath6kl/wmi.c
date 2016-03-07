@@ -3315,6 +3315,7 @@ struct ath6kl_rate_info ath6kl_wmi_get_rate(s8 rate_index)
 	/* SGI is stored as the MSB of the rate_index */
 	if (rate_index & RATE_INDEX_MSB) {
 		rate_index &= RATE_INDEX_WITHOUT_SGI_MASK;
+		info.sgi = 1;
 	}
 	/* Legacy Data Rate */
 	if (rate_index < ATH6KL_HT20_RATE_OFFSET) {
