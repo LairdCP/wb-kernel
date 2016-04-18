@@ -41,6 +41,11 @@
 
 	ahb {
 		apb {
+
+			rstc@fffffe00 {
+				compatible = "atmel,sama5d3-rstc";
+			};
+
 			pinctrl@fffff400 {
 				nand {
 					pinctrl_nand: nand-0 {
