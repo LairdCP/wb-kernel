@@ -788,25 +788,6 @@ struct ctnetlink_filter {
 	} mark;
 };
 
-static struct ctnetlink_filter *
-ctnetlink_alloc_filter(const struct nlattr * const cda[])
-{
-#ifdef CONFIG_NF_CONNTRACK_MARK
-	struct ctnetlink_filter *filter;
-
-	filter = kzalloc(sizeof(*filter), GFP_KERNEL);
-	if (filter == NULL)
-		return ERR_PTR(-ENOMEM);
-
-	filter->mark.val = ntohl(nla_get_be32(cda[CTA_MARK]));
-	filter->mark.mask = ntohl(nla_get_be32(cda[CTA_MARK_MASK]));
-
-	return filter;
-#else
-	return ERR_PTR(-EOPNOTSUPP);
-#endif
-}
-
 static int ctnetlink_filter_match(struct nf_conn *ct, void *data)
 {
 	struct ctnetlink_filter *filter = data;
@@ -1101,7 +1082,14 @@ static int ctnetlink_flush_conntrack(struct net *net,
 	struct ctnetlink_filter *filter = NULL;
 #ifdef CONFIG_NF_CONNTRACK_MARK
 	if (cda[CTA_MARK] && cda[CTA_MARK_MASK]) {
-		filter = ctnetlink_alloc_filter(cda);
+		filter = kzalloc(sizeof(*filter), GFP_KERNEL);
+
+		if (filter == NULL)
+			return -ENOMEM;
+
+		filter->mark.val = ntohl(nla_get_be32(cda[CTA_MARK]));
+		filter->mark.mask = ntohl(nla_get_be32(cda[CTA_MARK_MASK]));
+
 		if (IS_ERR(filter))
 			return PTR_ERR(filter);
 	}
@@ -1192,7 +1180,14 @@ ctnetlink_get_conntrack(struct sock *ctnl, struct sk_buff *skb,
 		if (cda[CTA_MARK] && cda[CTA_MARK_MASK]) {
 			struct ctnetlink_filter *filter;
 
-			filter = ctnetlink_alloc_filter(cda);
+			filter = kzalloc(sizeof(*filter), GFP_KERNEL);
+
+			if (filter == NULL)
+				return -ENOMEM;
+
+			filter->mark.val = ntohl(nla_get_be32(cda[CTA_MARK]));
+			filter->mark.mask = ntohl(nla_get_be32(cda[CTA_MARK_MASK]));
+
 			if (IS_ERR(filter))
 				return PTR_ERR(filter);
 
