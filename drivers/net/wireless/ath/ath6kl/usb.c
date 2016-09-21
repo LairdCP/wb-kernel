@@ -17,9 +17,16 @@
 
 #include <linux/module.h>
 #include <linux/usb.h>
+#include <linux/gpio.h>
 
 #include "debug.h"
 #include "core.h"
+
+static unsigned int reset_pwd_gpio = ARCH_NR_GPIOS;
+#ifdef CONFIG_GPIOLIB
+module_param(reset_pwd_gpio, uint, 0644);
+MODULE_PARM_DESC(reset_pwd_gpio, "WIFI CHIP_PWD reset pin GPIO");
+#endif
 
 /* constants */
 #define TX_URB_COUNT            32
@@ -1220,7 +1227,77 @@ static struct usb_driver ath6kl_usb_driver = {
 	.disable_hub_initiated_lpm = 1,
 };
 
-module_usb_driver(ath6kl_usb_driver);
+static int ath6kl_usb_init_gpio(void)
+{
+	int ret = 0;
+
+	if (gpio_is_valid(reset_pwd_gpio)) {
+		/* Request the reset GPIO, and assert it to make sure we get a
+		 * clean boot in-case we had a floating input or other issue.
+		 */
+		ret = gpio_request_one(reset_pwd_gpio,
+				       GPIOF_OUT_INIT_LOW |
+				       GPIOF_EXPORT_DIR_FIXED,
+				       "WIFI_RESET");
+		if (ret) {
+			ath6kl_err("Unable to get WIFI power gpio: %d\n", ret);
+			return ret;
+		}
+
+		ath6kl_dbg(ATH6KL_DBG_SUSPEND, "Setup wifi gpio #%d\n",
+			   reset_pwd_gpio);
+		usleep_range(20, 50); /* Pin must be asserted at least 5 usec */
+		gpio_set_value(reset_pwd_gpio, 1); /* De-assert the pin */
+	}
+
+	return 0;
+}
+
+static void ath6kl_usb_release_gpio(void)
+{
+	if (gpio_is_valid(reset_pwd_gpio)) {
+		/* Be sure we leave the chip in reset when we unload and also
+		 * release the GPIO
+		 */
+		gpio_set_value(reset_pwd_gpio, 0);
+		gpio_free(reset_pwd_gpio);
+	}
+}
+
+
+static int __init ath6kl_usb_init(void)
+{
+	int ret;
+
+	ret = ath6kl_usb_init_gpio();
+	if (ret)
+		goto err_gpio;
+
+	ret = usb_register(&ath6kl_usb_driver);
+	if (ret) {
+		ath6kl_err("usb driver registration failed: %d\n", ret);
+		goto err_register;
+	}
+
+	return ret;
+
+err_register:
+	ath6kl_usb_release_gpio();
+
+err_gpio:
+	return ret;
+}
+
+static void __exit ath6kl_usb_exit(void)
+{
+	usb_deregister(&ath6kl_usb_driver);
+
+	ath6kl_usb_release_gpio();
+}
+
+module_init(ath6kl_usb_init);
+module_exit(ath6kl_usb_exit);
+
 
 MODULE_AUTHOR("Atheros Communications, Inc.");
 MODULE_DESCRIPTION("Driver support for Atheros AR600x USB devices");
