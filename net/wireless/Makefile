@@ -19,7 +19,9 @@ CFLAGS_trace.o := -I$(src)
 
 ccflags-y += -D__CHECK_ENDIAN__
 
-$(obj)/regdb.c: $(src)/db.txt $(src)/genregdb.awk
+$(eval $(call config_filename,CFG80211_INTERNAL_REGDB_FILE))
+
+$(obj)/regdb.c: $(src)/$(CFG80211_INTERNAL_REGDB_FILE_FILENAME) $(src)/genregdb.awk
 	@$(AWK) -f $(srctree)/$(src)/genregdb.awk < $< > $@
 
 clean-files := regdb.c

@@ -161,6 +161,19 @@ config CFG80211_INTERNAL_REGDB
 
 	  Most distributions have a CRDA package. So if unsure, say N.
 
+config CFG80211_INTERNAL_REGDB_FILE
+	string "specify file for internal regulatory rules" if CFG80211_INTERNAL_REGDB
+	default "db.txt"
+	depends on CFG80211_INTERNAL_REGDB
+	---help---
+	  This option specifies what file in net/wireless is used to
+	  generate the internal data structure repesenting the wireless
+	  regulatory rules.  Normally, db.txt is used but this allows
+	  the kernel to be preloaded with multiple text files specifying
+	  different regulatory rules.
+
+	  If unsure, say "db.txt".
+
 config CFG80211_CRDA_SUPPORT
 	bool "support CRDA" if CFG80211_INTERNAL_REGDB
 	default y
