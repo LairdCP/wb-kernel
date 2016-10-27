@@ -177,7 +177,7 @@ config CFG80211_INTERNAL_REGDB
 config CFG80211_INTERNAL_REGDB_FILE
 	string "specify file for internal regulatory rules" if CFG80211_INTERNAL_REGDB
 	default "db.txt"
-	depends on CFG80211
+	depends on CFG80211_INTERNAL_REGDB
 	---help---
 	  This option specifies what file in net/wireless is used to
 	  generate the internal data structure repesenting the wireless
