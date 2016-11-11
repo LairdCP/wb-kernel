@@ -628,6 +628,10 @@ int ath6kl_configure_target(struct ath6kl *ar)
 
 	param |= (0 << HI_OPTION_MAC_ADDR_METHOD_SHIFT);
 	param |= (0 << HI_OPTION_FW_BRIDGE_SHIFT);
+	if (ar->disable_fw_dbglog) {
+		param |= (1 << HI_OPTION_DISABLE_DBGLOG);
+		ath6kl_info("disabling fw dbglog\n");
+	}
 
 	if (ath6kl_bmi_write_hi32(ar, hi_option_flag, param) != 0) {
 		ath6kl_err("bmi_write_memory for setting fwmode failed\n");

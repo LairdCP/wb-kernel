@@ -36,6 +36,7 @@ static unsigned int suspend_mode;
 static unsigned int wow_mode;
 static unsigned int uart_debug;
 static unsigned int uart_rate = 115200;
+static bool disable_fw_dbglog = false;
 static unsigned int ath6kl_p2p;
 static unsigned int testmode;
 static unsigned int recovery_enable;
@@ -48,12 +49,14 @@ module_param(suspend_mode, uint, 0644);
 module_param(wow_mode, uint, 0644);
 module_param(uart_debug, uint, 0644);
 module_param(uart_rate, uint, 0644);
+module_param(disable_fw_dbglog, bool, 0444);
 module_param(ath6kl_p2p, uint, 0644);
 module_param(testmode, uint, 0644);
 module_param(recovery_enable, uint, 0644);
 module_param(heart_beat_poll, uint, 0644);
 module_param(btcoex_chip_type, byte, 0444);
 module_param(btcoex_ant_config, byte, 0444);
+MODULE_PARM_DESC(disable_fw_dbglog, "Disable the firmware debug log");
 MODULE_PARM_DESC(recovery_enable, "Enable recovery from firmware error");
 MODULE_PARM_DESC(heart_beat_poll,
 		 "Enable fw error detection periodic polling in msecs - Also set recovery_enable for this to be effective");
@@ -200,6 +203,7 @@ int ath6kl_core_init(struct ath6kl *ar, enum ath6kl_htc_type htc_type)
 
 	set_bit(FIRST_BOOT, &ar->flag);
 
+	ar->disable_fw_dbglog = disable_fw_dbglog;
 	ath6kl_debug_init(ar);
 
 	ret = ath6kl_init_hw_start(ar);
