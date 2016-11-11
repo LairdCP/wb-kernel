@@ -901,6 +901,7 @@ struct ath6kl {
 
 	u8 btcoex_chip_type;
 	u8 btcoex_ant_config;
+	bool disable_fw_dbglog;
 
 	struct {
 		enum wmi_phy_mode phy_mode;
