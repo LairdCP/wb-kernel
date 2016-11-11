@@ -315,6 +315,7 @@ struct host_interest {
 #define HI_OPTION_NUM_DEV_SHIFT   0x9
 
 #define HI_OPTION_FW_BRIDGE_SHIFT 0x04
+#define HI_OPTION_DISABLE_DBGLOG  0X06
 
 /* Fw Mode/SubMode Mask
 |------------------------------------------------------------------------------|
