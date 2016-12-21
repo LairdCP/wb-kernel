@@ -7620,6 +7620,12 @@ L:	linux-wireless@vger.kernel.org
 S:	Odd Fixes
 F:	drivers/net/wireless/marvell/mwl8k.c
 
+MARVELL MWLWIFI WIRELESS DRIVER
+M:	David Lin <dlin@marvell.com>
+L:	linux-wireless@vger.kernel.org
+S:	Maintained
+F:	drivers/net/wireless/marvell/mwlwifi/
+
 MARVELL SOC MMC/SD/SDIO CONTROLLER DRIVER
 M:	Nicolas Pitre <nico@fluxnic.net>
 S:	Odd Fixes
