@@ -1063,6 +1063,16 @@ static int test_cipher(struct crypto_cipher *tfm, int enc,
 		data = xbuf[0];
 		memcpy(data, input, template[i].len);
 
+		if (fips_tinker &&
+		     !strncmp(fips_tinker, tfm->base.__crt_alg->cra_driver_name, strlen(tfm->base.__crt_alg->cra_driver_name))) {
+			u8 *buf = (u8 *)data;
+
+			if (template[i].len)
+				buf[0] = (buf[0] + 1) & 0xff;
+			printk("Altering input for raw cipher %s\n",
+			       fips_tinker);
+		}
+
 		crypto_cipher_clear_flags(tfm, ~0);
 		if (template[i].wk)
 			crypto_cipher_set_flags(tfm, CRYPTO_TFM_REQ_WEAK_KEY);
