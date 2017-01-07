@@ -326,6 +326,16 @@ static int __test_hash(struct crypto_ahash *tfm,
 		hash_buff += align_offset;
 
 		memcpy(hash_buff, template[i].plaintext, template[i].psize);
+
+		if (fips_tinker &&
+		     !strncmp(fips_tinker, tfm->base.__crt_alg->cra_driver_name, strlen(tfm->base.__crt_alg->cra_driver_name))) {
+			u8 *buf = (u8 *)hash_buff;
+
+			if (template[i].psize)
+				buf[0] = (buf[0] + 1) & 0xff;
+			printk("Altering input for hash %s\n", fips_tinker);
+		}
+
 		sg_init_one(&sg[0], hash_buff, template[i].psize);
 
 		if (template[i].ksize) {
