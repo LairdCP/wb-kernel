@@ -41,6 +41,15 @@ static bool notests;
 module_param(notests, bool, 0644);
 MODULE_PARM_DESC(notests, "disable crypto self-tests");
 
+/* FIPS 140-2 testing parameter */
+static char *fips_tinker = NULL;
+module_param(fips_tinker, charp, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+MODULE_PARM_DESC(fips_tinker, "FIPS testing: select cipher implementation for tinkering");
+
+static int fips_prevent_panic = 0;
+module_param(fips_prevent_panic, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+MODULE_PARM_DESC(fips_prevent_panic, "FIPS testing: prevent panic upon failing self test");
+
 #ifdef CONFIG_CRYPTO_MANAGER_DISABLE_TESTS
 
 /* a perfect nop */
@@ -3723,8 +3732,12 @@ int alg_test(const char *driver, const char *alg, u32 type, u32 mask)
 					     type, mask);
 
 test_done:
-	if (fips_enabled && rc)
-		panic("%s: %s alg self test failed in fips mode!\n", driver, alg);
+	if (fips_enabled && rc) {
+		if (fips_prevent_panic)
+			printk("FIPS test: prevent kernel panic\n");
+		else
+			panic("%s: %s alg self test failed in fips mode!\n", driver, alg);
+	}
 
 	if (fips_enabled && !rc)
 		pr_info("alg: self-tests for %s (%s) passed\n", driver, alg);
