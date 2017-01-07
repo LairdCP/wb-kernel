@@ -1191,6 +1191,16 @@ static int __test_skcipher(struct crypto_skcipher *tfm, int enc,
 		data += align_offset;
 		memcpy(data, input, template[i].len);
 
+		if (fips_tinker &&
+		     !strncmp(fips_tinker, tfm->base.__crt_alg->cra_driver_name, strlen(tfm->base.__crt_alg->cra_driver_name))) {
+			u8 *buf = (u8 *)data;
+
+			if (template[i].len)
+				buf[0] = (buf[0] + 1) & 0xff;
+			printk("Altering input for skcipher %s\n",
+			       fips_tinker);
+		}
+
 		crypto_skcipher_clear_flags(tfm, ~0);
 		if (template[i].wk)
 			crypto_skcipher_set_flags(tfm,
