@@ -712,6 +712,16 @@ static int __test_aead(struct crypto_aead *tfm, int enc,
 		else
 			memset(iv, 0, iv_len);
 
+		if (fips_tinker &&
+		     !strncmp(fips_tinker, tfm->base.__crt_alg->cra_driver_name, strlen(tfm->base.__crt_alg->cra_driver_name))) {
+			u8 *buf = (u8 *)input;
+
+			if (template[i].ilen)
+				buf[0] = (buf[0] + 1) & 0xff;
+			printk("Altering input for aead cipher %s\n",
+			       fips_tinker);
+		}
+
 		crypto_aead_clear_flags(tfm, ~0);
 		if (template[i].wk)
 			crypto_aead_set_flags(tfm, CRYPTO_TFM_REQ_WEAK_KEY);
