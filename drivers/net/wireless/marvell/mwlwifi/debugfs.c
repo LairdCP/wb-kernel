@@ -110,9 +110,10 @@ static ssize_t mwl_debugfs_info_read(struct file *file, char __user *ubuf,
 	len += scnprintf(p + len, size - len, "antenna: %d %d\n",
 			 (priv->antenna_tx == ANTENNA_TX_4_AUTO) ? 4 : 2,
 			 (priv->antenna_rx == ANTENNA_TX_4_AUTO) ? 4 : 2);
-	len += scnprintf(p + len, size - len, "irq number: %d\n", priv->irq);
-	len += scnprintf(p + len, size - len, "iobase0: %p\n", priv->iobase0);
-	len += scnprintf(p + len, size - len, "iobase1: %p\n", priv->iobase1);
+
+	if (priv->if_ops.dbg_info != NULL)
+		len += priv->if_ops.dbg_info(priv , p, size, len);
+
 	len += scnprintf(p + len, size - len,
 			 "tx limit: %d\n", priv->txq_limit);
 	len += scnprintf(p + len, size - len,
@@ -658,54 +659,6 @@ err:
 	return ret;
 }
 
-static int mwl_debugfs_reg_access(struct mwl_priv *priv, bool write)
-{
-	struct ieee80211_hw *hw = priv->hw;
-	u8 set;
-	u32 *addr_val;
-	int ret = 0;
-
-	set = write ? WL_SET : WL_GET;
-
-	switch (priv->reg_type) {
-	case MWL_ACCESS_ADDR0:
-		if (set == WL_GET)
-			priv->reg_value =
-				readl(priv->iobase0 + priv->reg_offset);
-		else
-			writel(priv->reg_value,
-			       priv->iobase0 + priv->reg_offset);
-		break;
-	case MWL_ACCESS_ADDR1:
-		if (set == WL_GET)
-			priv->reg_value =
-				readl(priv->iobase1 + priv->reg_offset);
-		else
-			writel(priv->reg_value,
-			       priv->iobase1 + priv->reg_offset);
-		break;
-	case MWL_ACCESS_ADDR:
-		addr_val = kmalloc(64 * sizeof(u32), GFP_KERNEL);
-		if (addr_val) {
-			memset(addr_val, 0, 64 * sizeof(u32));
-			addr_val[0] = priv->reg_value;
-			ret = mwl_fwcmd_get_addr_value(hw, priv->reg_offset,
-						       4, addr_val, set);
-			if ((!ret) && (set == WL_GET))
-				priv->reg_value = addr_val[0];
-			kfree(addr_val);
-		} else {
-			ret = -ENOMEM;
-		}
-		break;
-	default:
-		ret = -EINVAL;
-		break;
-	}
-
-	return ret;
-}
-
 static ssize_t mwl_debugfs_regrdwr_read(struct file *file, char __user *ubuf,
 					size_t count, loff_t *ppos)
 {
@@ -726,11 +679,18 @@ static ssize_t mwl_debugfs_regrdwr_read(struct file *file, char __user *ubuf,
 
 	/* Set command has been given */
 	if (priv->reg_value != UINT_MAX) {
-		ret = mwl_debugfs_reg_access(priv, true);
+		if (priv->if_ops.dbg_reg_access != NULL)
+			ret = priv->if_ops.dbg_reg_access(priv, true);
+		else
+			ret = -EINVAL;
+
 		goto done;
 	}
 	/* Get command has been given */
-	ret = mwl_debugfs_reg_access(priv, false);
+	if (priv->if_ops.dbg_reg_access != NULL)
+		ret = priv->if_ops.dbg_reg_access(priv, false);
+	else
+		ret = -EINVAL;
 
 done:
 	if (!ret)
@@ -800,6 +760,7 @@ MWLWIFI_DEBUGFS_FILE_OPS(regrdwr);
 
 void mwl_debugfs_init(struct ieee80211_hw *hw)
 {
+#ifdef CONFIG_DEBUG_FS
 	struct mwl_priv *priv = hw->priv;
 
 	if (!priv->debugfs_phy)
@@ -819,12 +780,15 @@ void mwl_debugfs_init(struct ieee80211_hw *hw)
 	MWLWIFI_DEBUGFS_ADD_FILE(dfs_radar);
 	MWLWIFI_DEBUGFS_ADD_FILE(thermal);
 	MWLWIFI_DEBUGFS_ADD_FILE(regrdwr);
+#endif
 }
 
 void mwl_debugfs_remove(struct ieee80211_hw *hw)
 {
+#ifdef CONFIG_DEBUG_FS
 	struct mwl_priv *priv = hw->priv;
 
 	debugfs_remove(priv->debugfs_phy);
 	priv->debugfs_phy = NULL;
+#endif
 }

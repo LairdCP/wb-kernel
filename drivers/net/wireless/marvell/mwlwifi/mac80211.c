@@ -136,7 +136,8 @@ static void mwl_mac80211_stop(struct ieee80211_hw *hw)
 	tasklet_disable(&priv->qe_task);
 
 	/* Return all skbs to mac80211 */
-	mwl_tx_done((unsigned long)hw);
+	if (priv->if_ops.tx_done != NULL)
+		priv->if_ops.tx_done((unsigned long)hw);
 }
 
 static int mwl_mac80211_add_interface(struct ieee80211_hw *hw,
@@ -623,7 +624,7 @@ static int mwl_mac80211_ampdu_action(struct ieee80211_hw *hw,
 			break;
 		}
 		stream->state = AMPDU_STREAM_IN_PROGRESS;
-		ssn = 0;
+		*ssn = 0;
 		ieee80211_start_tx_ba_cb_irqsafe(vif, addr, tid);
 		break;
 	case IEEE80211_AMPDU_TX_STOP_CONT:

@@ -33,6 +33,8 @@
 #define HOSTCMD_STA_FWRDY_SIGNATURE     0xF0F1F2F4
 #define HOSTCMD_SOFTAP_FWRDY_SIGNATURE  0xF1F2F4A5
 
+#define HOSTCMD_RESP_BIT		0x8000
+
 #define GUARD_INTERVAL_STANDARD         1
 #define GUARD_INTERVAL_SHORT            2
 #define GUARD_INTERVAL_AUTO             3
@@ -59,11 +61,18 @@ enum encr_type {
 	ENCR_TYPE_MIX = 7,
 };
 
+struct cmd_header {
+	__le16 command;
+	__le16 len;
+} __packed;
+
 void mwl_fwcmd_reset(struct ieee80211_hw *hw);
 
 void mwl_fwcmd_int_enable(struct ieee80211_hw *hw);
 
 void mwl_fwcmd_int_disable(struct ieee80211_hw *hw);
+
+char *mwl_fwcmd_get_cmd_string(unsigned short cmd);
 
 int mwl_fwcmd_get_hw_specs(struct ieee80211_hw *hw);
 

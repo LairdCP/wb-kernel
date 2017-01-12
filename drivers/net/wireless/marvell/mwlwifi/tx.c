@@ -68,168 +68,6 @@ struct ccmp_hdr {
 	__le32 iv32;
 } __packed;
 
-static int mwl_tx_ring_alloc(struct mwl_priv *priv)
-{
-	struct mwl_desc_data *desc;
-	int num;
-	u8 *mem;
-
-	desc = &priv->desc_data[0];
-
-	mem = dma_alloc_coherent(priv->dev,
-				 MAX_NUM_TX_RING_BYTES *
-				 SYSADPT_NUM_OF_DESC_DATA,
-				 &desc->pphys_tx_ring,
-				 GFP_KERNEL);
-
-	if (!mem) {
-		wiphy_err(priv->hw->wiphy, "cannot alloc mem\n");
-		return -ENOMEM;
-	}
-
-	for (num = 0; num < SYSADPT_NUM_OF_DESC_DATA; num++) {
-		desc = &priv->desc_data[num];
-
-		desc->ptx_ring = (struct mwl_tx_desc *)
-			(mem + num * MAX_NUM_TX_RING_BYTES);
-
-		desc->pphys_tx_ring = (dma_addr_t)
-			((u32)priv->desc_data[0].pphys_tx_ring +
-			num * MAX_NUM_TX_RING_BYTES);
-
-		memset(desc->ptx_ring, 0x00,
-		       MAX_NUM_TX_RING_BYTES);
-	}
-
-	mem = kmalloc(MAX_NUM_TX_HNDL_BYTES * SYSADPT_NUM_OF_DESC_DATA,
-		      GFP_KERNEL);
-
-	if (!mem) {
-		wiphy_err(priv->hw->wiphy, "cannot alloc mem\n");
-		dma_free_coherent(priv->dev,
-				  MAX_NUM_TX_RING_BYTES *
-				  SYSADPT_NUM_OF_DESC_DATA,
-				  priv->desc_data[0].ptx_ring,
-				  priv->desc_data[0].pphys_tx_ring);
-		return -ENOMEM;
-	}
-
-	for (num = 0; num < SYSADPT_NUM_OF_DESC_DATA; num++) {
-		desc = &priv->desc_data[num];
-
-		desc->tx_hndl = (struct mwl_tx_hndl *)
-			(mem + num * MAX_NUM_TX_HNDL_BYTES);
-
-		memset(desc->tx_hndl, 0x00,
-		       MAX_NUM_TX_HNDL_BYTES);
-	}
-
-	return 0;
-}
-
-static int mwl_tx_ring_init(struct mwl_priv *priv)
-{
-	int num, i;
-	struct mwl_desc_data *desc;
-
-	for (num = 0; num < SYSADPT_NUM_OF_DESC_DATA; num++) {
-		skb_queue_head_init(&priv->txq[num]);
-		priv->fw_desc_cnt[num] = 0;
-
-		desc = &priv->desc_data[num];
-
-		if (desc->ptx_ring) {
-			for (i = 0; i < SYSADPT_MAX_NUM_TX_DESC; i++) {
-				desc->ptx_ring[i].status =
-					cpu_to_le32(EAGLE_TXD_STATUS_IDLE);
-				desc->ptx_ring[i].pphys_next =
-					cpu_to_le32((u32)desc->pphys_tx_ring +
-					((i + 1) * sizeof(struct mwl_tx_desc)));
-				desc->tx_hndl[i].pdesc =
-					&desc->ptx_ring[i];
-				if (i < SYSADPT_MAX_NUM_TX_DESC - 1)
-					desc->tx_hndl[i].pnext =
-						&desc->tx_hndl[i + 1];
-			}
-			desc->ptx_ring[SYSADPT_MAX_NUM_TX_DESC - 1].pphys_next =
-				cpu_to_le32((u32)desc->pphys_tx_ring);
-			desc->tx_hndl[SYSADPT_MAX_NUM_TX_DESC - 1].pnext =
-				&desc->tx_hndl[0];
-
-			desc->pstale_tx_hndl = &desc->tx_hndl[0];
-			desc->pnext_tx_hndl  = &desc->tx_hndl[0];
-		} else {
-			wiphy_err(priv->hw->wiphy, "no valid TX mem\n");
-			return -ENOMEM;
-		}
-	}
-
-	return 0;
-}
-
-static void mwl_tx_ring_cleanup(struct mwl_priv *priv)
-{
-	int cleaned_tx_desc = 0;
-	int num, i;
-	struct mwl_desc_data *desc;
-
-	for (num = 0; num < SYSADPT_NUM_OF_DESC_DATA; num++) {
-		skb_queue_purge(&priv->txq[num]);
-		priv->fw_desc_cnt[num] = 0;
-
-		desc = &priv->desc_data[num];
-
-		if (desc->ptx_ring) {
-			for (i = 0; i < SYSADPT_MAX_NUM_TX_DESC; i++) {
-				if (!desc->tx_hndl[i].psk_buff)
-					continue;
-
-				wiphy_info(priv->hw->wiphy,
-					   "unmapped and free'd %i 0x%p 0x%x\n",
-					   i,
-					   desc->tx_hndl[i].psk_buff->data,
-					   le32_to_cpu(
-					   desc->ptx_ring[i].pkt_ptr));
-				pci_unmap_single(priv->pdev,
-						 le32_to_cpu(
-						 desc->ptx_ring[i].pkt_ptr),
-						 desc->tx_hndl[i].psk_buff->len,
-						 PCI_DMA_TODEVICE);
-				dev_kfree_skb_any(desc->tx_hndl[i].psk_buff);
-				desc->ptx_ring[i].status =
-					cpu_to_le32(EAGLE_TXD_STATUS_IDLE);
-				desc->ptx_ring[i].pkt_ptr = 0;
-				desc->ptx_ring[i].pkt_len = 0;
-				desc->tx_hndl[i].psk_buff = NULL;
-				cleaned_tx_desc++;
-			}
-		}
-	}
-
-	wiphy_info(priv->hw->wiphy, "cleaned %i TX descr\n", cleaned_tx_desc);
-}
-
-static void mwl_tx_ring_free(struct mwl_priv *priv)
-{
-	int num;
-
-	if (priv->desc_data[0].ptx_ring) {
-		dma_free_coherent(priv->dev,
-				  MAX_NUM_TX_RING_BYTES *
-				  SYSADPT_NUM_OF_DESC_DATA,
-				  priv->desc_data[0].ptx_ring,
-				  priv->desc_data[0].pphys_tx_ring);
-	}
-
-	for (num = 0; num < SYSADPT_NUM_OF_DESC_DATA; num++) {
-		if (priv->desc_data[num].ptx_ring)
-			priv->desc_data[num].ptx_ring = NULL;
-		priv->desc_data[num].pstale_tx_hndl = NULL;
-		priv->desc_data[num].pnext_tx_hndl = NULL;
-	}
-
-	kfree(priv->desc_data[0].tx_hndl);
-}
 
 static inline void mwl_tx_add_dma_header(struct mwl_priv *priv,
 					 struct sk_buff *skb,
@@ -373,33 +211,14 @@ static inline void mwl_tx_count_packet(struct ieee80211_sta *sta, u8 tid)
 
 static inline bool mwl_tx_available(struct mwl_priv *priv, int desc_num)
 {
-	struct mwl_tx_hndl *tx_hndl;
-
-	tx_hndl = priv->desc_data[desc_num].pnext_tx_hndl;
-
-	if (!tx_hndl->pdesc)
-		return false;
-
-	if (tx_hndl->pdesc->status != EAGLE_TXD_STATUS_IDLE) {
-		/* Interrupt F/W anyway */
-		if (tx_hndl->pdesc->status &
-		    cpu_to_le32(EAGLE_TXD_STATUS_FW_OWNED))
-			writel(MACREG_H2ARIC_BIT_PPA_READY,
-			       priv->iobase1 +
-			       MACREG_REG_H2A_INTERRUPT_EVENTS);
-		return false;
-	}
-
-	return true;
+	  return priv->if_ops.is_tx_available(priv, desc_num);
 }
 
-static inline void mwl_tx_skb(struct mwl_priv *priv, int desc_num,
+inline void mwl_tx_skb(struct mwl_priv *priv, int desc_num,
 			      struct sk_buff *tx_skb)
 {
 	struct ieee80211_tx_info *tx_info;
 	struct mwl_tx_ctrl *tx_ctrl;
-	struct mwl_tx_hndl *tx_hndl;
-	struct mwl_tx_desc *tx_desc;
 	struct ieee80211_sta *sta;
 	struct ieee80211_vif *vif;
 	struct mwl_vif *mwl_vif;
@@ -407,7 +226,6 @@ static inline void mwl_tx_skb(struct mwl_priv *priv, int desc_num,
 	bool ccmp = false;
 	struct mwl_dma_data *dma_data;
 	struct ieee80211_hdr *wh;
-	dma_addr_t dma;
 
 	if (WARN_ON(!tx_skb))
 		return;
@@ -460,35 +278,9 @@ static inline void mwl_tx_skb(struct mwl_priv *priv, int desc_num,
 			}
 		}
 	}
-
-	tx_hndl = priv->desc_data[desc_num].pnext_tx_hndl;
-	tx_hndl->psk_buff = tx_skb;
-	tx_desc = tx_hndl->pdesc;
-	tx_desc->tx_priority = tx_ctrl->tx_priority;
-	tx_desc->qos_ctrl = cpu_to_le16(tx_ctrl->qos_ctrl);
-	tx_desc->pkt_len = cpu_to_le16(tx_skb->len);
-	tx_desc->packet_info = 0;
-	tx_desc->data_rate = 0;
-	tx_desc->type = tx_ctrl->type;
-	tx_desc->xmit_control = tx_ctrl->xmit_control;
-	tx_desc->sap_pkt_info = 0;
-	dma = pci_map_single(priv->pdev, tx_skb->data,
-			     tx_skb->len, PCI_DMA_TODEVICE);
-	if (pci_dma_mapping_error(priv->pdev, dma)) {
-		dev_kfree_skb_any(tx_skb);
-		wiphy_err(priv->hw->wiphy,
-			  "failed to map pci memory!\n");
-		return;
-	}
-	tx_desc->pkt_ptr = cpu_to_le32(dma);
-	tx_desc->status = cpu_to_le32(EAGLE_TXD_STATUS_FW_OWNED);
-	/* make sure all the memory transactions done by cpu were completed */
-	wmb();	/*Data Memory Barrier*/
-	writel(MACREG_H2ARIC_BIT_PPA_READY,
-	       priv->iobase1 + MACREG_REG_H2A_INTERRUPT_EVENTS);
-	priv->desc_data[desc_num].pnext_tx_hndl = tx_hndl->pnext;
-	priv->fw_desc_cnt[desc_num]++;
+	priv->if_ops.host_to_card(priv, desc_num, tx_skb);
 }
+EXPORT_SYMBOL_GPL(mwl_tx_skb);
 
 static inline struct sk_buff *mwl_tx_do_amsdu(struct mwl_priv *priv,
 					      int desc_num,
@@ -631,7 +423,7 @@ static inline struct sk_buff *mwl_tx_do_amsdu(struct mwl_priv *priv,
 	return NULL;
 }
 
-static inline void mwl_tx_prepare_info(struct ieee80211_hw *hw, u32 rate,
+inline void mwl_tx_prepare_info(struct ieee80211_hw *hw, u32 rate,
 				       struct ieee80211_tx_info *info)
 {
 	u32 format, bandwidth, short_gi, rate_id;
@@ -679,8 +471,9 @@ static inline void mwl_tx_prepare_info(struct ieee80211_hw *hw, u32 rate,
 		info->status.rates[1].idx = -1;
 	}
 }
+EXPORT_SYMBOL_GPL(mwl_tx_prepare_info);
 
-static inline void mwl_tx_ack_amsdu_pkts(struct ieee80211_hw *hw, u32 rate,
+inline void mwl_tx_ack_amsdu_pkts(struct ieee80211_hw *hw, u32 rate,
 					 struct sk_buff_head *amsdu_pkts)
 {
 	struct sk_buff *amsdu_pkt;
@@ -697,39 +490,8 @@ static inline void mwl_tx_ack_amsdu_pkts(struct ieee80211_hw *hw, u32 rate,
 
 	kfree(amsdu_pkts);
 }
+EXPORT_SYMBOL_GPL(mwl_tx_ack_amsdu_pkts);
 
-int mwl_tx_init(struct ieee80211_hw *hw)
-{
-	struct mwl_priv *priv = hw->priv;
-	int rc;
-
-	skb_queue_head_init(&priv->delay_q);
-
-	rc = mwl_tx_ring_alloc(priv);
-	if (rc) {
-		wiphy_err(hw->wiphy, "allocating TX ring failed\n");
-		return rc;
-	}
-
-	rc = mwl_tx_ring_init(priv);
-	if (rc) {
-		mwl_tx_ring_free(priv);
-		wiphy_err(hw->wiphy, "initializing TX ring failed\n");
-		return rc;
-	}
-
-	return 0;
-}
-
-void mwl_tx_deinit(struct ieee80211_hw *hw)
-{
-	struct mwl_priv *priv = hw->priv;
-
-	skb_queue_purge(&priv->delay_q);
-
-	mwl_tx_ring_cleanup(priv);
-	mwl_tx_ring_free(priv);
-}
 
 void mwl_tx_xmit(struct ieee80211_hw *hw,
 		 struct ieee80211_tx_control *control,
@@ -1073,149 +835,7 @@ void mwl_tx_skbs(unsigned long data)
 	}
 	spin_unlock_bh(&priv->tx_desc_lock);
 }
-
-void mwl_tx_done(unsigned long data)
-{
-	struct ieee80211_hw *hw = (struct ieee80211_hw *)data;
-	struct mwl_priv *priv = hw->priv;
-	int num;
-	struct mwl_desc_data *desc;
-	struct mwl_tx_hndl *tx_hndl;
-	struct mwl_tx_desc *tx_desc;
-	struct sk_buff *done_skb;
-	u32 rate;
-	struct mwl_dma_data *tr;
-	struct ieee80211_tx_info *info;
-	struct mwl_tx_ctrl *tx_ctrl;
-	struct sk_buff_head *amsdu_pkts;
-	int hdrlen;
-
-	spin_lock_bh(&priv->tx_desc_lock);
-	for (num = 0; num < SYSADPT_TX_WMM_QUEUES; num++) {
-		desc = &priv->desc_data[num];
-		tx_hndl = desc->pstale_tx_hndl;
-		tx_desc = tx_hndl->pdesc;
-
-		if ((tx_desc->status &
-		    cpu_to_le32(EAGLE_TXD_STATUS_FW_OWNED)) &&
-		    (tx_hndl->pnext->pdesc->status &
-		    cpu_to_le32(EAGLE_TXD_STATUS_OK)))
-			tx_desc->status = cpu_to_le32(EAGLE_TXD_STATUS_OK);
-
-		while (tx_hndl &&
-		       (tx_desc->status & cpu_to_le32(EAGLE_TXD_STATUS_OK)) &&
-		       (!(tx_desc->status &
-		       cpu_to_le32(EAGLE_TXD_STATUS_FW_OWNED)))) {
-			pci_unmap_single(priv->pdev,
-					 le32_to_cpu(tx_desc->pkt_ptr),
-					 le16_to_cpu(tx_desc->pkt_len),
-					 PCI_DMA_TODEVICE);
-			done_skb = tx_hndl->psk_buff;
-			rate = le32_to_cpu(tx_desc->rate_info);
-			tx_desc->pkt_ptr = 0;
-			tx_desc->pkt_len = 0;
-			tx_desc->status =
-				cpu_to_le32(EAGLE_TXD_STATUS_IDLE);
-			tx_hndl->psk_buff = NULL;
-			wmb(); /* memory barrier */
-
-			skb_get(done_skb);
-			skb_queue_tail(&priv->delay_q, done_skb);
-			if (skb_queue_len(&priv->delay_q) >
-			    SYSADPT_DELAY_FREE_Q_LIMIT)
-				dev_kfree_skb_any(skb_dequeue(&priv->delay_q));
-
-			tr = (struct mwl_dma_data *)done_skb->data;
-			info = IEEE80211_SKB_CB(done_skb);
-
-			if (ieee80211_is_data(tr->wh.frame_control) ||
-			    ieee80211_is_data_qos(tr->wh.frame_control)) {
-				tx_ctrl = (struct mwl_tx_ctrl *)&info->status;
-				amsdu_pkts = (struct sk_buff_head *)
-					tx_ctrl->amsdu_pkts;
-				if (amsdu_pkts) {
-					mwl_tx_ack_amsdu_pkts(hw, rate,
-							      amsdu_pkts);
-					dev_kfree_skb_any(done_skb);
-					done_skb = NULL;
-				} else {
-					mwl_tx_prepare_info(hw, rate, info);
-				}
-			} else {
-				mwl_tx_prepare_info(hw, 0, info);
-			}
-
-			if (done_skb) {
-				/* Remove H/W dma header */
-				hdrlen = ieee80211_hdrlen(tr->wh.frame_control);
-				memmove(tr->data - hdrlen, &tr->wh, hdrlen);
-				skb_pull(done_skb, sizeof(*tr) - hdrlen);
-				info->flags &= ~IEEE80211_TX_CTL_AMPDU;
-				info->flags |= IEEE80211_TX_STAT_ACK;
-				ieee80211_tx_status(hw, done_skb);
-			}
-
-			tx_hndl = tx_hndl->pnext;
-			tx_desc = tx_hndl->pdesc;
-			priv->fw_desc_cnt[num]--;
-		}
-
-		desc->pstale_tx_hndl = tx_hndl;
-	}
-	spin_unlock_bh(&priv->tx_desc_lock);
-
-	if (priv->is_tx_done_schedule) {
-		u32 status_mask;
-
-		status_mask = readl(priv->iobase1 +
-				    MACREG_REG_A2H_INTERRUPT_STATUS_MASK);
-		writel(status_mask | MACREG_A2HRIC_BIT_TX_DONE,
-		       priv->iobase1 + MACREG_REG_A2H_INTERRUPT_STATUS_MASK);
-
-		tasklet_schedule(&priv->tx_task);
-		priv->is_tx_done_schedule = false;
-	}
-}
-
-void mwl_tx_flush_amsdu(unsigned long data)
-{
-	struct ieee80211_hw *hw = (struct ieee80211_hw *)data;
-	struct mwl_priv *priv = hw->priv;
-	u32 status_mask;
-	struct mwl_sta *sta_info;
-	int i;
-	struct mwl_amsdu_frag *amsdu_frag;
-
-	spin_lock(&priv->sta_lock);
-	list_for_each_entry(sta_info, &priv->sta_list, list) {
-		spin_lock(&priv->tx_desc_lock);
-		spin_lock(&sta_info->amsdu_lock);
-		for (i = 0; i < SYSADPT_TX_WMM_QUEUES; i++) {
-			amsdu_frag = &sta_info->amsdu_ctrl.frag[i];
-			if (amsdu_frag->num) {
-				if (time_after(jiffies,
-					       (amsdu_frag->jiffies + 1))) {
-					if (mwl_tx_available(priv, i)) {
-						mwl_tx_skb(priv, i,
-							   amsdu_frag->skb);
-						amsdu_frag->num = 0;
-						amsdu_frag->cur_pos = NULL;
-					}
-				}
-			}
-		}
-		spin_unlock(&sta_info->amsdu_lock);
-		spin_unlock(&priv->tx_desc_lock);
-	}
-	spin_unlock(&priv->sta_lock);
-
-	status_mask = readl(priv->iobase1 +
-			    MACREG_REG_A2H_INTERRUPT_STATUS_MASK);
-	writel(status_mask | MACREG_A2HRIC_BIT_QUE_EMPTY,
-	       priv->iobase1 + MACREG_REG_A2H_INTERRUPT_STATUS_MASK);
-
-	priv->is_qe_schedule = false;
-}
+EXPORT_SYMBOL_GPL(mwl_tx_skbs);
 
 void mwl_tx_del_sta_amsdu_pkts(struct ieee80211_sta *sta)
 {
