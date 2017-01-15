@@ -120,7 +120,7 @@ void mwl_rx_prepare_status(struct mwl_rx_desc *pdesc,
 }
 EXPORT_SYMBOL_GPL(mwl_rx_prepare_status);
 
-/* TODO: ??
+/* TODO: only used by sdio.... should be moved? */
 void mwl_rx_enable_sta_amsdu(struct mwl_priv *priv,
 					   u8 *sta_addr)
 {
@@ -139,7 +139,6 @@ void mwl_rx_enable_sta_amsdu(struct mwl_priv *priv,
 	spin_unlock_bh(&priv->sta_lock);
 }
 EXPORT_SYMBOL_GPL(mwl_rx_enable_sta_amsdu);
-*/
 
 struct mwl_vif *mwl_rx_find_vif_bss(struct mwl_priv *priv,
 						  u8 *bssid)

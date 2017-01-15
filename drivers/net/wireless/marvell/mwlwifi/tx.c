@@ -668,7 +668,17 @@ void mwl_tx_xmit(struct ieee80211_hw *hw,
 
 	skb_queue_tail(&priv->txq[index], skb);
 
-	tasklet_schedule(&priv->tx_task);
+	if (priv->if_ops.ptx_work != NULL) {
+		/* SDIO interface is using this path */
+		if (!priv->is_tx_done_schedule) {
+			priv->is_tx_done_schedule = true;
+			queue_work(priv->if_ops.ptx_workq,
+				priv->if_ops.ptx_work);
+		}
+	} else {
+		/* PCIE interface is using this path */
+		tasklet_schedule(&priv->tx_task);
+	}
 
 	/* Initiate the ampdu session here */
 	if (start_ba_session) {
@@ -796,6 +806,8 @@ void mwl_tx_skbs(unsigned long data)
 	struct mwl_priv *priv = hw->priv;
 	int num = SYSADPT_TX_WMM_QUEUES;
 	struct sk_buff *tx_skb;
+	struct sk_buff *next_skb;
+	int next_pkt_len = 0;
 
 	spin_lock_bh(&priv->tx_desc_lock);
 	while (num--) {
@@ -812,15 +824,37 @@ void mwl_tx_skbs(unsigned long data)
 
 			if ((tx_skb->protocol != cpu_to_be16(ETH_P_PAE)) &&
 			    (tx_ctrl->tx_priority >= SYSADPT_TX_WMM_QUEUES)) {
+				/* Need to leave spin_lock since bus driver may
+				sleep while transferring data
+				*/
+				spin_unlock_bh(&priv->tx_desc_lock);
 				tx_skb = mwl_tx_do_amsdu(priv, num,
 							 tx_skb, tx_info);
+				spin_lock_bh(&priv->tx_desc_lock);
 			}
 
+			/* get next buffer length */
+			next_pkt_len = 0;
+			if (priv->host_if == MWL_IF_SDIO) {
+				next_skb = skb_peek(&priv->txq[num]);
+				if (next_skb != NULL) {
+					next_pkt_len = next_skb->len +
+						sizeof(struct mwl_tx_desc);
+				}
+			} else
+				next_pkt_len = num;
+
 			if (tx_skb) {
-				if (mwl_tx_available(priv, num))
-					mwl_tx_skb(priv, num, tx_skb);
+				/* Need to leave spin_lock since bus driver
+				* may sleep while transferring data
+				*/
+				spin_unlock_bh(&priv->tx_desc_lock);
+				if (mwl_tx_available(priv, next_pkt_len))
+					mwl_tx_skb(priv, next_pkt_len, tx_skb);
 				else
 					skb_queue_head(&priv->txq[num], tx_skb);
+
+				spin_lock_bh(&priv->tx_desc_lock);
 			}
 		}
 

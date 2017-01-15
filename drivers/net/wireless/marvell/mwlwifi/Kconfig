@@ -37,3 +37,20 @@ config MWLWIFI_PCIE
 		say M here and read <file:Documentation/kbuild/modules.txt>.  The
 		module will be called mwlwifi_pcie.
 
+ config MWLWIFI_SDIO
+	tristate "Marvell Avastar 88W8864/88W8897 driver for SDIO"
+	depends on MWLWIFI && MMC
+	select FW_LOADER
+	---help---
+		Select to build the driver supporting the:
+
+		Marvell Wireless Wi-Fi 88W8864 modules
+		Marvell Wireless Wi-Fi 88W8897 modules
+		Marvell Wireless Wi-Fi 88W8997 modules
+
+		This driver uses the kernel's mac80211 subsystem.
+
+		If you want to compile the driver as a module (= code which can be
+		inserted in and removed from the running kernel whenever you want),
+		say M here and read <file:Documentation/kbuild/modules.txt>.  The
+		module will be called mwlwifi_sdio.

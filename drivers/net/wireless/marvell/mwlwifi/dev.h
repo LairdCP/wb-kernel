@@ -124,6 +124,7 @@
 enum {
 	MWL8864 = 0,
 	MWL8897,
+	MWL8997,
 	MWLUNKNOWN,
 };
 
@@ -294,6 +295,9 @@ struct mwl_priv;
 
 struct mwl_if_ops {
 	unsigned short inttf_head_len;
+/* TODO: these don't belong here, move */
+	struct workqueue_struct *ptx_workq;
+	struct work_struct *ptx_work;
 	struct mwl_chip_info	mwl_chip_tbl;
 
 	int (*init_if) (struct mwl_priv *);
