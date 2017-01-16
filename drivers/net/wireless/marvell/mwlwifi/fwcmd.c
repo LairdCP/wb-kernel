@@ -1920,8 +1920,9 @@ int mwl_fwcmd_set_new_stn_add(struct ieee80211_hw *hw,
 		wiphy_err(hw->wiphy, "failed execution\n");
 		return -EIO;
 	}
-/* TODO: fix the following */
+
 	if (vif->type == NL80211_IFTYPE_STATION) {
+		pcmd->cmd_hdr.cmd = cpu_to_le16(HOSTCMD_CMD_SET_NEW_STN);
 		ether_addr_copy(pcmd->mac_addr, mwl_vif->sta_mac);
 
 		if (mwl_fwcmd_exec_cmd(priv, HOSTCMD_CMD_SET_NEW_STN)) {
@@ -1996,8 +1997,9 @@ int mwl_fwcmd_set_new_stn_del(struct ieee80211_hw *hw,
 		wiphy_err(hw->wiphy, "failed execution\n");
 		return -EIO;
 	}
-/* TODO: Fix the following */
+
 	if (vif->type == NL80211_IFTYPE_STATION) {
+		pcmd->cmd_hdr.cmd = cpu_to_le16(HOSTCMD_CMD_SET_NEW_STN);
 		ether_addr_copy(pcmd->mac_addr, mwl_vif->sta_mac);
 
 		if (mwl_fwcmd_exec_cmd(priv, HOSTCMD_CMD_SET_NEW_STN)) {
