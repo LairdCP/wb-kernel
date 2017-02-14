@@ -413,7 +413,7 @@ void mwl_sdio_send_command(struct mwl_priv *priv)
 	pkt_len = buf_block_len * blk_size;
 	card->cmd_sent = true;
 	card->cmd_cond = false;
-	card->cmd_id = (u16)cmd_hdr->command;
+	card->cmd_id = (u16)(cmd_hdr->command & ~HOSTCMD_RESP_BIT);
 
 	pbuf[0] = cpu_to_le16(pkt_len);
 	pbuf[1] = cpu_to_le16(MWL_TYPE_CMD);
