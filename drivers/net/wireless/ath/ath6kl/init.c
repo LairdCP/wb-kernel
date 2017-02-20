@@ -1508,8 +1508,6 @@ static int ath6kl_init_upload(struct ath6kl *ar)
 
 	/* WAR to avoid SDIO CRC err */
 	if (ar->hw.flags & ATH6KL_HW_SDIO_CRC_ERROR_WAR) {
-		ath6kl_err("temporary war to avoid sdio crc error\n");
-
 		param = 0x28;
 		address = GPIO_BASE_ADDRESS + GPIO_PIN9_ADDRESS;
 		status = ath6kl_bmi_reg_write(ar, address, param);
