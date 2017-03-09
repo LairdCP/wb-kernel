@@ -92,6 +92,7 @@ enum { // keep this list in sync with the one from ath_access.c from the SDK
 	GETAPNAME,
 	GETAPIP,
 	GETFWSTR,
+	GETPSTREAMS,
 } ATHEROS_CMD_GET_VALUES;
 
 #define AIRONET_CCX_IE   0x85
@@ -4459,6 +4460,11 @@ static int ath6kl_genl_get_value (struct sk_buff *skb_2, struct genl_info *info)
 						ar->fw_api,
 						test_bit(TESTMODE, &ar->flag) ? " testmode" : "");
 				rc = nla_put_string(skb, ATHEROS_ATTR_MSG, fwStr);
+				break;
+			case GETPSTREAMS:
+				spin_lock_bh(&ar->wmi->lock);
+				rc = nla_put(skb, ATHEROS_ATTR_MSG, sizeof(ar->wmi->stream_exist_for_ac), ar->wmi->stream_exist_for_ac);
+				spin_unlock_bh(&ar->wmi->lock);
 				break;
 		}
 	}
