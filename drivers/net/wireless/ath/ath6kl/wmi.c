@@ -78,10 +78,9 @@ static const u8 up_to_ac[] = {
 	WMM_AC_VO,
 };
 
-/* Laird version is 32bit value.  Parsed in the form w.x.y.z.
- * increment y.z as needed for each change
+/* Laird build number is 32bit value.  Parsed in the form w.x.y.z.
  */
-#define LAIRD_DRV_VERSION 0x03050001
+#define LAIRD_BUILD_NUMBER 0x03050500
 
 static void __lrd_set_AP_Name(struct wmi *wmi, const char *apname);
 static void __lrd_set_AP_IP(struct wmi *wmi, const char *apip);
@@ -4437,7 +4436,7 @@ static int ath6kl_genl_get_value (struct sk_buff *skb_2, struct genl_info *info)
 		switch (*c)
 		{
 			case GETVERSION:
-				rc = nla_put_s32( skb, ATHEROS_ATTR_MSG, LAIRD_DRV_VERSION );
+				rc = nla_put_s32( skb, ATHEROS_ATTR_MSG, LAIRD_BUILD_NUMBER );
 				break;
 			case GETTXPOWER:
 				ath6kl_get_txpower( ar->wiphy, c);
