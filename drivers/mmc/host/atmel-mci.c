@@ -702,6 +702,15 @@ atmci_of_init(struct platform_device *pdev)
 			of_get_named_gpio(cnp, "wp-gpios", 0);
 	}
 
+	//get power management capabilities
+	pdata->pm_caps=0; // start with none set
+	if (of_property_read_bool(np, "keep-power-in-suspend"))
+		pdata->pm_caps |= MMC_PM_KEEP_POWER;
+	if (of_property_read_bool(np, "wakeup-source") ||
+		of_property_read_bool(np, "enable-sdio-wakeup")) /* legacy */
+		pdata->pm_caps |= MMC_PM_WAKE_SDIO_IRQ;
+
+
 	return pdata;
 }
 #else /* CONFIG_OF */
@@ -2646,6 +2655,8 @@ static int atmci_probe(struct platform_device *pdev)
 	pm_runtime_mark_last_busy(&host->pdev->dev);
 	pm_runtime_put_autosuspend(&pdev->dev);
 
+	//update mmc_host's pm+caps
+	host->slot[0]->mmc->pm_caps |= pdata->pm_caps;
 	return 0;
 
 err_dma_alloc:
