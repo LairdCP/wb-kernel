@@ -1264,8 +1264,10 @@ static int brcmf_ops_sdio_suspend(struct device *dev)
 		else
 			sdio_flags |= MMC_PM_WAKE_SDIO_IRQ;
 	}
-	if (sdio_set_host_pm_flags(sdiodev->func[1], sdio_flags))
+	if (sdio_set_host_pm_flags(sdiodev->func[1], sdio_flags)) (
 		brcmf_err("Failed to set pm_flags %x\n", sdio_flags);
+		return -EINVAL;
+	}
 	return 0;
 }
 
