@@ -4263,7 +4263,6 @@ static struct nla_policy atheros_policy[ATHEROS_ATTR_MAX + 1] = {
 #define ATHEROS_EVENT_VERSION 1
 #define ATHEROS_GENL_HDR_SZ 0
 static struct genl_family atheros_fam = {
-	.id = GENL_ID_GENERATE,
 	.hdrsize = ATHEROS_GENL_HDR_SZ,
 	.name = "atheros",
 	.version = ATHEROS_EVENT_VERSION,
@@ -4274,7 +4273,7 @@ enum ath_multicast_groups {
 	ATH_MCGRP_EVENTS,
 };
 
-static struct genl_multicast_group atheros_events_mcgrp[] = {
+static const struct genl_multicast_group atheros_events_mcgrp[] = {
 	[ATH_MCGRP_EVENTS] = { .name = "events", },
 };
 
@@ -4553,7 +4552,7 @@ static int ath6kl_genl_qos(struct sk_buff *skb_2, struct genl_info *info)
 	return 0;
 }
 
-struct genl_ops atheros_ops[] = {
+const struct genl_ops atheros_ops[] = {
 	{
 		.cmd = ATHEROS_CMD_GET_VALUE,
 		.flags = 0,
@@ -4587,9 +4586,12 @@ static int ath6kl_genl_init(void)
 
 	ath6kl_warn("initializing atheros generic netlink family\n");
 
-	if ((rc = _genl_register_family_with_ops_grps(&atheros_fam, atheros_ops,
-			ARRAY_SIZE(atheros_ops), atheros_events_mcgrp,
-			ARRAY_SIZE(atheros_events_mcgrp))) != 0) {
+	atheros_fam.ops = atheros_ops;
+	atheros_fam.n_ops = ARRAY_SIZE(atheros_ops);
+	atheros_fam.mcgrps = atheros_events_mcgrp;
+	atheros_fam.n_mcgrps = ARRAY_SIZE(atheros_events_mcgrp);
+
+	if ((rc = genl_register_family(&atheros_fam)) != 0) {
 		ath6kl_err("cannot register atheros netlink family\n");
 	}
 
