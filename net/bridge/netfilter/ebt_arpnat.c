@@ -274,8 +274,8 @@ static struct file_operations arpnat_info_fops = {
 
 static unsigned int ebt_target_arpnat(struct sk_buff *pskb, const struct xt_action_param *par)
 {
-	const struct net_device *in  =  par->in;
-	const struct net_device *out =  par->out;
+	const struct net_device *in  =  xt_in(par);
+	const struct net_device *out =  xt_out(par);
 
 	const struct ebt_nat_info *info = (struct ebt_nat_info *) par->targinfo;
 
