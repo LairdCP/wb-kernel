@@ -30,6 +30,44 @@
 #define IEEE80211_CHANNEL_TIME (HZ / 33)
 #define IEEE80211_PASSIVE_CHANNEL_TIME (HZ / 9)
 
+#ifndef _REMOVE_LAIRD_MODS_
+static inline int __get_PROBE_DELAY(struct cfg80211_scan_request *scan_req)
+{
+	int msec = scan_req->probe_delay_time;
+	if (0 < msec && msec <= 250)
+		return (HZ * msec + 999) / 1000;
+	return IEEE80211_PROBE_DELAY;
+}
+#undef IEEE80211_PROBE_DELAY
+#define IEEE80211_PROBE_DELAY __get_PROBE_DELAY(scan_req)
+static inline int __get_CHANNEL_TIME(struct cfg80211_scan_request *scan_req)
+{
+	int msec = scan_req->duration;
+	if (0 < msec && msec <= 250)
+		return (HZ * msec + 999) / 1000;
+	return IEEE80211_CHANNEL_TIME;
+}
+#undef IEEE80211_CHANNEL_TIME
+#define IEEE80211_CHANNEL_TIME __get_CHANNEL_TIME(scan_req)
+static inline int __get_PASSIVE_CHANNEL_TIME(struct cfg80211_scan_request *scan_req)
+{
+	int msec = scan_req->passive_channel_time;
+	if (0 < msec && msec <= 250)
+		return (HZ * msec + 999) / 1000;
+	return IEEE80211_PASSIVE_CHANNEL_TIME;
+}
+#undef IEEE80211_PASSIVE_CHANNEL_TIME
+#define IEEE80211_PASSIVE_CHANNEL_TIME __get_PASSIVE_CHANNEL_TIME(scan_req)
+// note, this version returns 0 by default, since no macro value available
+static inline int __get_SUSPEND_TIME(struct cfg80211_scan_request *scan_req)
+{
+	int msec = scan_req->scan_suspend_time;
+	if (0 < msec && msec <= 250)
+		return (HZ * msec + 999) / 1000;
+	return 0; // caller will fill in default
+}
+#endif /* _REMOVE_LAIRD_MODS_ */
+
 void ieee80211_rx_bss_put(struct ieee80211_local *local,
 			  struct ieee80211_bss *bss)
 {
@@ -547,6 +585,10 @@ static int __ieee80211_start_scan(struct ieee80211_sub_if_data *sdata,
 {
 	struct ieee80211_local *local = sdata->local;
 	int rc;
+#ifndef _REMOVE_LAIRD_MODS_
+	// need scan_req for fetching next_delay duration values
+	struct cfg80211_scan_request *scan_req = req;
+#endif
 
 	lockdep_assert_held(&local->mtx);
 
@@ -684,7 +726,11 @@ static int __ieee80211_start_scan(struct ieee80211_sub_if_data *sdata,
 }
 
 static unsigned long
-ieee80211_scan_get_channel_time(struct ieee80211_channel *chan)
+ieee80211_scan_get_channel_time(struct ieee80211_channel *chan
+#ifndef _REMOVE_LAIRD_MODS_
+								, struct cfg80211_scan_request *scan_req
+#endif
+	)
 {
 	/*
 	 * TODO: channel switching also consumes quite some time,
@@ -743,7 +789,11 @@ static void ieee80211_scan_state_decision(struct ieee80211_local *local,
 	 */
 
 	bad_latency = time_after(jiffies +
+#ifndef _REMOVE_LAIRD_MODS_
+				 ieee80211_scan_get_channel_time(next_chan, scan_req),
+#else
 				 ieee80211_scan_get_channel_time(next_chan),
+#endif
 				 local->leave_oper_channel_time + HZ / 8);
 
 	if (associated && !tx_empty) {
@@ -837,6 +887,12 @@ static void ieee80211_scan_state_set_channel(struct ieee80211_local *local,
 static void ieee80211_scan_state_suspend(struct ieee80211_local *local,
 					 unsigned long *next_delay)
 {
+#ifndef _REMOVE_LAIRD_MODS_
+	struct cfg80211_scan_request *scan_req;
+	scan_req = rcu_dereference_protected(local->scan_req,
+					     lockdep_is_held(&local->mtx));
+#endif
+
 	/* switch back to the operating channel */
 	local->scan_chandef.chan = NULL;
 	ieee80211_hw_config(local, IEEE80211_CONF_CHANGE_CHANNEL);
@@ -844,6 +900,10 @@ static void ieee80211_scan_state_suspend(struct ieee80211_local *local,
 	/* disable PS */
 	ieee80211_offchannel_return(local);
 
+#ifndef _REMOVE_LAIRD_MODS_
+	*next_delay = __get_SUSPEND_TIME(scan_req);
+	if (!*next_delay) // fall through to default value if zero
+#endif
 	*next_delay = HZ / 5;
 	/* afterwards, resume scan & go to next channel */
 	local->next_scan_state = SCAN_RESUME;

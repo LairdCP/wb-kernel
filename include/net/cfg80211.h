@@ -1527,6 +1527,12 @@ struct cfg80211_scan_request {
 	bool notified;
 	bool no_cck;
 
+#ifndef _REMOVE_LAIRD_MODS_
+	u16 passive_channel_time;
+	u16 probe_delay_time;
+	u16 scan_suspend_time;
+#endif
+
 	/* keep last */
 	struct ieee80211_channel *channels[0];
 };
