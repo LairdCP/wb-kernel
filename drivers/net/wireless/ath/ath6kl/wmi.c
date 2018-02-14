@@ -3532,27 +3532,6 @@ int ath6kl_wmi_set_rx_frame_format_cmd(struct wmi *wmi, u8 if_idx,
 	struct wmi_rx_frame_format_cmd *cmd;
 	int ret;
 
-#ifdef CONFIG_ATH6KL_LAIRD_FIPS
-	if (fips_mode) {
-		/* Disable A-MSDU when in FIPS mode */
-		struct wmi_allow_aggr_cmd *fips_cmd;
-
-		skb = ath6kl_wmi_get_new_buf(sizeof(*fips_cmd));
-
-		if (!skb)
-			return -ENOMEM;
-		fips_cmd = (struct wmi_allow_aggr_cmd *)skb->data;
-		/* Disable aggregation for Tx and Rx on all TIDs
-		 *(one bit each)
-		 */
-		fips_cmd->tx_allow_aggr = 0x00;
-		fips_cmd->rx_allow_aggr = 0x00;
-		ret = ath6kl_wmi_cmd_send(wmi, if_idx, skb,
-					  WMI_ALLOW_AGGR_CMDID,
-					  NO_SYNC_WMIFLAG);
-	}
-#endif
-
 	skb = ath6kl_wmi_get_new_buf(sizeof(*cmd));
 	if (!skb)
 		return -ENOMEM;
