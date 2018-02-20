@@ -1804,7 +1804,7 @@ void laird_skb_rx_continue(struct sk_buff *skb, int res)
 			return;
 		}
 	} else if (!is_broadcast_ether_addr(datap->h_dest)) {
-		vif->net_stats.multicast++;
+		vif->ndev->stats.multicast++;
 	}
 
 	ath6kl_deliver_frames_to_nw_stack(vif->ndev, skb);
