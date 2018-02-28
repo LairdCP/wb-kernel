@@ -1,0 +1,133 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * at91-wb50n_rdvk.dts - Device Tree file for wb50n_rdvk evaluation board
+ *
+ *  Copyright (C) 2018 Laird
+ *
+ */
+
+/dts-v1/;
+#include "at91-wb50n.dtsi"
+
+/ {
+	model = "Laird Workgroup Bridge 50N - Atmel SAMA5D";
+	compatible = "laird,wb50n", "atmel,sama5d31", "atmel,sama5d3", "atmel,sama5";
+
+	chosen {
+		stdout-path = "serial0:115200n8";
+	};
+
+	ahb {
+		apb {
+			pinctrl@fffff200 {
+				board {
+					pinctrl_wlan_wl8xx: wlan_wl18xx {
+						atmel,pins =
+							<AT91_PIOA 31 AT91_PERIPH_GPIO AT91_PINCTRL_PULL_DOWN /* WLAN-EN */
+							 AT91_PIOA 14 AT91_PERIPH_GPIO AT91_PINCTRL_PULL_DOWN /* INT */
+							 AT91_PIOA 30 AT91_PERIPH_GPIO AT91_PINCTRL_PULL_DOWN>; /* BT-EN */
+					};
+				};
+			};
+
+			watchdog@fffffe40 {
+				status = "okay";
+			};
+		};
+	};
+
+	gpio_keys {
+		compatible = "gpio-keys";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		btn0@pa10 {
+			label = "BTNESC";
+			linux,code = <1>; /* ESC button */
+			gpios = <&pioA 10 GPIO_ACTIVE_LOW>;
+			gpio-key,wakeup = <1>;
+		};
+
+		irqbtn@pe31 {
+			label = "IRQBTN";
+			linux,code = <99>; /* SysReq button */
+			gpios = <&pioE 31 GPIO_ACTIVE_LOW>;
+			gpio-key,wakeup = <1>;
+		};
+	};
+
+	leds {
+		compatible = "gpio-leds";
+
+		led0 {
+			label = "wb50n:blue:led0";
+			gpios = <&pioA 12 GPIO_ACTIVE_LOW>;
+			default-state = "off";
+		};
+
+		led1 {
+			label = "wb50n:green:led1";
+			gpios = <&pioA 24 GPIO_ACTIVE_LOW>;
+			default-state = "off";
+		};
+
+		led2 {
+			label = "wb50n:red:led2";
+			gpios = <&pioA 26 GPIO_ACTIVE_LOW>;
+			default-state = "off";
+		};
+	};
+};
+
+&mmc0 {
+	pinctrl-0 = <&pinctrl_mmc0_clk_cmd_dat0 &pinctrl_mmc0_dat1_3 &pinctrl_mmc0_cd &pinctrl_wlan_wl8xx>;
+	keep-power-in-suspend;
+	status = "okay";
+
+	wlcore@1 {
+		compatible = "ti,wl1835";
+		reg = <2>;
+		interrupt-parent = <&pioA>;
+		interrupts = <14 IRQ_TYPE_EDGE_RISING>;
+	};
+};
+
+&macb1 {
+	status = "okay";
+};
+
+&dbgu {
+	status = "okay";
+};
+
+/* On BB40 this port is labeled UART1 */
+&usart0 {
+	status = "okay";
+};
+
+/* On BB40 this port is labeled UART0 */
+&usart1 {
+	status = "okay";
+};
+
+&spi1 {
+	status = "okay";
+
+	spidev@0 {
+		compatible = "spidev";
+		reg = <0>;
+		spi-max-frequency = <8000000>;
+	};
+};
+
+&usb0 {
+	status = "okay";
+};
+
+&usb1 {
+	status = "okay";
+};
+
+&usb2 {
+	status = "okay";
+};
+
