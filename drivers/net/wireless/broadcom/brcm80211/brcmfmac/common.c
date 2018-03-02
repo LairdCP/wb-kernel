@@ -63,10 +63,6 @@ static int brcmf_roamoff;
 module_param_named(roamoff, brcmf_roamoff, int, 0400);
 MODULE_PARM_DESC(roamoff, "Do not use internal roaming engine");
 
-static int brcmf_eap_restrict;
-module_param_named(eap_restrict, brcmf_eap_restrict, int, 0400);
-MODULE_PARM_DESC(eap_restrict, "Block non-802.1X frames until auth finished");
-
 
 static int brcmf_iapp_enable;
 module_param_named(iapp, brcmf_iapp_enable, int, 0);
@@ -417,7 +413,6 @@ struct brcmf_mp_device *brcmf_get_module_param(struct device *dev,
 	settings->feature_disable = brcmf_feature_disable;
 	settings->fcmode = brcmf_fcmode;
 	settings->roamoff = !!brcmf_roamoff;
-	settings->eap_restrict = !!brcmf_eap_restrict;
 	settings->iapp = !!brcmf_iapp_enable;
 #ifdef DEBUG
 	settings->ignore_probe_fail = !!brcmf_ignore_probe_fail;
