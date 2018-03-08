@@ -1481,25 +1481,7 @@ static int xhci_urb_dequeue(struct usb_hcd *hcd, struct urb *urb, int status)
 			if (!list_empty(&td->cancelled_td_list))
 				list_del_init(&td->cancelled_td_list);
 		}
-
-		usb_hcd_unlink_urb_from_ep(hcd, urb);
-		spin_unlock_irqrestore(&xhci->lock, flags);
-		usb_hcd_giveback_urb(hcd, urb, -ESHUTDOWN);
-		xhci_urb_free_priv(urb_priv);
-		return ret;
-	}
-	if ((xhci->xhc_state & XHCI_STATE_DYING) ||
-			(xhci->xhc_state & XHCI_STATE_HALTED)) {
-		xhci_dbg_trace(xhci, trace_xhci_dbg_cancel_urb,
-				"Ep 0x%x: URB %p to be canceled on "
-				"non-responsive xHCI host.",
-				urb->ep->desc.bEndpointAddress, urb);
-		/* Let the stop endpoint command watchdog timer (which set this
-		 * state) finish cleaning up the endpoint TD lists.  We must
-		 * have caught it in the middle of dropping a lock and giving
-		 * back an URB.
-		 */
-		goto done;
+		goto err_giveback;
 	}
 
 	i = urb_priv->num_tds_done;

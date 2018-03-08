@@ -1750,12 +1750,13 @@ static int si_init_microcode(struct radeon_device *rdev)
 		break;
 	case CHIP_HAINAN:
 		chip_name = "HAINAN";
-		if ((rdev->pdev->revision == 0x81) ||
-		    (rdev->pdev->revision == 0x83) ||
-		    (rdev->pdev->revision == 0xC3) ||
-		    (rdev->pdev->device == 0x6664) ||
-		    (rdev->pdev->device == 0x6665) ||
-		    (rdev->pdev->device == 0x6667))
+		if (((rdev->pdev->revision == 0x81) &&
+		     (rdev->pdev->device == 0x6660)) ||
+		    ((rdev->pdev->revision == 0x83) &&
+		     ((rdev->pdev->device == 0x6660) ||
+		      (rdev->pdev->device == 0x6663) ||
+		      (rdev->pdev->device == 0x6665) ||
+		      (rdev->pdev->device == 0x6667))))
 			new_smc = true;
 		else if ((rdev->pdev->revision == 0xc3) &&
 			 (rdev->pdev->device == 0x6665))

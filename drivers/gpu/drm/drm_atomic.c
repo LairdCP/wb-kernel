@@ -2346,20 +2346,7 @@ retry:
 out:
 	drm_atomic_clean_old_fb(dev, plane_mask, ret);
 
-	if (ret && arg->flags & DRM_MODE_PAGE_FLIP_EVENT) {
-		/*
-		 * TEST_ONLY and PAGE_FLIP_EVENT are mutually exclusive,
-		 * if they weren't, this code should be called on success
-		 * for TEST_ONLY too.
-		 */
-
-		for_each_crtc_in_state(state, crtc, crtc_state, i) {
-			if (!crtc_state->event)
-				continue;
-
-			drm_event_cancel_free(dev, &crtc_state->event->base);
-		}
-	}
+	complete_crtc_signaling(dev, state, fence_state, num_fences, !ret);
 
 	if (ret == -EDEADLK) {
 		drm_atomic_state_clear(state);
