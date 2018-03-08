@@ -2893,15 +2893,6 @@ static void *mlx4_ib_add(struct mlx4_dev *dev)
 			bitmap_fill(ibdev->ib_uc_qpns_bitmap,
 				    ibdev->steer_qpn_count);
 		}
-
-		bitmap_zero(ibdev->ib_uc_qpns_bitmap, ibdev->steer_qpn_count);
-
-		err = mlx4_FLOW_STEERING_IB_UC_QP_RANGE(
-				dev, ibdev->steer_qpn_base,
-				ibdev->steer_qpn_base +
-				ibdev->steer_qpn_count - 1);
-		if (err)
-			goto err_steer_free_bitmap;
 	}
 
 	for (j = 1; j <= ibdev->dev->caps.num_ports; j++)
