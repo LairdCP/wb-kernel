@@ -80,7 +80,7 @@ static const u8 up_to_ac[] = {
 
 /* Laird build number is 32bit value.  Parsed in the form w.x.y.z.
  */
-#define LAIRD_BUILD_NUMBER 0x03050608
+#define LAIRD_BUILD_NUMBER 0x03050609
 
 static void __lrd_set_AP_Name(struct wmi *wmi, const char *apname);
 static void __lrd_set_AP_IP(struct wmi *wmi, const char *apip);
