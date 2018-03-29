@@ -1,0 +1,65 @@
+Boot time creation of mapped devices
+====================================
+
+It is possible to configure a device mapper device to act as the root
+device for your system in two ways.
+
+The first is to build an initial ramdisk which boots to a minimal
+userspace which configures the device, then pivot_root(8) in to it.
+
+The second is to possible when the device-mapper and any targets are
+compiled into the kernel (not a module), one or more device-mappers may
+be created and used as the root device at boot time with the parameters
+given with the boot line dm=...
+
+The format is specified as a simple string of data separated by commas and
+optionally semi-colons, where:
+ - a comma is used to separate fields like name, uuid, flags and table (specifies
+   one device)
+ - a semi-colon is used to separate devices.
+
+So the format will look like this:
+
+ dm=<dev_name>,<uuid>,<flags>,<table>[,<table>+][;<dev_name>,<uuid>,<flags>,<table>[,<table>+]]+
+
+Where,
+	<dev_name>	::= The device name.
+	<uuid>		::= xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx | ""
+	<flags>		::= "ro" | "rw"
+	<table>		::= <start> <length> <type> <options>
+	<type>		::= "verity" | "bootcache" | ...
+
+The dm line may be as normal when using the dmsetup tool when using the
+--bootformat argument.
+
+Unless renamed by udev, the device node created will be dm-0 as the
+first minor number for the device-mapper is used during early creation.
+
+Examples
+========
+An example of booting to a linear array made up of user-mode linux block
+devices:
+
+  dm="lroot,,rw, 0 4096 linear 98:16 0, 4096 4096 linear 98:32 0" \
+  root=/dev/dm-0
+
+This will boot to a rw dm-linear target of 8192 sectors split across two
+block devices identified by their major:minor numbers.  After boot, udev
+will rename this target to /dev/mapper/lroot (depending on the rules).
+No uuid was assigned.
+
+An example of multiple device-mappers, with the dm="..." contents shown
+here split on multiple lines for readability:
+
+    vboot,,ro,
+      0 1768000 bootcache
+        aa55b119-2a47-8c45-946a-5ac57765011f+1
+        76e9be054b15884a9fa85973e9cb274c93afadb6
+        1768000 100000 23 20000;
+    vroot,,ro,
+      0 1740800 verity 254:0 254:0 1740800 sha1
+        76e9be054b15884a9fa85973e9cb274c93afadb6
+        5b3549d54d6c7a3837b9b81ed72e49463a64c03680c47835bef94d768e5646fe;
+    vram,,rw,
+      0 32768 linear 1:0 0,
+      32768 32768 linear 1:1 0
