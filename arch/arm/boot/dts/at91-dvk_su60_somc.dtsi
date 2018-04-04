@@ -51,10 +51,6 @@
 	};
 };
 
-&can0 {
-	status = "okay";
-};
-
 &ssc0 {
 	atmel,clk-from-rk-pin;
 	status = "okay";
