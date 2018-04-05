@@ -111,10 +111,49 @@ ieee80211_bss_info_update(struct ieee80211_local *local,
 	bool signal_valid;
 	struct ieee80211_sub_if_data *scan_sdata;
 
+#ifndef _REMOVE_LAIRD_MODS_
+// averaging of the signal level of received beacon/probe rsp
+// the cumulative value (avg_signal) is multipled by LAIRD_SCALE
+// averaging subtracts off 1/LAIRD_AVG before adding the new signal
+// note, not using EWMA routines since values are signed
+#define LAIRD_AVG	(8)
+#define LAIRD_SCALE (8*(LAIRD_AVG))
+	s32 signal = rx_status->signal;
+
+	cbss = cfg80211_get_bss(local->hw.wiphy,
+							NULL, /* any channel */
+							mgmt->bssid,
+							NULL, 0, /* any ssid */
+							IEEE80211_BSS_TYPE_ANY,
+							IEEE80211_PRIVACY_ANY);
+
+	if (cbss) {
+		bss = (void *)cbss->priv;
+		if (bss->avg_signal) {
+			bss->avg_signal += (signal * (LAIRD_SCALE/LAIRD_AVG))
+				- ((bss->avg_signal + (LAIRD_AVG/2)) / LAIRD_AVG);
+			signal = bss->avg_signal;
+			if (signal >= 0) signal += LAIRD_SCALE/2;
+			else signal -= LAIRD_SCALE/2;
+			signal /= LAIRD_SCALE;
+		} else {
+			bss->avg_signal = signal * LAIRD_SCALE;
+		}
+	}
+#endif
+
 	if (ieee80211_hw_check(&local->hw, SIGNAL_DBM))
+#ifndef _REMOVE_LAIRD_MODS_
+		bss_meta.signal = signal * 100;
+#else
 		bss_meta.signal = rx_status->signal * 100;
+#endif
 	else if (ieee80211_hw_check(&local->hw, SIGNAL_UNSPEC))
+#ifndef _REMOVE_LAIRD_MODS_
+		bss_meta.signal = (signal * 100) / local->hw.max_signal;
+#else
 		bss_meta.signal = (rx_status->signal * 100) / local->hw.max_signal;
+#endif
 
 	bss_meta.scan_width = NL80211_BSS_CHAN_WIDTH_20;
 	if (rx_status->bw == RATE_INFO_BW_5)
