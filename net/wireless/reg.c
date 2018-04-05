@@ -2649,7 +2649,10 @@ int regulatory_hint_found_beacon(struct wiphy *wiphy,
 	bool processing;
 
 	if (beacon_chan->beacon_found ||
+#ifndef _REMOVE_LAIRD_MODS_
+#else
 	    beacon_chan->flags & IEEE80211_CHAN_RADAR ||
+#endif
 	    (beacon_chan->band == NL80211_BAND_2GHZ &&
 	     !freq_is_chan_12_13_14(beacon_chan->center_freq)))
 		return 0;
