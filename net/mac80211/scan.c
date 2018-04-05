@@ -859,8 +859,16 @@ static void ieee80211_scan_state_set_channel(struct ieee80211_local *local,
 	enum nl80211_bss_scan_width oper_scan_width;
 	struct cfg80211_scan_request *scan_req;
 
+#ifndef _REMOVE_LAIRD_MODS_
+	struct wireless_dev *wdev = 0;
+#endif
+
 	scan_req = rcu_dereference_protected(local->scan_req,
 					     lockdep_is_held(&local->mtx));
+
+#ifndef _REMOVE_LAIRD_MODS_
+	wdev = scan_req->wdev;
+#endif
 
 	skip = 0;
 	chan = scan_req->channels[local->scan_channel_idx];
@@ -911,7 +919,13 @@ static void ieee80211_scan_state_set_channel(struct ieee80211_local *local,
 	 *
 	 * In any case, it is not necessary for a passive scan.
 	 */
+
+#ifndef _REMOVE_LAIRD_MODS_
+	if ( (chan->flags & IEEE80211_CHAN_NO_IR) || !wdev ||
+		 ((chan->flags & IEEE80211_CHAN_RADAR) && wdev->iftype != NL80211_IFTYPE_STATION) ||
+#else
 	if ((chan->flags & (IEEE80211_CHAN_NO_IR | IEEE80211_CHAN_RADAR)) ||
+#endif
 	    !scan_req->n_ssids) {
 		*next_delay = IEEE80211_PASSIVE_CHANNEL_TIME;
 		local->next_scan_state = SCAN_DECISION;
