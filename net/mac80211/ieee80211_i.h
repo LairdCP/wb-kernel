@@ -125,6 +125,11 @@ struct ieee80211_bss {
 
 	/* Keep track of what bits of information we have valid info for. */
 	u8 valid_data;
+
+#ifndef _REMOVE_LAIRD_MODS_
+	// scaled averaged signal level
+	s32 avg_signal;
+#endif
 };
 
 /**
