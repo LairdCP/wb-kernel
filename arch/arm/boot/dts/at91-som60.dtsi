@@ -194,8 +194,8 @@
 			#address-cells = <1>;
 			#size-cells = <1>;
 
-			at91bootstrap@0 {
-				label = "at91bs";
+			ubootspl@0 {
+				label = "u-boot-spl";
 				reg = <0x0 0x20000>;
 			};
 
@@ -214,29 +214,9 @@
 				reg = <0xc0000 0x20000>;
 			};
 
-			kernel-a@e0000 {
-				label = "kernel-a";
-				reg = <0xe0000 0x800000>;
-			};
-
-			kernel-b@5e0000 {
-				label = "kernel-b";
-				reg = <0x8e0000 0x800000>;
-			};
-
-			rootfs-a@ae0000 {
-				label = "rootfs-a";
-				reg = <0x10e0000 0x6800000>;
-			};
-
-			rootfs-b@3ae0000 {
-				label = "rootfs-b";
-				reg = <0x78e0000 0x6800000>;
-			};
-
-			user@6ae0000 {
-				label = "user";
-				reg = <0xe0e0000 0x14e0000>;
+			ubi@e0000 {
+				label = "ubi";
+				reg = <0xe0000 0xff00000>;
 			};
 		};
 	};
