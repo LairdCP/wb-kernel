@@ -1726,12 +1726,14 @@ brcmf_set_key_mgmt(struct net_device *ndev, struct cfg80211_connect_params *sme)
 		case WLAN_AKM_SUITE_PSK:
 			val = WPA2_AUTH_PSK;
 			break;
+#if 0 // available in 4.14 but not in 4.9
 		case WLAN_AKM_SUITE_FT_8021X:
 			val = WPA2_AUTH_UNSPECIFIED | WPA2_AUTH_FT;
 			break;
 		case WLAN_AKM_SUITE_FT_PSK:
 			val = WPA2_AUTH_PSK | WPA2_AUTH_FT;
 			break;
+#endif 
 		default:
 			brcmf_err("invalid cipher group (%d)\n",
 				  sme->crypto.cipher_group);
