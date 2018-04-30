@@ -337,11 +337,14 @@ static struct sctp_af *sctp_sockaddr_af(struct sctp_sock *opt,
 	if (!opt->pf->af_supported(addr->sa.sa_family, opt))
 		return NULL;
 
-	/* V4 mapped address are really of AF_INET family */
-	if (addr->sa.sa_family == AF_INET6 &&
-	    ipv6_addr_v4mapped(&addr->v6.sin6_addr) &&
-	    !opt->pf->af_supported(AF_INET, opt))
-		return NULL;
+	if (addr->sa.sa_family == AF_INET6) {
+		if (len < SIN6_LEN_RFC2133)
+			return NULL;
+		/* V4 mapped address are really of AF_INET family */
+		if (ipv6_addr_v4mapped(&addr->v6.sin6_addr) &&
+		    !opt->pf->af_supported(AF_INET, opt))
+			return NULL;
+	}
 
 	/* If we get this far, af is valid. */
 	af = sctp_get_af_specific(addr->sa.sa_family);
@@ -3494,6 +3497,8 @@ static int sctp_setsockopt_hmac_ident(struct sock *sk,
 
 	if (optlen < sizeof(struct sctp_hmacalgo))
 		return -EINVAL;
+	optlen = min_t(unsigned int, optlen, sizeof(struct sctp_hmacalgo) +
+					     SCTP_AUTH_NUM_HMACS * sizeof(u16));
 
 	hmacs = memdup_user(optval, optlen);
 	if (IS_ERR(hmacs))
@@ -3532,6 +3537,11 @@ static int sctp_setsockopt_auth_key(struct sock *sk,
 
 	if (optlen <= sizeof(struct sctp_authkey))
 		return -EINVAL;
+	/* authkey->sca_keylength is u16, so optlen can't be bigger than
+	 * this.
+	 */
+	optlen = min_t(unsigned int, optlen, USHRT_MAX +
+					     sizeof(struct sctp_authkey));
 
 	authkey = memdup_user(optval, optlen);
 	if (IS_ERR(authkey))
@@ -3889,6 +3899,9 @@ static int sctp_setsockopt_reset_streams(struct sock *sk,
 
 	if (optlen < sizeof(*params))
 		return -EINVAL;
+	/* srs_number_streams is u16, so optlen can't be bigger than this. */
+	optlen = min_t(unsigned int, optlen, USHRT_MAX +
+					     sizeof(__u16) * sizeof(*params));
 
 	params = memdup_user(optval, optlen);
 	if (IS_ERR(params))
@@ -4947,7 +4960,7 @@ static int sctp_getsockopt_autoclose(struct sock *sk, int len, char __user *optv
 	len = sizeof(int);
 	if (put_user(len, optlen))
 		return -EFAULT;
-	if (copy_to_user(optval, &sctp_sk(sk)->autoclose, sizeof(int)))
+	if (copy_to_user(optval, &sctp_sk(sk)->autoclose, len))
 		return -EFAULT;
 	return 0;
 }
@@ -5578,6 +5591,9 @@ copy_getaddrs:
 		err = -EFAULT;
 		goto out;
 	}
+	/* XXX: We should have accounted for sizeof(struct sctp_getaddrs) too,
+	 * but we can't change it anymore.
+	 */
 	if (put_user(bytes_copied, optlen))
 		err = -EFAULT;
 out:
@@ -6014,7 +6030,7 @@ static int sctp_getsockopt_maxseg(struct sock *sk, int len,
 		params.assoc_id = 0;
 	} else if (len >= sizeof(struct sctp_assoc_value)) {
 		len = sizeof(struct sctp_assoc_value);
-		if (copy_from_user(&params, optval, sizeof(params)))
+		if (copy_from_user(&params, optval, len))
 			return -EFAULT;
 	} else
 		return -EINVAL;
@@ -6184,7 +6200,9 @@ static int sctp_getsockopt_active_key(struct sock *sk, int len,
 
 	if (len < sizeof(struct sctp_authkeyid))
 		return -EINVAL;
-	if (copy_from_user(&val, optval, sizeof(struct sctp_authkeyid)))
+
+	len = sizeof(struct sctp_authkeyid);
+	if (copy_from_user(&val, optval, len))
 		return -EFAULT;
 
 	asoc = sctp_id2assoc(sk, val.scact_assoc_id);
@@ -6196,7 +6214,6 @@ static int sctp_getsockopt_active_key(struct sock *sk, int len,
 	else
 		val.scact_keynumber = ep->active_key_id;
 
-	len = sizeof(struct sctp_authkeyid);
 	if (put_user(len, optlen))
 		return -EFAULT;
 	if (copy_to_user(optval, &val, len))
@@ -6222,7 +6239,7 @@ static int sctp_getsockopt_peer_auth_chunks(struct sock *sk, int len,
 	if (len < sizeof(struct sctp_authchunks))
 		return -EINVAL;
 
-	if (copy_from_user(&val, optval, sizeof(struct sctp_authchunks)))
+	if (copy_from_user(&val, optval, sizeof(val)))
 		return -EFAULT;
 
 	to = p->gauth_chunks;
@@ -6267,7 +6284,7 @@ static int sctp_getsockopt_local_auth_chunks(struct sock *sk, int len,
 	if (len < sizeof(struct sctp_authchunks))
 		return -EINVAL;
 
-	if (copy_from_user(&val, optval, sizeof(struct sctp_authchunks)))
+	if (copy_from_user(&val, optval, sizeof(val)))
 		return -EFAULT;
 
 	to = p->gauth_chunks;

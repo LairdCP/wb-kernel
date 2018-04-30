@@ -531,6 +531,13 @@ static void __blk_drain_queue(struct request_queue *q, bool drain_all)
 	}
 }
 
+void blk_drain_queue(struct request_queue *q)
+{
+	spin_lock_irq(q->queue_lock);
+	__blk_drain_queue(q, true);
+	spin_unlock_irq(q->queue_lock);
+}
+
 /**
  * blk_queue_bypass_start - enter queue bypass mode
  * @q: queue of interest
@@ -655,8 +662,6 @@ void blk_cleanup_queue(struct request_queue *q)
 	 */
 	blk_freeze_queue(q);
 	spin_lock_irq(lock);
-	if (!q->mq_ops)
-		__blk_drain_queue(q, true);
 	queue_flag_set(QUEUE_FLAG_DEAD, q);
 	spin_unlock_irq(lock);
 
@@ -2272,7 +2277,7 @@ blk_qc_t submit_bio(struct bio *bio)
 		unsigned int count;
 
 		if (unlikely(bio_op(bio) == REQ_OP_WRITE_SAME))
-			count = queue_logical_block_size(bio->bi_disk->queue);
+			count = queue_logical_block_size(bio->bi_disk->queue) >> 9;
 		else
 			count = bio_sectors(bio);
 
@@ -3060,6 +3065,8 @@ void blk_rq_bio_prep(struct request_queue *q, struct request *rq,
 {
 	if (bio_has_data(bio))
 		rq->nr_phys_segments = bio_phys_segments(q, bio);
+	else if (bio_op(bio) == REQ_OP_DISCARD)
+		rq->nr_phys_segments = 1;
 
 	rq->__data_len = bio->bi_iter.bi_size;
 	rq->bio = rq->biotail = bio;
