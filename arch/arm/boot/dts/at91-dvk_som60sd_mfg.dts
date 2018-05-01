@@ -1,0 +1,173 @@
+/*
+ * at91-som60.dtsi - Device Tree file for the SOM60 module
+ *
+ *  Copyright (C) 2018 Laird,
+ *		  2018 Ben Whitten <ben.whitten@lairdtech.com>
+ *
+ * Licensed under GPLv2 or later.
+ */
+ /dts-v1/;
+#include "sama5d36.dtsi"
+
+/ {
+  model = "Laird SOM60";
+  compatible = "laird,som60", "atmel,sama5d36", "atmel,sama5d3", "atmel,sama5";
+
+  chosen {
+    stdout-path = &dbgu;
+  };
+
+  memory {
+    reg = <0x20000000 0x8000000>;
+  };
+
+  clocks {
+    slow_xtal {
+      clock-frequency = <32768>;
+    };
+
+    main_xtal {
+      clock-frequency = <12000000>;
+    };
+  };
+
+  ahb {
+    apb {
+      pinctrl@fffff200 {
+
+        board {
+          pinctrl_mmc0_cd: mmc0_cd {
+            atmel,pins =
+              <AT91_PIOE 31 AT91_PERIPH_GPIO AT91_PINCTRL_DEGLITCH>;
+          };
+
+          pinctrl_usb_vbus: usb_vbus {
+            atmel,pins =
+              <AT91_PIOE 20 AT91_PERIPH_GPIO AT91_PINCTRL_NONE>; /* Conflicts with USART2_SCK */
+          };
+
+          pinctrl_usb_oc: usb_oc {
+            atmel,pins =
+              <AT91_PIOE 15 AT91_PERIPH_GPIO AT91_PINCTRL_DEGLITCH>; /* Conflicts with USART3_SCK */
+          };
+
+          pinctrl_geth_int: geth_int {
+            atmel,pins =
+              <AT91_PIOB 25 AT91_PERIPH_GPIO AT91_PINCTRL_DEGLITCH>; /* Conflicts with USART1_SCK */
+          };
+
+          pinctrl_usba_vbus: usba_vbus {
+            atmel,pins =
+              <AT91_PIOC 14 AT91_PERIPH_GPIO AT91_PINCTRL_DEGLITCH>;
+          };
+
+          pinctrl_eth_int: eth_int {
+            atmel,pins =
+              <AT91_PIOC 10 AT91_PERIPH_GPIO AT91_PINCTRL_DEGLITCH>;
+          };
+
+        };
+      };
+    };
+  };
+ };
+
+
+ &mmc0 {
+  status = "okay";
+  pinctrl-0 = <&pinctrl_mmc0_clk_cmd_dat0 &pinctrl_mmc0_dat1_3 &pinctrl_mmc0_cd>;
+    slot@0 {
+      reg = <0>;
+      bus-width = <4>;
+    };
+ };
+
+ &mmc1 {
+ status = "okay";
+  slot@0 {
+    reg = <0>;
+    bus-width = <4>;
+  };
+ /* Describe shutdown pin PMU_EN */
+ };
+
+ &usb0 {
+ status = "okay";
+ pinctrl-names = "default";
+ pinctrl-0 = <&pinctrl_usba_vbus>;
+ atmel,vbus-gpio = <&pioC 14 GPIO_ACTIVE_HIGH>;
+ };
+
+ &usb1 {
+ status = "okay";
+ pinctrl-names = "default";
+ pinctrl-0 = <&pinctrl_usb_vbus &pinctrl_usb_oc>;
+ num-ports = <3>;
+ atmel,vbus-gpio = <&pioE 20 GPIO_ACTIVE_HIGH>;
+ atmel,oc-gpio = <&pioE 15 GPIO_ACTIVE_LOW>;
+ };
+
+ &usb2 {
+ status="okay";
+ };
+
+
+ &macb0 {
+ phy-mode = "rgmii";
+ #address-cells = <1>;
+ #size-cells = <0>;
+ status = "okay";
+  ethernet-phy@7 {
+    reg = <7>;
+    pinctrl-names = "default";
+    pinctrl-0 = <&pinctrl_geth_int>;
+    interrupt-parent = <&pioB>;
+    interrupts = <25 IRQ_TYPE_EDGE_FALLING>;
+    txen-skew-ps = <800>;
+    txc-skew-ps = <3000>;
+    rxdv-skew-ps = <400>;
+    rxc-skew-ps = <3000>;
+    rxd0-skew-ps = <400>;
+    rxd1-skew-ps = <400>;
+    rxd2-skew-ps = <400>;
+    rxd3-skew-ps = <400>;
+  };
+ };
+
+ &macb1 {
+ phy-mode = "rmii";
+ #address-cells = <1>;
+ #size-cells = <0>;
+ status = "okay";
+  ethernet-phy@1 {
+    reg = <1>;
+    pinctrl-names = "default";
+    pinctrl-0 = <&pinctrl_eth_int>;
+    interrupt-parent = <&pioC>;
+    interrupts = <10 IRQ_TYPE_EDGE_FALLING>;
+  };
+ };
+
+ &dbgu {
+ status = "okay";
+ };
+
+ &ebi {
+ status = "okay";
+ pinctrl-0 = <&pinctrl_ebi_nand_addr>;
+ pinctrl-names = "default";
+ };
+
+ &nand_controller {
+ status = "okay";
+  nand: nand@3 {
+    reg = <0x3 0x0 0x2>;
+    atmel,rb = <0>;
+    nand-bus-width = <8>;
+    nand-ecc-mode = "hw";
+    nand-ecc-strength = <8>;
+    nand-ecc-step-size = <512>;
+    nand-on-flash-bbt;
+    label = "atmel_nand";
+ };
+ };
