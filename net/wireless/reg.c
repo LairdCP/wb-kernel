@@ -1223,6 +1223,9 @@ static void handle_channel(struct wiphy *wiphy,
 				chan->dfs_cac_ms = reg_rule->dfs_cac_ms;
 		}
 
+#ifndef _REMOVE_LAIRD_MODS_
+		chan->beacon_found = false;
+#endif
 		return;
 	}
 
