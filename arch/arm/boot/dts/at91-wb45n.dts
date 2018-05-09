@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * at91-wb45n.dts - Device Tree file for wb45n evaluation board
+ * at91-wb45n.dts - Device Tree file for WB45NBT board
  *
  *  Copyright (C) 2018 Laird
  *
- */
-
+*/
 /dts-v1/;
 #include "at91-wb45n.dtsi"
 
@@ -14,7 +13,7 @@
 	compatible = "laird,wb45n", "laird,wbxx", "atmel,at91sam9x5", "atmel,at91sam9";
 
 	chosen {
-		stdout-path = "serial0:115200n8";
+		bootargs = "root=/dev/mtdblock1 rw rootfstype=ubifs ubi.mtd=1 root=ubi0:rootfs";
 	};
 
 	ahb {
@@ -36,7 +35,18 @@
 			gpio-key,wakeup = <1>;
 		};
 	};
+};
 
+&usb0 {
+	status = "okay";
+};
+
+&mmc0 {
+	status = "okay";
+};
+
+&spi0 {
+	status = "okay";
 };
 
 &macb0 {
@@ -55,19 +65,6 @@
 	status = "okay";
 };
 
-&i2c0 {
+&i2c1 {
 	status = "okay";
 };
-
-&spi0 {
-	status = "okay";
-};
-
-&usb0 {
-	status = "okay";
-};
-
-&usb1 {
-	status = "okay";
-};
-
