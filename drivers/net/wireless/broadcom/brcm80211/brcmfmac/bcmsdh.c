@@ -1055,7 +1055,6 @@ static int brcmf_ops_sdio_probe(struct sdio_func *func,
 fail:
 	dev_set_drvdata(&func->dev, NULL);
 	dev_set_drvdata(&sdiodev->func1->dev, NULL);
-	sdiodev->func2->card->host->caps &= ~MMC_CAP_NONREMOVABLE;
 	kfree(sdiodev);
 	kfree(bus_if);
 	return err;
@@ -1082,7 +1081,6 @@ static void brcmf_ops_sdio_remove(struct sdio_func *func)
 			return;
 
 		/* only proceed with rest of cleanup if func 1 */
-		sdiodev->func2->card->host->caps &= ~MMC_CAP_NONREMOVABLE;
 		brcmf_sdiod_remove(sdiodev);
 
 		dev_set_drvdata(&sdiodev->func1->dev, NULL);
