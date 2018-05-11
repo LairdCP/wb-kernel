@@ -54,7 +54,6 @@
 
 #define SDIO_FUNC1_BLOCKSIZE		64
 #define SDIO_FUNC2_BLOCKSIZE		512
-#define SDIO_4373_FUNC2_BLOCKSIZE	256
 /* Maximum milliseconds to wait for F2 to come up */
 #define SDIO_WAIT_F2RDY	3000
 
@@ -1039,7 +1038,6 @@ static void brcmf_sdiod_host_fixup(struct mmc_host *host)
 static int brcmf_sdiod_probe(struct brcmf_sdio_dev *sdiodev)
 {
 	int ret = 0;
-	unsigned int f2_blksz = SDIO_FUNC2_BLOCKSIZE;
 
 	sdiodev->num_funcs = 2;
 
@@ -1051,18 +1049,11 @@ static int brcmf_sdiod_probe(struct brcmf_sdio_dev *sdiodev)
 		sdio_release_host(sdiodev->func[1]);
 		goto out;
 	}
-
-	if (sdiodev->func[0]->device == SDIO_DEVICE_ID_CYPRESS_4373) {
-		f2_blksz = SDIO_4373_FUNC2_BLOCKSIZE;
-	}
-
-	ret = sdio_set_block_size(sdiodev->func[2], f2_blksz);
+	ret = sdio_set_block_size(sdiodev->func[2], SDIO_FUNC2_BLOCKSIZE);
 	if (ret) {
 		brcmf_err("Failed to set F2 blocksize\n");
 		sdio_release_host(sdiodev->func[1]);
 		goto out;
-	} else {
-		brcmf_dbg(SDIO, "set F2 blocksize to %d\n", f2_blksz);
 	}
 
 	/* increase F2 timeout */
