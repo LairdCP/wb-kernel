@@ -2787,7 +2787,7 @@ int ath6kl_wmi_set_btcoex_fe_ant_cmd(struct wmi *wmi, u8 if_idx,
 int ath6kl_wmi_set_btcoex_colocated_bt_dev_cmd(struct wmi *wmi, u8 if_idx,
                                                u8 btcoex_colocated_btdev);
 
-void ath6kl_wmi_sscan_timer(unsigned long ptr);
+void ath6kl_wmi_sscan_timer(struct timer_list *t);
 
 int ath6kl_wmi_get_challenge_resp_cmd(struct wmi *wmi, u32 cookie, u32 source);
 

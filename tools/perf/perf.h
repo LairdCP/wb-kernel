@@ -50,6 +50,7 @@ struct record_opts {
 	bool	     sample_time_set;
 	bool	     sample_cpu;
 	bool	     period;
+	bool	     period_set;
 	bool	     running_time;
 	bool	     full_auxtrace;
 	bool	     auxtrace_snapshot_mode;
@@ -60,12 +61,14 @@ struct record_opts {
 	bool	     tail_synthesize;
 	bool	     overwrite;
 	bool	     ignore_missing_thread;
+	bool	     sample_id;
 	unsigned int freq;
 	unsigned int mmap_pages;
 	unsigned int auxtrace_mmap_pages;
 	unsigned int user_freq;
 	u64          branch_stack;
 	u64	     sample_intr_regs;
+	u64	     sample_user_regs;
 	u64	     default_interval;
 	u64	     user_interval;
 	size_t	     auxtrace_snapshot_size;

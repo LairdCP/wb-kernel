@@ -119,6 +119,9 @@ out:
 
 static bool inet_fragq_should_evict(const struct inet_frag_queue *q)
 {
+	if (!hlist_unhashed(&q->list_evictor))
+		return false;
+
 	return q->net->low_thresh == 0 ||
 	       frag_mem_limit(q->net) >= q->net->low_thresh;
 }
@@ -147,7 +150,7 @@ inet_evict_bucket(struct inet_frags *f, struct inet_frag_bucket *hb)
 	spin_unlock(&hb->chain_lock);
 
 	hlist_for_each_entry_safe(fq, n, &expired, list_evictor)
-		f->frag_expire((unsigned long) fq);
+		f->frag_expire(&fq->timer);
 
 	return evicted;
 }
@@ -164,7 +167,7 @@ static void inet_frag_worker(struct work_struct *work)
 
 	local_bh_disable();
 
-	for (i = ACCESS_ONCE(f->next_bucket); budget; --budget) {
+	for (i = READ_ONCE(f->next_bucket); budget; --budget) {
 		evicted += inet_evict_bucket(f, &f->hash[i]);
 		i = (i + 1) & (INETFRAGS_HASHSZ - 1);
 		if (evicted > INETFRAGS_EVICT_MAX)
@@ -366,7 +369,7 @@ static struct inet_frag_queue *inet_frag_alloc(struct netns_frags *nf,
 	f->constructor(q, arg);
 	add_frag_mem_limit(nf, f->qsize);
 
-	setup_timer(&q->timer, f->frag_expire, (unsigned long)q);
+	timer_setup(&q->timer, f->frag_expire, 0);
 	spin_lock_init(&q->lock);
 	refcount_set(&q->refcnt, 1);
 

@@ -948,7 +948,7 @@ enum atheros_cmd_id {
 
 int ath6kl_configure_target(struct ath6kl *ar);
 void ath6kl_detect_error(unsigned long ptr);
-void disconnect_timer_handler(unsigned long ptr);
+void disconnect_timer_handler(struct timer_list *t);
 void init_netdev(struct net_device *dev);
 void ath6kl_cookie_init(struct ath6kl *ar);
 void ath6kl_cookie_cleanup(struct ath6kl *ar);
