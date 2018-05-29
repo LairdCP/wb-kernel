@@ -858,8 +858,6 @@ static int ath6kl_cfg80211_disconnect(struct wiphy *wiphy,
 
 	up(&ar->sem);
 
-	vif->sme_state = SME_DISCONNECTED;
-
 #ifdef CONFIG_ATH6KL_LAIRD_FIPS
 	if (fips_mode)
 		laird_setbssid(NULL);
