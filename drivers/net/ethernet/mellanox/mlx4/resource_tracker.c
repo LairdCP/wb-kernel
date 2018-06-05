@@ -611,7 +611,6 @@ int mlx4_init_resource_tracker(struct mlx4_dev *dev)
 						MLX4_MAX_PORTS;
 				else
 					res_alloc->guaranteed[t] = 0;
-				res_alloc->res_free -= res_alloc->guaranteed[t];
 				break;
 			default:
 				break;
@@ -3185,7 +3184,7 @@ static int verify_qp_parameters(struct mlx4_dev *dev,
 	optpar	= be32_to_cpu(*(__be32 *) inbox->buf);
 
 	if (slave != mlx4_master_func_num(dev)) {
-		qp_ctx->params2 &= ~MLX4_QP_BIT_FPP;
+		qp_ctx->params2 &= ~cpu_to_be32(MLX4_QP_BIT_FPP);
 		/* setting QP rate-limit is disallowed for VFs */
 		if (qp_ctx->rate_limit_params)
 			return -EPERM;
@@ -5089,6 +5088,7 @@ static void rem_slave_fs_rule(struct mlx4_dev *dev, int slave)
 						 &tracker->res_tree[RES_FS_RULE]);
 					list_del(&fs_rule->com.list);
 					spin_unlock_irq(mlx4_tlock(dev));
+					kfree(fs_rule->mirr_mbox);
 					kfree(fs_rule);
 					state = 0;
 					break;

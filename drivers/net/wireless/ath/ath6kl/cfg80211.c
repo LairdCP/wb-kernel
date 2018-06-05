@@ -858,8 +858,6 @@ static int ath6kl_cfg80211_disconnect(struct wiphy *wiphy,
 
 	up(&ar->sem);
 
-	vif->sme_state = SME_DISCONNECTED;
-
 #ifdef CONFIG_ATH6KL_LAIRD_FIPS
 	if (fips_mode)
 		laird_setbssid(NULL);
@@ -2723,7 +2721,6 @@ static int ath6kl_start_ap(struct wiphy *wiphy, struct net_device *dev,
 	struct ieee80211_mgmt *mgmt;
 	bool hidden = false;
 	u8 *ies;
-	int ies_len;
 	struct wmi_connect_cmd p;
 	int res;
 	int i, ret;
@@ -2761,7 +2758,6 @@ static int ath6kl_start_ap(struct wiphy *wiphy, struct net_device *dev,
 	ies = mgmt->u.beacon.variable;
 	if (ies > info->beacon.head + info->beacon.head_len)
 		return -EINVAL;
-	ies_len = info->beacon.head + info->beacon.head_len - ies;
 
 	if (info->ssid == NULL)
 		return -EINVAL;
@@ -3546,10 +3542,8 @@ static int ath6kl_cfg80211_vif_init(struct ath6kl_vif *vif)
 		return -ENOMEM;
 	}
 
-	setup_timer(&vif->disconnect_timer, disconnect_timer_handler,
-		    (unsigned long) vif->ndev);
-	setup_timer(&vif->sched_scan_timer, ath6kl_wmi_sscan_timer,
-		    (unsigned long) vif);
+	timer_setup(&vif->disconnect_timer, disconnect_timer_handler, 0);
+	timer_setup(&vif->sched_scan_timer, ath6kl_wmi_sscan_timer, 0);
 
 	set_bit(WMM_ENABLED, &vif->flags);
 	spin_lock_init(&vif->if_lock);
@@ -3611,7 +3605,6 @@ void ath6kl_cfg80211_vif_cleanup(struct ath6kl_vif *vif)
 		kfree(mc_filter);
 	}
 
-	cfg80211_disconnected(vif->ndev, 0, NULL, 0, true, GFP_KERNEL);
 	unregister_netdevice(vif->ndev);
 
 	ar->num_vif--;

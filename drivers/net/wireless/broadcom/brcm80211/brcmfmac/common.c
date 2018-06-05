@@ -85,6 +85,10 @@ static int brcmf_sdio_dpc_prio;
 module_param_named(sdio_dpc_prio, brcmf_sdio_dpc_prio, int, S_IRUSR);
 MODULE_PARM_DESC(sdio_dpc_prio, "The scheduling priority of sdio_dpc thread");
 
+static int brcmf_iapp_enable;
+module_param_named(iapp, brcmf_iapp_enable, int, 0);
+MODULE_PARM_DESC(iapp, "Enable partial support for the obsoleted Inter-Access Point Protocol");
+
 #ifdef DEBUG
 /* always succeed brcmf_bus_started() */
 static int brcmf_ignore_probe_fail;
@@ -261,7 +265,7 @@ int brcmf_c_preinit_dcmds(struct brcmf_if *ifp)
 	char *ptr;
 	s32 err;
 
-	/* retrieve mac addresses */
+	/* retreive mac address */
 	err = brcmf_fil_iovar_data_get(ifp, "cur_etheraddr", ifp->mac_addr,
 				       sizeof(ifp->mac_addr));
 	if (err < 0) {
@@ -470,6 +474,7 @@ struct brcmf_mp_device *brcmf_get_module_param(struct device *dev,
 	settings->roamoff = !!brcmf_roamoff;
 	settings->eap_restrict = !!brcmf_eap_restrict;
 	settings->sdio_dpc_prio = brcmf_sdio_dpc_prio;
+	settings->iapp = !!brcmf_iapp_enable;
 #ifdef DEBUG
 	settings->ignore_probe_fail = !!brcmf_ignore_probe_fail;
 #endif

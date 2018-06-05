@@ -37,7 +37,6 @@
 #include <linux/clk-provider.h>
 #include <linux/clkdev.h>
 #include <linux/clk.h>
-#include <linux/clk/bcm2835.h>
 #include <linux/debugfs.h>
 #include <linux/delay.h>
 #include <linux/module.h>
@@ -416,35 +415,6 @@ static int bcm2835_debugfs_regset(struct bcm2835_cprman *cprman, u32 base,
 	return regdump ? 0 : -ENOMEM;
 }
 
-/*
- * These are fixed clocks. They're probably not all root clocks and it may
- * be possible to turn them on and off but until this is mapped out better
- * it's the only way they can be used.
- */
-void __init bcm2835_init_clocks(void)
-{
-	struct clk_hw *hw;
-	int ret;
-
-	hw = clk_hw_register_fixed_rate(NULL, "apb_pclk", NULL, 0, 126000000);
-	if (IS_ERR(hw))
-		pr_err("apb_pclk not registered\n");
-
-	hw = clk_hw_register_fixed_rate(NULL, "uart0_pclk", NULL, 0, 3000000);
-	if (IS_ERR(hw))
-		pr_err("uart0_pclk not registered\n");
-	ret = clk_hw_register_clkdev(hw, NULL, "20201000.uart");
-	if (ret)
-		pr_err("uart0_pclk alias not registered\n");
-
-	hw = clk_hw_register_fixed_rate(NULL, "uart1_pclk", NULL, 0, 125000000);
-	if (IS_ERR(hw))
-		pr_err("uart1_pclk not registered\n");
-	ret = clk_hw_register_clkdev(hw, NULL, "20215000.uart");
-	if (ret)
-		pr_err("uart1_pclk alias not registered\n");
-}
-
 struct bcm2835_pll_data {
 	const char *name;
 	u32 cm_ctrl_reg;
@@ -479,17 +449,17 @@ struct bcm2835_pll_ana_bits {
 static const struct bcm2835_pll_ana_bits bcm2835_ana_default = {
 	.mask0 = 0,
 	.set0 = 0,
-	.mask1 = (u32)~(A2W_PLL_KI_MASK | A2W_PLL_KP_MASK),
+	.mask1 = A2W_PLL_KI_MASK | A2W_PLL_KP_MASK,
 	.set1 = (2 << A2W_PLL_KI_SHIFT) | (8 << A2W_PLL_KP_SHIFT),
-	.mask3 = (u32)~A2W_PLL_KA_MASK,
+	.mask3 = A2W_PLL_KA_MASK,
 	.set3 = (2 << A2W_PLL_KA_SHIFT),
 	.fb_prediv_mask = BIT(14),
 };
 
 static const struct bcm2835_pll_ana_bits bcm2835_ana_pllh = {
-	.mask0 = (u32)~(A2W_PLLH_KA_MASK | A2W_PLLH_KI_LOW_MASK),
+	.mask0 = A2W_PLLH_KA_MASK | A2W_PLLH_KI_LOW_MASK,
 	.set0 = (2 << A2W_PLLH_KA_SHIFT) | (2 << A2W_PLLH_KI_LOW_SHIFT),
-	.mask1 = (u32)~(A2W_PLLH_KI_HIGH_MASK | A2W_PLLH_KP_MASK),
+	.mask1 = A2W_PLLH_KI_HIGH_MASK | A2W_PLLH_KP_MASK,
 	.set1 = (6 << A2W_PLLH_KP_SHIFT),
 	.mask3 = 0,
 	.set3 = 0,
@@ -653,8 +623,10 @@ static int bcm2835_pll_on(struct clk_hw *hw)
 		     ~A2W_PLL_CTRL_PWRDN);
 
 	/* Take the PLL out of reset. */
+	spin_lock(&cprman->regs_lock);
 	cprman_write(cprman, data->cm_ctrl_reg,
 		     cprman_read(cprman, data->cm_ctrl_reg) & ~CM_PLL_ANARST);
+	spin_unlock(&cprman->regs_lock);
 
 	/* Wait for the PLL to lock. */
 	timeout = ktime_add_ns(ktime_get(), LOCK_TIMEOUT_NS);
@@ -731,9 +703,11 @@ static int bcm2835_pll_set_rate(struct clk_hw *hw,
 	}
 
 	/* Unmask the reference clock from the oscillator. */
+	spin_lock(&cprman->regs_lock);
 	cprman_write(cprman, A2W_XOSC_CTRL,
 		     cprman_read(cprman, A2W_XOSC_CTRL) |
 		     data->reference_enable_mask);
+	spin_unlock(&cprman->regs_lock);
 
 	if (do_ana_setup_first)
 		bcm2835_pll_write_ana(cprman, data->ana_reg_base, ana);

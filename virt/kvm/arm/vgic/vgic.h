@@ -96,12 +96,18 @@
 /* we only support 64 kB translation table page size */
 #define KVM_ITS_L1E_ADDR_MASK		GENMASK_ULL(51, 16)
 
+/* Requires the irq_lock to be held by the caller. */
 static inline bool irq_is_pending(struct vgic_irq *irq)
 {
 	if (irq->config == VGIC_CONFIG_EDGE)
 		return irq->pending_latch;
 	else
 		return irq->pending_latch || irq->line_level;
+}
+
+static inline bool vgic_irq_is_mapped_level(struct vgic_irq *irq)
+{
+	return irq->config == VGIC_CONFIG_LEVEL && irq->hw;
 }
 
 /*
@@ -140,7 +146,11 @@ vgic_get_mmio_region(struct kvm_vcpu *vcpu, struct vgic_io_device *iodev,
 struct vgic_irq *vgic_get_irq(struct kvm *kvm, struct kvm_vcpu *vcpu,
 			      u32 intid);
 void vgic_put_irq(struct kvm *kvm, struct vgic_irq *irq);
-bool vgic_queue_irq_unlock(struct kvm *kvm, struct vgic_irq *irq);
+bool vgic_get_phys_line_level(struct vgic_irq *irq);
+void vgic_irq_set_phys_pending(struct vgic_irq *irq, bool pending);
+void vgic_irq_set_phys_active(struct vgic_irq *irq, bool active);
+bool vgic_queue_irq_unlock(struct kvm *kvm, struct vgic_irq *irq,
+			   unsigned long flags);
 void vgic_kick_vcpus(struct kvm *kvm);
 
 int vgic_check_ioaddr(struct kvm *kvm, phys_addr_t *ioaddr,
@@ -150,6 +160,7 @@ void vgic_v2_fold_lr_state(struct kvm_vcpu *vcpu);
 void vgic_v2_populate_lr(struct kvm_vcpu *vcpu, struct vgic_irq *irq, int lr);
 void vgic_v2_clear_lr(struct kvm_vcpu *vcpu, int lr);
 void vgic_v2_set_underflow(struct kvm_vcpu *vcpu);
+void vgic_v2_set_npie(struct kvm_vcpu *vcpu);
 int vgic_v2_has_attr_regs(struct kvm_device *dev, struct kvm_device_attr *attr);
 int vgic_v2_dist_uaccess(struct kvm_vcpu *vcpu, bool is_write,
 			 int offset, u32 *val);
@@ -179,6 +190,7 @@ void vgic_v3_fold_lr_state(struct kvm_vcpu *vcpu);
 void vgic_v3_populate_lr(struct kvm_vcpu *vcpu, struct vgic_irq *irq, int lr);
 void vgic_v3_clear_lr(struct kvm_vcpu *vcpu, int lr);
 void vgic_v3_set_underflow(struct kvm_vcpu *vcpu);
+void vgic_v3_set_npie(struct kvm_vcpu *vcpu);
 void vgic_v3_set_vmcr(struct kvm_vcpu *vcpu, struct vgic_vmcr *vmcr);
 void vgic_v3_get_vmcr(struct kvm_vcpu *vcpu, struct vgic_vmcr *vmcr);
 void vgic_v3_enable(struct kvm_vcpu *vcpu);
@@ -235,5 +247,15 @@ static inline int vgic_v3_max_apr_idx(struct kvm_vcpu *vcpu)
 	default: return 0;
 	}
 }
+
+int vgic_its_resolve_lpi(struct kvm *kvm, struct vgic_its *its,
+			 u32 devid, u32 eventid, struct vgic_irq **irq);
+struct vgic_its *vgic_msi_to_its(struct kvm *kvm, struct kvm_msi *msi);
+
+bool vgic_supports_direct_msis(struct kvm *kvm);
+int vgic_v4_init(struct kvm *kvm);
+void vgic_v4_teardown(struct kvm *kvm);
+int vgic_v4_sync_hwstate(struct kvm_vcpu *vcpu);
+int vgic_v4_flush_hwstate(struct kvm_vcpu *vcpu);
 
 #endif

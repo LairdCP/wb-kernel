@@ -1372,7 +1372,7 @@ static void panel_process_inputs(void)
 				break;
 			input->rise_timer = 0;
 			input->state = INPUT_ST_RISING;
-			/* no break here, fall through */
+			/* fall through */
 		case INPUT_ST_RISING:
 			if ((phys_curr & input->mask) != input->value) {
 				input->state = INPUT_ST_LOW;
@@ -1385,18 +1385,18 @@ static void panel_process_inputs(void)
 			}
 			input->high_timer = 0;
 			input->state = INPUT_ST_HIGH;
-			/* no break here, fall through */
+			/* fall through */
 		case INPUT_ST_HIGH:
 			if (input_state_high(input))
 				break;
-			/* no break here, fall through */
+			/* fall through */
 		case INPUT_ST_FALLING:
 			input_state_falling(input);
 		}
 	}
 }
 
-static void panel_scan_timer(void)
+static void panel_scan_timer(struct timer_list *unused)
 {
 	if (keypad.enabled && keypad_initialized) {
 		if (spin_trylock_irq(&pprt_lock)) {
@@ -1421,7 +1421,7 @@ static void init_scan_timer(void)
 	if (scan_timer.function)
 		return;		/* already started */
 
-	setup_timer(&scan_timer, (void *)&panel_scan_timer, 0);
+	timer_setup(&scan_timer, panel_scan_timer, 0);
 	scan_timer.expires = jiffies + INPUT_POLL_TIME;
 	add_timer(&scan_timer);
 }
