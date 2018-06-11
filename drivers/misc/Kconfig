@@ -450,6 +450,12 @@ config LATTICE_ECP3_CONFIG
 
 	  If unsure, say N.
 
+config LAIRD_FS
+	bool "Laird FS Key injector"
+	help
+	  This driver is in charge of injecting the FS key for encrypted
+	  filesystems.
+
 config SRAM
 	bool "Generic on-chip SRAM driver"
 	depends on HAS_IOMEM
