@@ -77,6 +77,7 @@
 				status = "okay";
 				cd-gpios = <&pioC 26 GPIO_ACTIVE_LOW>;
 				keep-power-in-suspend;
+				autosuspend-delay = <1000>;
 				slot@0 {
 					reg = <0>;
 					bus-width = <4>;
