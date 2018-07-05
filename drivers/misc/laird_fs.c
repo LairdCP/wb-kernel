@@ -3,9 +3,11 @@
  *
  */
 
+#include <linux/cred.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/fs.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
 #include <linux/of_device.h>
