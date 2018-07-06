@@ -142,7 +142,9 @@ ieee80211_bss_info_update(struct ieee80211_local *local,
 	}
 #endif
 
-	if (ieee80211_hw_check(&local->hw, SIGNAL_DBM))
+	if (rx_status->flag & RX_FLAG_NO_SIGNAL_VAL)
+		bss_meta.signal = 0; /* invalid signal indication */
+	else if (ieee80211_hw_check(&local->hw, SIGNAL_DBM))
 #ifndef _REMOVE_LAIRD_MODS_
 		bss_meta.signal = signal * 100;
 #else
