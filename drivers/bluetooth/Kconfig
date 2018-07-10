@@ -22,6 +22,7 @@ config BT_QCA
 config BT_HCIBTUSB
 	tristate "HCI USB driver"
 	depends on USB
+	select BT_INTEL
 	help
 	  Bluetooth HCI USB driver.
 	  This driver is required if you want to use Bluetooth devices with
@@ -59,16 +60,6 @@ config BT_HCIBTUSB_RTL
 	  download support for Realtek Bluetooth controllers.
 
 	  Say Y here to compile support for Realtek protocol.
-
-config BT_HCIBTUSB_INTEL
-	bool "Intel protocol support"
-	depends on BT_HCIBTUSB
-	select BT_INTEL
-	help
-	  The Intel protocol support enables Bluetooth HCI over USB
-	  port interface for Intel Bluetooth controllers.
-
-	  Say Y here to compile support for Intel protocol.
 
 config BT_HCIBTSDIO
 	tristate "HCI SDIO driver"
@@ -154,6 +145,7 @@ config BT_HCIUART_ATH3K
 config BT_HCIUART_LL
 	bool "HCILL protocol support"
 	depends on BT_HCIUART_SERDEV
+	select BT_HCIUART_H4
 	help
 	  HCILL (HCI Low Level) is a serial protocol for communication
 	  between Bluetooth device and host. This protocol is required for
@@ -249,8 +241,7 @@ config BT_HCIBCM203X
 
 config BT_HCIBPA10X
 	tristate "HCI BPA10x USB driver"
-	depends on USB && BT_HCIUART
-	select BT_HCIUART_H4
+	depends on USB
 	help
 	  Bluetooth HCI BPA10x USB driver.
 	  This driver provides support for the Digianswer BPA 100/105 Bluetooth
@@ -408,6 +399,16 @@ config BT_QCOMSMD
 	  channels to the WCNSS core.
 
 	  Say Y here to compile support for HCI over Qualcomm SMD into the
+	  kernel or say M to compile as a module.
+
+config BT_HCIRSI
+	tristate
+	help
+	  Redpine BT driver.
+	  This driver handles BT traffic from upper layers and pass
+	  to the RSI_91x coex module for further scheduling to device
+
+	  Say Y here to compile support for HCI over Redpine into the
 	  kernel or say M to compile as a module.
 
 endmenu

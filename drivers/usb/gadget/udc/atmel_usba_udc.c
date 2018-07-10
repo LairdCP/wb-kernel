@@ -23,18 +23,12 @@
 #include <linux/usb/atmel_usba_udc.h>
 #include <linux/delay.h>
 #include <linux/of.h>
-#include <linux/of_gpio.h>
-#include <linux/suspend.h>
-#include <linux/workqueue.h>
+#include <linux/irq.h>
+#include <linux/gpio/consumer.h>
 
 #include "atmel_usba_udc.h"
 #define USBA_VBUS_IRQFLAGS (IRQF_ONESHOT \
 			   | IRQF_TRIGGER_FALLING | IRQF_TRIGGER_RISING)
-
-/* System suspend state variables */
-static int usba_suspend_enable = 0; /* disabled by default */
-static suspend_state_t usba_suspend_state = PM_SUSPEND_ON;
-static suspend_state_t usba_suspend_to_state = PM_SUSPEND_STANDBY; /* standby by default */
 
 #ifdef CONFIG_USB_GADGET_DEBUG_FS
 #include <linux/debugfs.h>
@@ -420,86 +414,10 @@ static inline void usba_int_enb_set(struct usba_udc *udc, u32 val)
 	udc->int_enb_cache = val;
 }
 
-/*
- * System suspend control attributes
- *
- * Found in /sys/devices/ahb.0/500000.gadget (or similar due to device tree)
- *
- * sys_suspend_en - enable or disable the system suspend feature. disabled is default
- *      setting values: enable, disable
- *
- * sys_suspend_to - set the type of suspend to do. Same values as /sys/power/state
- *      setting values: standby, mem
- *      reads "disabled" if sys_suspend_en is disabled.
- */
-ssize_t usba_sys_suspend_enable_show(struct device *dev, struct device_attribute *attr, char *buf)
-{
-	ssize_t ret = -EIO;
-
-	if (usba_suspend_enable) {
-		ret = scnprintf(buf, PAGE_SIZE, "enabled\n");
-	} else {
-		ret = scnprintf(buf, PAGE_SIZE, "disabled\n");
-	}
-
-	return ret;
-}
-
-ssize_t usba_sys_suspend_enable_store(struct device *dev, struct device_attribute *attr,
-                 const char *buf, size_t count)
-{
-	int ret = count;
-
-	if (!strncmp(buf, "enable", 6))
-		usba_suspend_enable = 1;
-	else if (!strncmp(buf, "disable", 7))
-		usba_suspend_enable = 0;
-	else
-		ret = -EINVAL;
-
-	return ret;
-}
-
-static DEVICE_ATTR(sys_suspend_en, S_IWUSR | S_IRUGO, usba_sys_suspend_enable_show, usba_sys_suspend_enable_store);
-
-ssize_t usba_suspend_to_show(struct device *dev, struct device_attribute *attr, char *buf)
-{
-	ssize_t ret = -EIO;
-
-	if (!usba_suspend_enable) {
-		ret = scnprintf(buf, PAGE_SIZE, "disabled\n");
-	} else if (usba_suspend_to_state == PM_SUSPEND_STANDBY) {
-		ret = scnprintf(buf, PAGE_SIZE, "standby\n");
-	} else if (usba_suspend_to_state == PM_SUSPEND_MEM) {
-		ret = scnprintf(buf, PAGE_SIZE, "mem\n");
-	} else {
-		ret = -EINVAL;
-	}
-
-	return ret;
-}
-
-ssize_t usba_suspend_to_store(struct device *dev, struct device_attribute *attr,
-                 const char *buf, size_t count)
-{
-	int ret = count;
-
-	if (!strncmp(buf, "standby", 7))
-		usba_suspend_to_state = PM_SUSPEND_STANDBY;
-	else if (!strncmp(buf, "mem", 3))
-		usba_suspend_to_state = PM_SUSPEND_MEM;
-	else
-		ret = -EINVAL;
-
-	return ret;
-}
-
-static DEVICE_ATTR(sys_suspend_to, S_IWUSR | S_IRUGO, usba_suspend_to_show, usba_suspend_to_store);
-
 static int vbus_is_present(struct usba_udc *udc)
 {
-	if (gpio_is_valid(udc->vbus_pin))
-		return gpio_get_value(udc->vbus_pin) ^ udc->vbus_pin_inverted;
+	if (udc->vbus_pin)
+		return gpiod_get_value(udc->vbus_pin) ^ udc->vbus_pin_inverted;
 
 	/* No Vbus detection: Assume always present */
 	return 1;
@@ -521,23 +439,6 @@ static void generate_bias_pulse(struct usba_udc *udc)
 
 	udc->bias_pulse_needed = false;
 }
-
-void atmel_usba_udc_do_suspend(struct work_struct *work)
-{
-	DBG(DBG_PM, "atmel_usba_udc_do_suspend. enabled: %d, state: %d\n",
-		usba_suspend_enable,
-		usba_suspend_state);
-
-	if (usba_suspend_enable) {
-		if (usba_suspend_state > PM_SUSPEND_ON) {
-			pm_suspend(usba_suspend_state);
-		}
-	}
-
-	return;
-}
-
-DECLARE_WORK(suspend_work, atmel_usba_udc_do_suspend);
 
 static void next_fifo_transaction(struct usba_ep *ep, struct usba_request *req)
 {
@@ -1859,7 +1760,6 @@ static irqreturn_t usba_udc_irq(int irq, void *devid)
 	if (status & USBA_DET_SUSPEND) {
 		toggle_bias(udc, 0);
 		usba_writel(udc, INT_CLR, USBA_DET_SUSPEND);
-		usba_writel(udc, INT_CLR, USBA_WAKE_UP);
 		usba_int_enb_set(udc, int_enb | USBA_WAKE_UP);
 		udc->bias_pulse_needed = true;
 		DBG(DBG_BUS, "Suspend detected\n");
@@ -1869,17 +1769,6 @@ static irqreturn_t usba_udc_irq(int irq, void *devid)
 			udc->driver->suspend(&udc->gadget);
 			spin_lock(&udc->lock);
 		}
-
-		/* Do system suspend feature, if enabled */
-		if( usba_suspend_enable ) {
-			if( usba_suspend_state < PM_SUSPEND_STANDBY ) {
-				DBG(DBG_PM, "Setting up suspend work\n");
-				usba_suspend_state = usba_suspend_to_state;
-				schedule_work(&suspend_work);
-			}
-		}
-
-
 	}
 
 	if (status & USBA_WAKE_UP) {
@@ -1887,9 +1776,6 @@ static irqreturn_t usba_udc_irq(int irq, void *devid)
 		usba_writel(udc, INT_CLR, USBA_WAKE_UP);
 		usba_int_enb_set(udc, int_enb & ~USBA_WAKE_UP);
 		DBG(DBG_BUS, "Wake Up CPU detected\n");
-		if( usba_suspend_enable ) {
-			usba_suspend_state = PM_SUSPEND_ON;
-		}
 	}
 
 	if (status & USBA_END_OF_RESUME) {
@@ -2090,8 +1976,8 @@ static int atmel_usba_start(struct usb_gadget *gadget,
 
 	mutex_lock(&udc->vbus_mutex);
 
-	if (gpio_is_valid(udc->vbus_pin))
-		enable_irq(gpio_to_irq(udc->vbus_pin));
+	if (udc->vbus_pin)
+		enable_irq(gpiod_to_irq(udc->vbus_pin));
 
 	/* If Vbus is present, enable the controller and wait for reset */
 	udc->vbus_prev = vbus_is_present(udc);
@@ -2105,8 +1991,8 @@ static int atmel_usba_start(struct usb_gadget *gadget,
 	return 0;
 
 err:
-	if (gpio_is_valid(udc->vbus_pin))
-		disable_irq(gpio_to_irq(udc->vbus_pin));
+	if (udc->vbus_pin)
+		disable_irq(gpiod_to_irq(udc->vbus_pin));
 
 	mutex_unlock(&udc->vbus_mutex);
 
@@ -2121,8 +2007,8 @@ static int atmel_usba_stop(struct usb_gadget *gadget)
 {
 	struct usba_udc *udc = container_of(gadget, struct usba_udc, gadget);
 
-	if (gpio_is_valid(udc->vbus_pin))
-		disable_irq(gpio_to_irq(udc->vbus_pin));
+	if (udc->vbus_pin)
+		disable_irq(gpiod_to_irq(udc->vbus_pin));
 
 	if (fifo_mode == 0)
 		udc->configured_ep = 1;
@@ -2134,7 +2020,6 @@ static int atmel_usba_stop(struct usb_gadget *gadget)
 	return 0;
 }
 
-#ifdef CONFIG_OF
 static void at91sam9rl_toggle_bias(struct usba_udc *udc, int is_on)
 {
 	regmap_update_bits(udc->pmc, AT91_CKGR_UCKR, AT91_PMC_BIASEN,
@@ -2170,7 +2055,6 @@ static struct usba_ep * atmel_udc_of_init(struct platform_device *pdev,
 {
 	u32 val;
 	const char *name;
-	enum of_gpio_flags flags;
 	struct device_node *np = pdev->dev.of_node;
 	const struct of_device_id *match;
 	struct device_node *pp;
@@ -2190,9 +2074,9 @@ static struct usba_ep * atmel_udc_of_init(struct platform_device *pdev,
 
 	udc->num_ep = 0;
 
-	udc->vbus_pin = of_get_named_gpio_flags(np, "atmel,vbus-gpio", 0,
-						&flags);
-	udc->vbus_pin_inverted = (flags & OF_GPIO_ACTIVE_LOW) ? 1 : 0;
+	udc->vbus_pin = devm_gpiod_get_optional(&pdev->dev, "atmel,vbus",
+						GPIOD_IN);
+	udc->vbus_pin_inverted = gpiod_is_active_low(udc->vbus_pin);
 
 	if (fifo_mode == 0) {
 		pp = NULL;
@@ -2319,75 +2203,10 @@ static struct usba_ep * atmel_udc_of_init(struct platform_device *pdev,
 err:
 	return ERR_PTR(ret);
 }
-#else
-static struct usba_ep * atmel_udc_of_init(struct platform_device *pdev,
-						    struct usba_udc *udc)
-{
-	return ERR_PTR(-ENOSYS);
-}
-#endif
-
-static struct usba_ep * usba_udc_pdata(struct platform_device *pdev,
-						 struct usba_udc *udc)
-{
-	struct usba_platform_data *pdata = dev_get_platdata(&pdev->dev);
-	struct usba_ep *eps;
-	int i;
-
-	if (!pdata)
-		return ERR_PTR(-ENXIO);
-
-	eps = devm_kzalloc(&pdev->dev, sizeof(struct usba_ep) * pdata->num_ep,
-			   GFP_KERNEL);
-	if (!eps)
-		return ERR_PTR(-ENOMEM);
-
-	udc->gadget.ep0 = &eps[0].ep;
-
-	udc->vbus_pin = pdata->vbus_pin;
-	udc->vbus_pin_inverted = pdata->vbus_pin_inverted;
-	udc->num_ep = pdata->num_ep;
-
-	INIT_LIST_HEAD(&eps[0].ep.ep_list);
-
-	for (i = 0; i < pdata->num_ep; i++) {
-		struct usba_ep *ep = &eps[i];
-
-		ep->ep_regs = udc->regs + USBA_EPT_BASE(i);
-		ep->dma_regs = udc->regs + USBA_DMA_BASE(i);
-		ep->fifo = udc->fifo + USBA_FIFO_BASE(i);
-		ep->ep.ops = &usba_ep_ops;
-		ep->ep.name = pdata->ep[i].name;
-		ep->fifo_size = pdata->ep[i].fifo_size;
-		usb_ep_set_maxpacket_limit(&ep->ep, ep->fifo_size);
-		ep->udc = udc;
-		INIT_LIST_HEAD(&ep->queue);
-		ep->nr_banks = pdata->ep[i].nr_banks;
-		ep->index = pdata->ep[i].index;
-		ep->can_dma = pdata->ep[i].can_dma;
-		ep->can_isoc = pdata->ep[i].can_isoc;
-
-		if (i == 0) {
-			ep->ep.caps.type_control = true;
-		} else {
-			ep->ep.caps.type_iso = ep->can_isoc;
-			ep->ep.caps.type_bulk = true;
-			ep->ep.caps.type_int = true;
-		}
-
-		ep->ep.caps.dir_in = true;
-		ep->ep.caps.dir_out = true;
-
-		if (i)
-			list_add_tail(&ep->ep.ep_list, &udc->gadget.ep_list);
-	}
-
-	return eps;
-}
 
 static int usba_udc_probe(struct platform_device *pdev)
 {
-	struct resource *regs, *fifo;
+	struct resource *res;
 	struct clk *pclk, *hclk;
 	struct usba_udc *udc;
 	int irq, ret, i;
@@ -2399,10 +2218,18 @@ static int usba_udc_probe(struct platform_device *pdev)
 	udc->gadget = usba_gadget_template;
 	INIT_LIST_HEAD(&udc->gadget.ep_list);
 
-	regs = platform_get_resource(pdev, IORESOURCE_MEM, CTRL_IOMEM_ID);
-	fifo = platform_get_resource(pdev, IORESOURCE_MEM, FIFO_IOMEM_ID);
-	if (!regs || !fifo)
-		return -ENXIO;
+	res = platform_get_resource(pdev, IORESOURCE_MEM, CTRL_IOMEM_ID);
+	udc->regs = devm_ioremap_resource(&pdev->dev, res);
+	if (IS_ERR(udc->regs))
+		return PTR_ERR(udc->regs);
+	dev_info(&pdev->dev, "MMIO registers at %pR mapped at %p\n",
+		 res, udc->regs);
+
+	res = platform_get_resource(pdev, IORESOURCE_MEM, FIFO_IOMEM_ID);
+	udc->fifo = devm_ioremap_resource(&pdev->dev, res);
+	if (IS_ERR(udc->fifo))
+		return PTR_ERR(udc->fifo);
+	dev_info(&pdev->dev, "FIFO at %pR mapped at %p\n", res, udc->fifo);
 
 	irq = platform_get_irq(pdev, 0);
 	if (irq < 0)
@@ -2420,23 +2247,6 @@ static int usba_udc_probe(struct platform_device *pdev)
 	udc->pdev = pdev;
 	udc->pclk = pclk;
 	udc->hclk = hclk;
-	udc->vbus_pin = -ENODEV;
-
-	ret = -ENOMEM;
-	udc->regs = devm_ioremap(&pdev->dev, regs->start, resource_size(regs));
-	if (!udc->regs) {
-		dev_err(&pdev->dev, "Unable to map I/O memory, aborting.\n");
-		return ret;
-	}
-	dev_info(&pdev->dev, "MMIO registers at 0x%08lx mapped at %p\n",
-		 (unsigned long)regs->start, udc->regs);
-	udc->fifo = devm_ioremap(&pdev->dev, fifo->start, resource_size(fifo));
-	if (!udc->fifo) {
-		dev_err(&pdev->dev, "Unable to map FIFO, aborting.\n");
-		return ret;
-	}
-	dev_info(&pdev->dev, "FIFO at 0x%08lx mapped at %p\n",
-		 (unsigned long)fifo->start, udc->fifo);
 
 	platform_set_drvdata(pdev, udc);
 
@@ -2450,10 +2260,7 @@ static int usba_udc_probe(struct platform_device *pdev)
 	usba_writel(udc, CTRL, USBA_DISABLE_MASK);
 	clk_disable_unprepare(pclk);
 
-	if (pdev->dev.of_node)
-		udc->usba_ep = atmel_udc_of_init(pdev, udc);
-	else
-		udc->usba_ep = usba_udc_pdata(pdev, udc);
+	udc->usba_ep = atmel_udc_of_init(pdev, udc);
 
 	toggle_bias(udc, 0);
 
@@ -2469,42 +2276,24 @@ static int usba_udc_probe(struct platform_device *pdev)
 	}
 	udc->irq = irq;
 
-	if (gpio_is_valid(udc->vbus_pin)) {
-		if (!devm_gpio_request(&pdev->dev, udc->vbus_pin, "atmel_usba_udc")) {
-			irq_set_status_flags(gpio_to_irq(udc->vbus_pin),
-					IRQ_NOAUTOEN);
-			ret = devm_request_threaded_irq(&pdev->dev,
-					gpio_to_irq(udc->vbus_pin), NULL,
+	if (udc->vbus_pin) {
+		irq_set_status_flags(gpiod_to_irq(udc->vbus_pin), IRQ_NOAUTOEN);
+		ret = devm_request_threaded_irq(&pdev->dev,
+					gpiod_to_irq(udc->vbus_pin), NULL,
 					usba_vbus_irq_thread, USBA_VBUS_IRQFLAGS,
 					"atmel_usba_udc", udc);
 			if (ret) {
-				udc->vbus_pin = -ENODEV;
+				udc->vbus_pin = NULL;
 				dev_warn(&udc->pdev->dev,
 					 "failed to request vbus irq; "
 					 "assuming always on\n");
 			}
-		} else {
-			/* gpio_request fail so use -EINVAL for gpio_is_valid */
-			udc->vbus_pin = -EINVAL;
-		}
 	}
 
 	ret = usb_add_gadget_udc(&pdev->dev, &udc->gadget);
 	if (ret)
 		return ret;
 	device_init_wakeup(&pdev->dev, 1);
-
-
-	/* setup /sys attributes for suspend feature */
-	ret = device_create_file(&pdev->dev, &dev_attr_sys_suspend_en);
-	if (ret) {
-		dev_err(&pdev->dev, "Unable create sys_suspend_en sysfs entry: %d\n", ret);
-	}
-
-	ret = device_create_file(&pdev->dev, &dev_attr_sys_suspend_to);
-	if (ret) {
-		dev_err(&pdev->dev, "Unable create sys_suspend_to sysfs entry: %d\n", ret);
-	}
 
 	usba_init_debugfs(udc);
 	for (i = 1; i < udc->num_ep; i++)
@@ -2521,8 +2310,6 @@ static int usba_udc_remove(struct platform_device *pdev)
 	udc = platform_get_drvdata(pdev);
 
 	device_init_wakeup(&pdev->dev, 0);
-	device_remove_file(&pdev->dev, &dev_attr_sys_suspend_en);
-	device_remove_file(&pdev->dev, &dev_attr_sys_suspend_to);
 	usb_del_gadget_udc(&udc->gadget);
 
 	for (i = 1; i < udc->num_ep; i++)
@@ -2541,8 +2328,6 @@ static int usba_udc_suspend(struct device *dev)
 	if (!udc->driver)
 		return 0;
 
-	DBG(DBG_PM, "suspend -- may wake: %d; suspend_enable: %d", device_may_wakeup(dev), usba_suspend_enable);
-
 	mutex_lock(&udc->vbus_mutex);
 
 	if (!device_may_wakeup(dev)) {
@@ -2551,21 +2336,12 @@ static int usba_udc_suspend(struct device *dev)
 	}
 
 	/*
-	 * If we support system suspend/wake-on USB Suspend signal,
-	 * we need to prepare to wake up on that IRQ.
-	 */
-	if (usba_suspend_enable) {
-		enable_irq_wake(udc->irq);
-	}
-
-	/*
 	 * Device may wake up. We stay clocked if we failed
 	 * to request vbus irq, assuming always on.
 	 */
-	if (gpio_is_valid(udc->vbus_pin)) {
-		if (!usba_suspend_enable) /* Don't stop the clock if using usb suspend */
-			usba_stop(udc);
-		enable_irq_wake(gpio_to_irq(udc->vbus_pin));
+	if (udc->vbus_pin) {
+		usba_stop(udc);
+		enable_irq_wake(gpiod_to_irq(udc->vbus_pin));
 	}
 
 out:
@@ -2581,20 +2357,13 @@ static int usba_udc_resume(struct device *dev)
 	if (!udc->driver)
 		return 0;
 
-	DBG(DBG_PM, "resume -- may wake: %d; suspend_enable: %d", device_may_wakeup(dev), usba_suspend_enable);
-
-	if (device_may_wakeup(dev))
-	{
-		if (gpio_is_valid(udc->vbus_pin))
-			disable_irq_wake(gpio_to_irq(udc->vbus_pin));
-		if (usba_suspend_enable)
-			disable_irq_wake(udc->irq);
-	}
+	if (device_may_wakeup(dev) && udc->vbus_pin)
+		disable_irq_wake(gpiod_to_irq(udc->vbus_pin));
 
 	/* If Vbus is present, enable the controller and wait for reset */
 	mutex_lock(&udc->vbus_mutex);
 	udc->vbus_prev = vbus_is_present(udc);
-	if (udc->vbus_prev && !usba_suspend_enable)
+	if (udc->vbus_prev)
 		usba_start(udc);
 	mutex_unlock(&udc->vbus_mutex);
 
@@ -2609,7 +2378,7 @@ static struct platform_driver udc_driver = {
 	.driver		= {
 		.name		= "atmel_usba_udc",
 		.pm		= &usba_udc_pm_ops,
-		.of_match_table	= of_match_ptr(atmel_udc_dt_ids),
+		.of_match_table	= atmel_udc_dt_ids,
 	},
 };
 
