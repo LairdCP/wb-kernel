@@ -19,7 +19,9 @@ cfg80211-$(CONFIG_CFG80211_INTERNAL_REGDB) += regdb.o
 
 CFLAGS_trace.o := -I$(src)
 
-$(obj)/regdb.c: $(src)/db.txt $(src)/genregdb.awk
+$(eval $(call config_filename,CFG80211_INTERNAL_REGDB_FILE))
+
+$(obj)/regdb.c: $(src)/$(CFG80211_INTERNAL_REGDB_FILE_FILENAME) $(src)/genregdb.awk
 	@$(AWK) -f $(srctree)/$(src)/genregdb.awk < $< > $@
 
 clean-files := regdb.c
