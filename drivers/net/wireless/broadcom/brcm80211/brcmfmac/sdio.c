@@ -320,6 +320,11 @@ struct rte_console {
 #define MAX_KSO_ATTEMPTS (PMU_MAX_TRANSITION_DLY/KSO_WAIT_US)
 #define BRCMF_SDIO_MAX_ACCESS_ERRORS	5
 
+static void brcmf_sdio_firmware_callback(struct device *dev, int err,
+					 struct brcmf_fw_request *fwreq);
+static struct brcmf_fw_request *
+brcmf_sdio_prepare_fw_request(struct brcmf_sdio *bus);
+
 /*
  * Conversion of 802.1D priority to precedence level
  */
@@ -2543,6 +2548,7 @@ static int
 brcmf_sdio_ulp_reinit_fw(struct brcmf_sdio *bus)
 {
 	struct brcmf_sdio_dev *sdiodev = bus->sdiodev;
+	struct brcmf_fw_request *fwreq;
 	int err = 0;
 
 	/* After firmware redownload tx/rx seq are reset accordingly
@@ -2553,11 +2559,18 @@ brcmf_sdio_ulp_reinit_fw(struct brcmf_sdio *bus)
 	bus->rx_seq = 0;
 	bus->tx_max = 4;
 
-	err = brcmf_fw_get_firmwares(sdiodev->dev, BRCMF_FW_REQUEST_NVRAM,
-				     sdiodev->fw_name, sdiodev->nvram_name,
+	fwreq = brcmf_sdio_prepare_fw_request(bus);
+	if (!fwreq) {
+		err = -ENOMEM;
+		return err;
+	}
+
+	err = brcmf_fw_get_firmwares(sdiodev->dev, fwreq,
 				     brcmf_sdio_firmware_callback);
-	if (err != 0)
+	if (err != 0) {
 		brcmf_err("async firmware request failed: %d\n", err);
+		kfree(fwreq);
+	}
 	return err;
 }
 
