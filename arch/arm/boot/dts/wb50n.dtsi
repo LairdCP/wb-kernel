@@ -127,6 +127,18 @@
 					atmel,osc-bypass;
 				};
 			};
+
+			tcb0: timer@f0010000 {
+				timer0: timer@0 {
+					compatible = "atmel,tcb-timer";
+					reg = <0>;
+				};
+
+				timer1: timer@1 {
+					compatible = "atmel,tcb-timer";
+					reg = <1>;
+				};
+			};
 		};
 
 		nand0: nand@60000000 {
