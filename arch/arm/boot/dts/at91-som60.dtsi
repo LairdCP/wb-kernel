@@ -255,3 +255,15 @@
 		&pioE 15 GPIO_ACTIVE_LOW
 		0>;
 };
+
+&tcb0 {
+	timer0: timer@0 {
+		compatible = "atmel,tcb-timer";
+		reg = <0>;
+	};
+
+	timer1: timer@1 {
+		compatible = "atmel,tcb-timer";
+		reg = <1>;
+	};
+};

@@ -199,3 +199,15 @@
 	atmel,vbus-gpio = <&pioA 2 GPIO_ACTIVE_LOW>;
 	atmel,oc-gpio = <&pioA 4 GPIO_ACTIVE_LOW>;
 };
+
+&tcb0 {
+	timer0: timer@0 {
+		compatible = "atmel,tcb-timer";
+		reg = <0>;
+	};
+
+	timer1: timer@1 {
+		compatible = "atmel,tcb-timer";
+		reg = <1>;
+	};
+};

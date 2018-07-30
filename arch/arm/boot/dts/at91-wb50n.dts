@@ -10,19 +10,9 @@
 #include "at91-wb50n.dtsi"
 
 / {
-	model = "Laird Workgroup Bridge 50N - Atmel SAMA5D";
-	compatible = "laird,wb50n", "atmel,sama5d31", "atmel,sama5d3", "atmel,sama5";
-
-	chosen {
-		stdout-path = "serial0:115200n8";
-	};
-
 	ahb {
 		apb {
 			watchdog@fffffe40 {
-				compatible = "atmel,at91sam9260-wdt";
-				reg = <0xfffffe40 0x10>;
-				clocks = <&clk32k>;
 				status = "okay";
 			};
 		};
@@ -117,4 +107,3 @@
 &usb2 {
 	status = "okay";
 };
-
