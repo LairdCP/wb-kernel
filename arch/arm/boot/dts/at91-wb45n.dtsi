@@ -41,7 +41,6 @@
 
 	ahb {
 		apb {
-
 			shdwc@fffffe10 {
 				atmel,wakeup-mode = "low";
 			};
@@ -59,6 +58,17 @@
 				compatible = "atmel,sama5d3-rstc";
 			};
 
+			tcb0: timer@f8008000 {
+				timer0: timer@0 {
+					compatible = "atmel,tcb-timer";
+					reg = <0>;
+				};
+
+				timer1: timer@1 {
+					compatible = "atmel,tcb-timer";
+					reg = <1>;
+				};
+			};
 		};
 	};
 
