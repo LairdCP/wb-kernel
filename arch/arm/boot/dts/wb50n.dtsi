@@ -139,6 +139,10 @@
 					reg = <1>;
 				};
 			};
+
+			sha@f8034000 {
+				status = "disabled";
+			};
 		};
 
 		nand0: nand@60000000 {
