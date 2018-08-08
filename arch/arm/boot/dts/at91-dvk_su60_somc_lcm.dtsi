@@ -1,5 +1,5 @@
 /*
- * at91-dvk_su60_somc_lcm.dtsi - Device Tree file for the DVK SOM60 LCD board
+ * at91-dvk_su60_somc_lcm.dtsi - Device Tree file for the LCD for the DVK SOM60 board
  *
  *  Copyright (C) 2018 Laird,
  *		  2018 Ben Whitten <ben.whitten@lairdtech.com>
@@ -65,11 +65,12 @@
 	status = "okay";
 
 	ft5426@56 {
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_lcd_ctp_int>;
+
 		/* Actually FT5426 */
 		compatible = "edt,edt-ft5406";
 		reg = <56>;
-		pinctrl-names = "default";
-		pinctrl-0 = <&pinctrl_lcd_ctp_int>;
 
 		interrupt-parent = <&pioC>;
 		interrupts = <28 IRQ_TYPE_EDGE_FALLING>;

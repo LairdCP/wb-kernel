@@ -3,6 +3,7 @@
  *
  *  Copyright (C) 2018 Laird,
  *		  2018 Ben Whitten <ben.whitten@lairdtech.com>
+ *		  2018 Boris Krasnovskiy <boris.krasnovskiy@lairdtech.com>
  *
  * Licensed under GPLv2 or later.
  */
@@ -13,7 +14,7 @@
 	compatible = "laird,som60", "atmel,sama5d36", "atmel,sama5d3", "atmel,sama5";
 
 	chosen {
-		stdout-path = &dbgu;
+		stdout-path = "serial0:115200n8";
 	};
 
 	memory {
@@ -36,78 +37,13 @@
 		memory-region = <&fs_reserved>;
 	};
 
-	clocks {
-		slow_xtal {
-			clock-frequency = <32768>;
-		};
-
-		main_xtal {
-			clock-frequency = <12000000>;
-		};
-	};
-
 	ahb {
 		apb {
 			pinctrl@fffff200 {
 				board {
-					pinctrl_mmc0_cd: mmc0_cd {
-						atmel,pins =
-							<AT91_PIOE 31 AT91_PERIPH_GPIO AT91_PINCTRL_DEGLITCH>;
-					};
-
-					pinctrl_mmc0_en: mmc0_en {
-						atmel,pins =
-							<AT91_PIOE 30 AT91_PERIPH_GPIO AT91_PINCTRL_NONE>;
-					};
-
 					pinctrl_nand0_wp: nand0_wp {
 						atmel,pins =
 							<AT91_PIOE 14 AT91_PERIPH_GPIO AT91_PINCTRL_PULL_UP>;
-					};
-
-					pinctrl_usb_vbus: usb_vbus {
-						atmel,pins =
-							<AT91_PIOE 20 AT91_PERIPH_GPIO AT91_PINCTRL_NONE>; /* Conflicts with USART2_SCK */
-					};
-
-					pinctrl_usart2_sck: usart2_sck {
-						atmel,pins =
-							<AT91_PIOE 20 AT91_PERIPH_B AT91_PINCTRL_NONE>; /* Conflicts with USB_VBUS */
-					};
-
-					pinctrl_usb_oc: usb_oc {
-						atmel,pins =
-							<AT91_PIOE 15 AT91_PERIPH_GPIO AT91_PINCTRL_DEGLITCH>; /* Conflicts with USART3_SCK */
-					};
-
-					pinctrl_usart3_sck: usart3_sck {
-						atmel,pins =
-							<AT91_PIOE 15 AT91_PERIPH_B AT91_PINCTRL_NONE>; /* Conflicts with USB_OC */
-					};
-
-					pinctrl_usba_vbus: usba_vbus {
-					   atmel,pins =
-							<AT91_PIOC 14 AT91_PERIPH_GPIO AT91_PINCTRL_DEGLITCH>;
-					};
-
-					pinctrl_geth_int: geth_int {
-						atmel,pins =
-							<AT91_PIOB 25 AT91_PERIPH_GPIO AT91_PINCTRL_DEGLITCH>; /* Conflicts with USART1_SCK */
-					};
-
-					pinctrl_usart1_sck: usart1_sck {
-						atmel,pins =
-							<AT91_PIOB 25 AT91_PERIPH_A AT91_PINCTRL_NONE>; /* Conflicts with GETH_INT */
-					};
-
-					pinctrl_eth_int: eth_int {
-						atmel,pins =
-							<AT91_PIOC 10 AT91_PERIPH_GPIO AT91_PINCTRL_DEGLITCH>;
-					};
-
-					pinctrl_pck2_as_audio_mck: pck2_as_audio_mck {
-						atmel,pins =
-							<AT91_PIOC 15 AT91_PERIPH_B AT91_PINCTRL_NONE>;
 					};
 				};
 			};
@@ -119,25 +55,41 @@
 	};
 };
 
-/* Makes a corrupt DT? */
-/*&pioE {
-  nand_wpee {
-  gpio-hog;
-  gpios = <14 0>;
-  output-high;
-  line-name = "nand_wp";
-  };
-  };*/
-
 &mmc0 {
 	slot@0 {
 		reg = <0>;
-		bus-width = <8>;
+		bus-width = <4>;
 	};
 };
 
+&slow_xtal {
+	clock-frequency = <32768>;
+};
+
+&main_xtal {
+	clock-frequency = <12000000>;
+};
+
+&slow_osc {
+	atmel,osc-bypass;
+};
+
+&tcb0 {
+	timer0: timer@0 {
+		compatible = "atmel,tcb-timer";
+		reg = <0>;
+	};
+
+	timer1: timer@1 {
+		compatible = "atmel,tcb-timer";
+		reg = <1>;
+	};
+};
+
+/* Wi-Fi MMC */
 &mmc1 {
 	status = "okay";
+
 	slot@0 {
 		reg = <0>;
 		bus-width = <4>;
@@ -146,10 +98,7 @@
 	/* Describe shutdown pin PMU_EN */
 };
 
-&spi0 {
-	cs-gpios = <&pioD 13 0>, <0>, <0>, <0>;
-};
-
+/* BT UART */
 &usart0 {
 	atmel,use-dma-rx;
 	atmel,use-dma-tx;
@@ -157,28 +106,12 @@
 	pinctrl-0 = <&pinctrl_usart0 &pinctrl_usart0_rts_cts>;
 };
 
-&usart1 {
-	pinctrl-0 = <&pinctrl_usart1 &pinctrl_usart1_rts_cts>;
-};
-
-&usart2 {
-	pinctrl-0 = <&pinctrl_usart2 &pinctrl_usart2_rts_cts>;
-};
-
-&usart3 {
-	pinctrl-0 = <&pinctrl_usart3 &pinctrl_usart3_rts_cts>;
-};
-
 &adc0 {
 	pinctrl-0 = <
-		&pinctrl_adc0_adtrg
-		&pinctrl_adc0_ad0
-		&pinctrl_adc0_ad1
-		&pinctrl_adc0_ad2
-		&pinctrl_adc0_ad3
-		&pinctrl_adc0_ad4
+		&pinctrl_adc0_adtrg &pinctrl_adc0_ad0 &pinctrl_adc0_ad1
+		&pinctrl_adc0_ad2   &pinctrl_adc0_ad3 &pinctrl_adc0_ad4
 		&pinctrl_adc0_ad5
-		>;
+	>;
 };
 
 &macb0 {
@@ -189,10 +122,10 @@
 	phy-mode = "rmii";
 };
 
-
 &ebi {
-	pinctrl-0 = <&pinctrl_ebi_nand_addr>;
 	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_ebi_nand_addr &pinctrl_nand0_wp>;
+	pinctrl-assert-gpios = <&pioE 14 GPIO_ACTIVE_HIGH>;
 	status = "okay";
 };
 
@@ -239,35 +172,5 @@
 				reg = <0xe0000 0xfe00000>;
 			};
 		};
-	};
-};
-
-&usb0 {
-	pinctrl-names = "default";
-	pinctrl-0 = <&pinctrl_usba_vbus>;
-	atmel,vbus-gpio = <&pioC 14 GPIO_ACTIVE_HIGH>;
-};
-
-&usb1 {
-	pinctrl-names = "default";
-	pinctrl-0 = <&pinctrl_usb_vbus &pinctrl_usb_oc>;
-	num-ports = <3>;
-	atmel,vbus-gpio = <0
-		&pioE 20 GPIO_ACTIVE_HIGH
-		0>;
-	atmel,oc-gpio = <0
-		&pioE 15 GPIO_ACTIVE_LOW
-		0>;
-};
-
-&tcb0 {
-	timer0: timer@0 {
-		compatible = "atmel,tcb-timer";
-		reg = <0>;
-	};
-
-	timer1: timer@1 {
-		compatible = "atmel,tcb-timer";
-		reg = <1>;
 	};
 };
