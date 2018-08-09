@@ -101,6 +101,7 @@ ieee80211_bss_info_update(struct ieee80211_local *local,
 		} else {
 			bss->avg_signal = signal * LAIRD_SCALE;
 		}
+		cfg80211_put_bss(local->hw.wiphy, cbss);
 	}
 #endif
 
