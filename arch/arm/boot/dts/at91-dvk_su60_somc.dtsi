@@ -153,6 +153,7 @@
 
 &i2c0 {
 	status = "okay";
+	clock-frequency = <400000>;
 
 	wm8904: wm8904@1a {
 		compatible = "wlf,wm8904";
@@ -164,6 +165,7 @@
 
 &i2c1 {
 	status = "okay";
+	clock-frequency = <400000>;
 
 	eeprom@87 {
 		compatible = "atmel,24c32";
