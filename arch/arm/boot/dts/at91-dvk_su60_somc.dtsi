@@ -155,6 +155,9 @@
 	status = "okay";
 	clock-frequency = <400000>;
 
+	// Not enough DMA channels available, to support audio
+	dmas = <0>, <0>;
+
 	wm8904: wm8904@1a {
 		compatible = "wlf,wm8904";
 		reg = <0x1a>;
@@ -202,23 +205,19 @@
 
 &usart1 {
 	pinctrl-0 = <&pinctrl_usart1 &pinctrl_usart1_rts_cts>;
-	atmel,use-dma-rx;
-	atmel,use-dma-tx;
 	status = "okay";
 };
 
 &usart2 {
 	pinctrl-0 = <&pinctrl_usart2 &pinctrl_usart2_rts_cts>;
-	atmel,use-dma-rx;
 	atmel,use-dma-tx;
 	status = "okay";
 };
 
 &usart3 {
 	pinctrl-0 = <&pinctrl_usart3 &pinctrl_usart3_rts_cts>;
-	atmel,use-dma-rx;
-	atmel,use-dma-tx;
 	status = "okay";
+	atmel,use-dma-tx;
 };
 
 &uart0 {
@@ -226,6 +225,7 @@
 };
 
 &dbgu {
+	atmel,use-dma-tx;
 	status = "okay";
 };
 
