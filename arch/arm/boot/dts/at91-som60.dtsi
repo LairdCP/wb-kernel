@@ -37,6 +37,15 @@
 		memory-region = <&fs_reserved>;
 	};
 
+	wifi_pwrseq: wifi_pwrseq {
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_wifi_pmu_en>;
+
+		compatible = "mmc-pwrseq-simple";
+		reset-gpios = <&pioE 5 GPIO_ACTIVE_LOW>;
+		post-power-on-delay-ms = <10>;
+	};
+
 	ahb {
 		apb {
 			pinctrl@fffff200 {
@@ -45,6 +54,11 @@
 						atmel,pins =
 							<AT91_PIOE 14 AT91_PERIPH_GPIO AT91_PINCTRL_PULL_UP>;
 					};
+
+					pinctrl_wifi_pmu_en: wifi_pmu_en {
+						atmel,pins =
+							<AT91_PIOE 5 AT91_PERIPH_GPIO AT91_PINCTRL_PULL_UP>;
+					};
 				};
 			};
 
@@ -52,13 +66,6 @@
 				status = "disabled";
 			};
 		};
-	};
-};
-
-&mmc0 {
-	slot@0 {
-		reg = <0>;
-		bus-width = <4>;
 	};
 };
 
@@ -86,16 +93,24 @@
 	};
 };
 
-/* Wi-Fi MMC */
-&mmc1 {
-	status = "okay";
-
+&mmc0 {
 	slot@0 {
 		reg = <0>;
 		bus-width = <4>;
 	};
+};
 
-	/* Describe shutdown pin PMU_EN */
+/* Wi-Fi MMC */
+&mmc1 {
+	status = "okay";
+	mmc-pwrseq = <&wifi_pwrseq>;
+
+	slot@0 {
+		reg = <0>;
+		bus-width = <4>;
+
+		non-removable;
+	};
 };
 
 /* BT UART */
@@ -115,10 +130,14 @@
 };
 
 &macb0 {
+	#address-cells = <1>;
+	#size-cells = <0>;
 	phy-mode = "rgmii";
 };
 
 &macb1 {
+	#address-cells = <1>;
+	#size-cells = <0>;
 	phy-mode = "rmii";
 };
 
