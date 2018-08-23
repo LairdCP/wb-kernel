@@ -565,7 +565,7 @@ err_clk:
 	return err;
 }
 
-static int __init tcb_clksrc_init(struct device_node *node)
+static void __init tcb_clksrc_init(struct device_node *node)
 {
 	const struct of_device_id *match;
 	const struct atmel_tcb_info *tcb_info;
@@ -575,7 +575,7 @@ static int __init tcb_clksrc_init(struct device_node *node)
 	int bits, irq, err, chan1 = -1;
 
 	if (tc.registered && tce.registered)
-		return -ENODEV;
+		return;
 
 	/*
 	 * The regmap has to be used to access registers that are shared
@@ -584,12 +584,12 @@ static int __init tcb_clksrc_init(struct device_node *node)
 	 */
 	regmap = syscon_node_to_regmap(node->parent);
 	if (IS_ERR(regmap))
-		return PTR_ERR(regmap);
+		return;
 
 	tcb_base = of_iomap(node->parent, 0);
 	if (!tcb_base) {
 		pr_err("%s +%d %s\n", __FILE__, __LINE__, __func__);
-		return -ENXIO;
+		return;
 	}
 
 	match = of_match_node(atmel_tcb_dt_ids, node->parent);
@@ -598,15 +598,16 @@ static int __init tcb_clksrc_init(struct device_node *node)
 
 	err = of_property_read_u32_index(node, "reg", 0, &channel);
 	if (err)
-		return err;
+		return;
 
 	irq = tcb_irq_get(node, channel);
 	if (irq < 0)
-		return irq;
+		return;
 
-	if (tc.registered)
-		return tc_clkevt_register(node, regmap, tcb_base, channel, irq,
-					  bits);
+	if (tc.registered) {
+		tc_clkevt_register(node, regmap, tcb_base, channel, irq, bits);
+		return;
+	}
 
 	if (bits == 16) {
 		of_property_read_u32_index(node, "reg", 1, &chan1);
@@ -614,17 +615,16 @@ static int __init tcb_clksrc_init(struct device_node *node)
 			if (tce.registered) {
 				pr_err("%s: clocksource needs two channels\n",
 				       node->parent->full_name);
-				return -EINVAL;
+				return;
 			} else {
-				return tc_clkevt_register(node, regmap,
-							  tcb_base, channel,
-							  irq, bits);
+				tc_clkevt_register(node, regmap, tcb_base, channel, 
+					irq, bits);
+				return;
 			}
 		}
 	}
 
-	return tcb_clksrc_register(node, regmap, tcb_base, channel, chan1, irq,
-				   bits);
+	tcb_clksrc_register(node, regmap, tcb_base, channel, chan1, irq, bits);
 }
 CLOCKSOURCE_OF_DECLARE(atmel_tcb_clksrc, "atmel,tcb-timer",
 		       tcb_clksrc_init);
