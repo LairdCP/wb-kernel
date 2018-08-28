@@ -48,6 +48,10 @@
 				};
 			};
 
+			watchdog@fffffe40 {
+				status = "okay";
+			};
+
 			sha@f8034000 {
 				status = "disabled";
 			};
