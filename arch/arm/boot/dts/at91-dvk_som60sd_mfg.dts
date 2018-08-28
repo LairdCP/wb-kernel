@@ -12,14 +12,18 @@
 /* DVK board definition */
 #include "at91-dvk_su60_somc.dtsi"
 
+/ {
+	sound {
+		status = "disabled";
+	};
+};
+
 &ssc0 {
 	status = "disabled";
 };
 
 &i2c0 {
 	status = "disabled";
-
-	/delete-node/ wm8904@1a;
 };
 
 &i2c1 {
