@@ -908,7 +908,14 @@ void ieee80211_send_nullfunc(struct ieee80211_local *local,
 	struct ieee80211_hdr_3addr *nullfunc;
 	struct ieee80211_if_managed *ifmgd = &sdata->u.mgd;
 
+#ifndef REMOVE_LAIRD_MODS 
+	// Laird - Issues in mac80211 and some drivers prevent QOS NULL frames
+	// from being transmitted in some cases.  Use only standard NULL data
+	// frames until this is resolved
+	skb = ieee80211_nullfunc_get(&local->hw, &sdata->vif, false);
+#else
 	skb = ieee80211_nullfunc_get(&local->hw, &sdata->vif, true);
+#endif
 	if (!skb)
 		return;
 
