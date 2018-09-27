@@ -1,9 +1,9 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * at91-wb50n.dtsi - Device Tree include file for wb50n cpu module
  *
- *  Copyright (C) 2017 Laird
+ *  Copyright (C) 2018 Laird
  *
- * Licensed under GPLv2 or later.
  */
 
 #include "sama5d31.dtsi"
@@ -22,21 +22,21 @@
 
 	ahb {
 		apb {
-			pinctrl@fffff200 {
-				board {
-					pinctrl_mmc0_cd: mmc0_cd {
-						atmel,pins = <AT91_PIOC 26 AT91_PERIPH_GPIO AT91_PINCTRL_PULL_UP_DEGLITCH>; /* PC26 GPIO with pullup deglitch */
-					};
-
-					pinctrl_usba_vbus: usba_vbus {
-						atmel,pins = <AT91_PIOB 13 AT91_PERIPH_GPIO AT91_PINCTRL_DEGLITCH>; /* PB13 GPIO with deglitch */
-					};
-				};
-			};
-
 			sha@f8034000 {
 				status = "disabled";
 			};
+		};
+	};
+};
+
+&pinctrl {
+	board {
+		pinctrl_mmc0_cd: mmc0_cd {
+			atmel,pins = <AT91_PIOC 26 AT91_PERIPH_GPIO AT91_PINCTRL_PULL_UP_DEGLITCH>; /* PC26 GPIO with pullup deglitch */
+		};
+
+		pinctrl_usba_vbus: usba_vbus {
+			atmel,pins = <AT91_PIOB 13 AT91_PERIPH_GPIO AT91_PINCTRL_DEGLITCH>; /* PB13 GPIO with deglitch */
 		};
 	};
 };

@@ -1,26 +1,13 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * at91-dvk_su60_somc_lcm.dtsi - Device Tree file for the LCD for the DVK SOM60 board
  *
  *  Copyright (C) 2018 Laird,
  *		  2018 Ben Whitten <ben.whitten@lairdtech.com>
  *
- * Licensed under GPLv2 or later.
  */
 
 / {
-	ahb {
-		apb {
-			pinctrl@fffff200 {
-				board {
-					pinctrl_lcd_ctp_int: lcd_ctp_int {
-						 atmel,pins =
-							 <AT91_PIOC 28 AT91_PERIPH_GPIO AT91_PINCTRL_PULL_UP_DEGLITCH>;
-					};
-				};
-			};
-		};
-	};
-
 	backlight: backlight {
 		compatible = "pwm-backlight";
 		pwms = <&hlcdc_pwm 0 50000 0>;
@@ -30,7 +17,6 @@
 	};
 
 	panel: panel {
-		/* Actually Winstar WF70GTIAGDNG0 */
 		compatible = "innolux,at070tn92", "simple-panel";
 		backlight = <&backlight>;
 		power-supply = <&vcc_lcd_reg>;
@@ -58,6 +44,15 @@
 		regulator-boot-on;
 		regulator-always-on;
 		status = "okay";
+	};
+};
+
+&pinctrl {
+	board {
+		pinctrl_lcd_ctp_int: lcd_ctp_int {
+			 atmel,pins =
+				 <AT91_PIOC 28 AT91_PERIPH_GPIO AT91_PINCTRL_PULL_UP_DEGLITCH>;
+		};
 	};
 };
 
