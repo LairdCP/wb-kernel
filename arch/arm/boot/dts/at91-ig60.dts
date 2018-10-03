@@ -169,8 +169,10 @@
 	slot@0 {
 		reg = <0>;
 		bus-width = <4>;
+
+		/*Temporarily disabled cd pin (Re-enable on IG-60 R-1.0)
 		cd-gpios = <&pioE 31 GPIO_ACTIVE_HIGH>;
-		cd-inverted;
+		cd-inverted;*/
 	};
 };
 
