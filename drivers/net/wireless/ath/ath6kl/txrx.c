@@ -356,11 +356,11 @@ fail_ctrl_tx:
 }
 
 #ifdef CONFIG_ATH6KL_LAIRD_FIPS
-int laird_data_tx_continue(struct sk_buff *skb,
+netdev_tx_t laird_data_tx_continue(struct sk_buff *skb,
 			   struct net_device *dev,
 			   int isfips)
 #else
-int ath6kl_data_tx(struct sk_buff *skb, struct net_device *dev)
+netdev_tx_t ath6kl_data_tx(struct sk_buff *skb, struct net_device *dev)
 #endif
 {
 	struct ath6kl *ar = ath6kl_priv(dev);
@@ -551,7 +551,7 @@ fail_tx:
 }
 
 #ifdef CONFIG_ATH6KL_LAIRD_FIPS
-int ath6kl_data_tx(struct sk_buff *skb, struct net_device *dev)
+netdev_tx_t ath6kl_data_tx(struct sk_buff *skb, struct net_device *dev)
 {
 	struct ath6kl *ar = ath6kl_priv(dev);
 

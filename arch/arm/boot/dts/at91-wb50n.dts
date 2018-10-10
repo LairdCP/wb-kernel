@@ -2,7 +2,7 @@
 /*
  * at91-wb50n.dts - Device Tree file for wb50n evaluation board
  *
- *  Copyright (C) 2017 Laird
+ *  Copyright (C) 2018 Laird
  *
  */
 
@@ -10,26 +10,24 @@
 #include "at91-wb50n.dtsi"
 
 / {
-	ahb {
-		apb {
-			watchdog@fffffe40 {
-				status = "okay";
-			};
-		};
-	};
+	model = "Laird Workgroup Bridge 50N - Atmel SAMA5D";
+	compatible = "laird,wb50n", "atmel,sama5d31", "atmel,sama5d3", "atmel,sama5";
 
 	gpio_keys {
 		compatible = "gpio-keys";
 		#address-cells = <1>;
 		#size-cells = <0>;
-		btn0@pa10 {
+
+		btn0@10 {
+			reg = <10>;
 			label = "BTNESC";
 			linux,code = <1>; /* ESC button */
 			gpios = <&pioA 10 GPIO_ACTIVE_LOW>;
 			gpio-key,wakeup = <1>;
 		};
 
-		irqbtn@pe31 {
+		irqbtn@31 {
+			reg = <31>;
 			label = "IRQBTN";
 			linux,code = <99>; /* SysReq button */
 			gpios = <&pioE 31 GPIO_ACTIVE_LOW>;
@@ -58,6 +56,10 @@
 			default-state = "off";
 		};
 	};
+};
+
+&watchdog {
+	status = "okay";
 };
 
 &mmc0 {
@@ -107,3 +109,4 @@
 &usb2 {
 	status = "okay";
 };
+
