@@ -808,8 +808,8 @@ static void atmel_complete_tx_dma(void *arg)
 		atmel_tasklet_schedule(atmel_port, &atmel_port->tasklet_tx);
 	else if ((port->rs485.flags & SER_RS485_ENABLED) &&
 		 !(port->rs485.flags & SER_RS485_RX_DURING_TX)) {
-		/* DMA done, stop TX, start RX for RS485 */
-		atmel_start_rx(port);
+		/* DMA done, enable TXEMPTY IRQ to enable Rx in interrupt handler */
+		atmel_uart_writel(port, ATMEL_US_IER, atmel_port->tx_done_mask);
 	}
 
 	spin_unlock_irqrestore(&port->lock, flags);
@@ -1248,12 +1248,20 @@ static void
 atmel_handle_transmit(struct uart_port *port, unsigned int pending)
 {
 	struct atmel_uart_port *atmel_port = to_atmel_uart_port(port);
+	struct circ_buf *xmit = &port->state->xmit;
 
 	if (pending & atmel_port->tx_done_mask) {
-		/* Either PDC or interrupt transmission */
-		atmel_uart_writel(port, ATMEL_US_IDR,
-				  atmel_port->tx_done_mask);
-		atmel_tasklet_schedule(atmel_port, &atmel_port->tasklet_tx);
+		atmel_uart_writel(port, ATMEL_US_IDR, atmel_port->tx_done_mask);
+		if ((port->rs485.flags & SER_RS485_ENABLED) &&
+		    !(port->rs485.flags & SER_RS485_RX_DURING_TX) &&
+		     (pending & ATMEL_US_TXEMPTY) &&
+		     uart_circ_empty(xmit)) {
+			/* RS485 Tx is done, re-enable Rx */
+			 atmel_start_rx(port);
+		} else {
+			/* Either PDC or interrupt transmission, schedule Tx DMA start */
+			atmel_tasklet_schedule(atmel_port, &atmel_port->tasklet_tx);
+		}
 	}
 }
 
