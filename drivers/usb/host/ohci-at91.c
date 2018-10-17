@@ -266,7 +266,7 @@ static void ohci_at91_usb_set_power(struct at91_usbh_data *pdata, int port, int 
 	if (!valid_port(port))
 		return;
 
-	gpiod_set_value(pdata->vbus_pin[port], enable);
+	gpiod_set_value_cansleep(pdata->vbus_pin[port], enable);
 }
 
 static int ohci_at91_usb_get_power(struct at91_usbh_data *pdata, int port)
@@ -274,7 +274,7 @@ static int ohci_at91_usb_get_power(struct at91_usbh_data *pdata, int port)
 	if (!valid_port(port))
 		return -EINVAL;
 
-	return gpiod_get_value(pdata->vbus_pin[port]);
+	return gpiod_get_value_cansleep(pdata->vbus_pin[port]);
 }
 
 /*
@@ -478,7 +478,7 @@ static irqreturn_t ohci_hcd_at91_overcurrent_irq(int irq, void *data)
 		return IRQ_HANDLED;
 	}
 
-	val = gpiod_get_value(pdata->overcurrent_pin[port]);
+	val = gpiod_get_value_cansleep(pdata->overcurrent_pin[port]);
 
 	/* When notified of an over-current situation, disable power
 	   on the corresponding port, and mark this port in
@@ -537,10 +537,13 @@ static int ohci_hcd_at91_drv_probe(struct platform_device *pdev)
 		pdata->vbus_pin[i] =
 			devm_gpiod_get_index_optional(&pdev->dev, "atmel,vbus",
 						      i, GPIOD_OUT_HIGH);
+
 		if (IS_ERR(pdata->vbus_pin[i])) {
 			err = PTR_ERR(pdata->vbus_pin[i]);
-			dev_err(&pdev->dev, "unable to claim gpio \"vbus\": %d\n", err);
-			continue;
+			if (err == -EPROBE_DEFER) return err;
+			dev_err(&pdev->dev,
+				"unable to claim port %d gpio \"vbus\": %d\n",
+				i, err);
 		}
 	}
 
@@ -551,19 +554,28 @@ static int ohci_hcd_at91_drv_probe(struct platform_device *pdev)
 		pdata->overcurrent_pin[i] =
 			devm_gpiod_get_index_optional(&pdev->dev, "atmel,oc",
 						      i, GPIOD_IN);
+
+		if (pdata->overcurrent_pin[i] == NULL)
+			continue;
+
 		if (IS_ERR(pdata->overcurrent_pin[i])) {
 			err = PTR_ERR(pdata->overcurrent_pin[i]);
-			dev_err(&pdev->dev, "unable to claim gpio \"overcurrent\": %d\n", err);
+			if (err == -EPROBE_DEFER) return err;
+			dev_err(&pdev->dev,
+				"unable to claim port %d gpio \"overcurrent\": %d\n",
+				i, err);
 			continue;
 		}
 
-		ret = devm_request_irq(&pdev->dev,
+		ret = devm_request_any_context_irq(&pdev->dev,
 				       gpiod_to_irq(pdata->overcurrent_pin[i]),
 				       ohci_hcd_at91_overcurrent_irq,
 				       IRQF_SHARED,
 				       "ohci_overcurrent", pdev);
-		if (ret)
-			dev_info(&pdev->dev, "failed to request gpio \"overcurrent\" IRQ\n");
+		if (ret < 0)
+			dev_err(&pdev->dev,
+				"failed to request port %d gpio \"overcurrent\" IRQ: %d\n",
+				i, ret);
 	}
 
 	device_init_wakeup(&pdev->dev, 1);

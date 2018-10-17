@@ -59,13 +59,18 @@
 &i2c1 {
 	status = "okay";
 
-	ft5426@56 {
+	clock-frequency = <400000>;
+
+	// Not enough DMA channels available, to support audio, bluetooth
+	dmas = <0>, <0>;
+
+	ft5426@38 {
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_lcd_ctp_int>;
 
 		/* Actually FT5426 */
 		compatible = "edt,edt-ft5406";
-		reg = <56>;
+		reg = <0x38>;
 
 		interrupt-parent = <&pioC>;
 		interrupts = <28 IRQ_TYPE_EDGE_FALLING>;

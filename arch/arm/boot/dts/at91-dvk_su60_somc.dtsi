@@ -47,20 +47,6 @@
 		enable-active-high;
 	};
 
-	reg_usb_vbus: reg_usb_vbus_grp {
-		pinctrl-names = "default";
-		pinctrl-0 = <&pinctrl_usb_vbus>;
-
-		compatible = "regulator-fixed";
-		regulator-name = "VDD USB";
-		regulator-min-microvolt = <5000000>;
-		regulator-max-microvolt = <5000000>;
-
-		gpio = <&pioE 20 GPIO_ACTIVE_HIGH>;
-		enable-active-high;
-		regulator-always-on;
-	};
-
 	ahb {
 		apb {
 			pinctrl@fffff200 {
@@ -75,14 +61,9 @@
 							<AT91_PIOE 30 AT91_PERIPH_GPIO AT91_PINCTRL_NONE>;
 					};
 
-					pinctrl_usb_vbus: usb_vbus {
+					pinctrl_gpiom_int: gpiom_int {
 						atmel,pins =
-							<AT91_PIOE 20 AT91_PERIPH_GPIO AT91_PINCTRL_NONE>;
-					};
-
-					pinctrl_usb_oc: usb_oc {
-						atmel,pins =
-							<AT91_PIOE 15 AT91_PERIPH_GPIO AT91_PINCTRL_DEGLITCH>;
+							<AT91_PIOE 20 AT91_PERIPH_GPIO AT91_PINCTRL_DEGLITCH>;
 					};
 
 					pinctrl_usba_vbus: usba_vbus {
@@ -126,7 +107,6 @@
 		reg = <0>;
 		bus-width = <4>;
 		cd-gpios = <&pioE 31 GPIO_ACTIVE_HIGH>;
-		cd-inverted;
 	};
 };
 
@@ -155,8 +135,14 @@
 	status = "okay";
 	clock-frequency = <400000>;
 
-	// Not enough DMA channels available, to support audio
+	// Not enough DMA channels available, to support audio, bluetooth
 	dmas = <0>, <0>;
+
+	eeprom: eeprom@57 {
+		compatible = "atmel,24c32";
+		reg = <0x57>;
+		pagesize = <32>;
+	};
 
 	wm8904: wm8904@1a {
 		compatible = "wlf,wm8904";
@@ -164,16 +150,21 @@
 		clocks = <&pck2>;
 		clock-names = "mclk";
 	};
-};
 
-&i2c1 {
-	status = "okay";
-	clock-frequency = <400000>;
+	gpiom1: gpio@27 {
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_gpiom_int>;
 
-	eeprom@87 {
-		compatible = "atmel,24c32";
-		reg = <87>;
-		pagesize = <32>;
+		compatible = "microchip,mcp23008";
+		reg = <0x27>;
+
+		gpio-controller;
+		#gpio-cells = <2>;
+
+		interrupt-parent = <&pioE>;
+		interrupts = <20 IRQ_TYPE_LEVEL_LOW>;
+		interrupt-controller;
+		#interrupt-cells = <2>;
 	};
 };
 
@@ -247,6 +238,10 @@
 };
 
 &usb1 {
+	num-ports = <3>;
+	atmel,vbus-gpio = <0>, <&gpiom1 6 GPIO_ACTIVE_HIGH>, <&gpiom1 7 GPIO_ACTIVE_HIGH>;
+	atmel,oc-gpio = <0>, <&gpiom1 0 GPIO_ACTIVE_LOW>, <&gpiom1 1 GPIO_ACTIVE_LOW>;
+
 	status = "okay";
 };
 
