@@ -43,6 +43,11 @@
 							<AT91_PIOE 30 AT91_PERIPH_GPIO AT91_PINCTRL_NONE>;
 					};
 
+					pinctrl_gpiom_int: gpiom_int {
+						atmel,pins =
+							<AT91_PIOE 20 AT91_PERIPH_GPIO AT91_PINCTRL_DEGLITCH>;
+					};
+
 					pinctrl_usba_vbus: usba_vbus {
 					   atmel,pins =
 							<AT91_PIOC 14 AT91_PERIPH_GPIO AT91_PINCTRL_DEGLITCH>;
@@ -74,6 +79,27 @@
 		reg = <0>;
 		bus-width = <4>;
 		cd-gpios = <&pioE 31 GPIO_ACTIVE_HIGH>;
+	};
+};
+
+&i2c0 {
+	status = "okay";
+	clock-frequency = <400000>;
+
+	gpiom1: gpio@27 {
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_gpiom_int>;
+
+		compatible = "microchip,mcp23008";
+		reg = <0x27>;
+
+		gpio-controller;
+		#gpio-cells = <2>;
+
+		interrupt-parent = <&pioE>;
+		interrupts = <20 IRQ_TYPE_LEVEL_LOW>;
+		interrupt-controller;
+		#interrupt-cells = <2>;
 	};
 };
 
@@ -118,6 +144,10 @@
 };
 
 &usb1 {
+	num-ports = <3>;
+	atmel,vbus-gpio = <0>, <&gpiom1 6 GPIO_ACTIVE_HIGH>, <&gpiom1 7 GPIO_ACTIVE_HIGH>;
+	atmel,oc-gpio = <0>, <&gpiom1 0 GPIO_ACTIVE_LOW>, <&gpiom1 1 GPIO_ACTIVE_LOW>;
+
 	status = "okay";
 };
 
