@@ -144,7 +144,7 @@ static char __init *dm_find_unescaped_char(char **str, const char c)
 		p = strchr(p + 1, c);
 	}
 
-	if (strlen(*str)) {
+	if ((*str)[0] != 0) {
 		*str += strlen(*str);
 		return s;
 	}
@@ -182,14 +182,14 @@ static struct target __init *dm_parse_table(struct dm_device *dev, char *str)
 		goto parse_fail;
 	}
 
-	table->type = kstrndup(type, strlen(type), GFP_KERNEL);
+	table->type = kstrdup(type, GFP_KERNEL);
 	if (!table->type) {
 		DMERR("invalid type of table");
 		goto parse_fail;
 	}
 
 	ptr += n;
-	table->params = kstrndup(ptr, strlen(ptr), GFP_KERNEL);
+	table->params = kstrdup(ptr, GFP_KERNEL);
 	if (!table->params) {
 		DMERR("invalid params for table");
 		goto parse_fail;
@@ -215,16 +215,16 @@ static int __init dm_parse_device(struct dm_device *dev, char *dev_info)
 		str = _unescape_char(str, ',');
 		switch (field) {
 		case 0: /* set device name */
-			strncpy(dev->name, str, strlen(str));
+			strlcpy(dev->name, str, sizeof(dev->name));
 			break;
 		case 1: /* set uuid if any */
-			strncpy(dev->uuid, str, strlen(str));
+			strlcpy(dev->uuid, str, sizeof(dev->uuid));
 			break;
 		case 2:
 			/* set as read-only if flags = "ro" | "" */
-			if (!strncmp(str, "ro", strlen(str)) || !strlen(str))
+			if (str[0] == 0 || strcmp(str, "ro") == 0)
 				dev->ro = 1;
-			else if (!strncmp(str, "rw", strlen(str)))
+			else if (strcmp(str, "rw") == 0)
 				dev->ro = 0;
 			else
 				return -EINVAL;
@@ -330,8 +330,7 @@ static char __init *dm_add_target(struct target *table, char *out, char *end)
 	sp.status = 0;
 	sp.sector_start = table->start;
 	sp.length = table->length;
-	strncpy(sp.target_type, table->type, sizeof(sp.target_type) - 1);
-	sp.target_type[sizeof(sp.target_type) - 1] = '\0';
+	strlcpy(sp.target_type, table->type, sizeof(sp.target_type));
 
 	out += sp_size;
 	pt = table->params;
