@@ -2782,7 +2782,12 @@ static s32 brcmf_inform_single_bss(struct brcmf_cfg80211_info *cfg,
 	bss = cfg80211_inform_bss_data(wiphy, &bss_data,
 				       CFG80211_BSS_FTYPE_UNKNOWN,
 				       (const u8 *)bi->BSSID,
+#ifdef CONFIG_ANDROID
+#warning Building for Android bug (Laird) 13615
+				  (u64)(0x7FFFFFFFFFFFFFFFLL), notify_capability,
+#else
 				       0, notify_capability,
+#endif
 				       notify_interval, notify_ie,
 				       notify_ielen, GFP_KERNEL);
 
