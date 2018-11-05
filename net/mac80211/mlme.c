@@ -1467,12 +1467,13 @@ static u32 ieee80211_handle_pwr_constr(struct ieee80211_sub_if_data *sdata,
 	int chan_pwr = 0, pwr_reduction_80211h = 0;
 	int pwr_level_cisco, pwr_level_80211h;
 	int new_ap_level;
-	__le16 capab = mgmt->u.probe_resp.capab_info;
 
 #ifndef _REMOVE_LAIRD_MODS_
 	// BZ12222: process 802.11d/h even if SM/RM capabilities are not set
 	if (country_ie) {
 #else
+	__le16 capab = mgmt->u.probe_resp.capab_info;
+
 	if (country_ie &&
 	    (capab & cpu_to_le16(WLAN_CAPABILITY_SPECTRUM_MGMT) ||
 	     capab & cpu_to_le16(WLAN_CAPABILITY_RADIO_MEASURE))) {
