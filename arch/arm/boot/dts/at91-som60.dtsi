@@ -104,6 +104,8 @@
 &mmc1 {
 	status = "okay";
 	mmc-pwrseq = <&wifi_pwrseq>;
+	autosuspend-delay = <1000>;
+	keep-power-in-suspend;
 
 	slot@0 {
 		reg = <0>;
