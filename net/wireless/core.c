@@ -539,13 +539,15 @@ static int wiphy_verify_combinations(struct wiphy *wiphy)
 
 		c = &wiphy->iface_combinations[i];
 
+#ifndef _REMOVE_LAIRD_MODS_
+#else
 		/*
 		 * Combinations with just one interface aren't real,
 		 * however we make an exception for DFS.
 		 */
 		if (WARN_ON((c->max_interfaces < 2) && !c->radar_detect_widths))
 			return -EINVAL;
-
+#endif
 		/* Need at least one channel */
 		if (WARN_ON(!c->num_different_channels))
 			return -EINVAL;
