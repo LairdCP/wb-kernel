@@ -49,6 +49,10 @@
 
 	ahb {
 		apb {
+			shutdown-controller@fffffe10 {
+				atmel,wakeup-mode = "low";
+			};
+
 			pinctrl@fffff200 {
 				board {
 					pinctrl_mmc0_cd: mmc0_cd {
