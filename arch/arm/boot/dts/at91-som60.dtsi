@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * at91-som60.dtsi - Device Tree file for the SOM60 module
  *
@@ -5,7 +6,6 @@
  *		  2018 Ben Whitten <ben.whitten@lairdtech.com>
  *		  2018 Boris Krasnovskiy <boris.krasnovskiy@lairdtech.com>
  *
- * Licensed under GPLv2 or later.
  */
 #include "sama5d36.dtsi"
 
@@ -46,6 +46,18 @@
 		post-power-on-delay-ms = <10>;
 	};
 
+	wake_up_wifi_bt {
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_wifi_wake &pinctrl_bt_wake>;
+
+		compatible = "gpio-wakeup";
+
+		interrupt-names = "wifi-wakeup", "bt-wakeup";
+		interrupts-extended =
+			<&pioD 14 IRQ_TYPE_EDGE_FALLING>,
+			<&pioB 10 IRQ_TYPE_EDGE_FALLING>;
+	};
+
 	ahb {
 		apb {
 			pinctrl@fffff200 {
@@ -58,6 +70,16 @@
 					pinctrl_wifi_pmu_en: wifi_pmu_en {
 						atmel,pins =
 							<AT91_PIOE 5 AT91_PERIPH_GPIO AT91_PINCTRL_PULL_UP>;
+					};
+
+					pinctrl_wifi_wake: wifi_wake {
+						atmel,pins =
+							<AT91_PIOD 14 AT91_PERIPH_GPIO AT91_PINCTRL_PULL_UP_DEGLITCH>;
+					};
+
+					pinctrl_bt_wake: bt_wake {
+						atmel,pins =
+							<AT91_PIOB 10 AT91_PERIPH_GPIO AT91_PINCTRL_PULL_UP_DEGLITCH>;
 					};
 				};
 			};

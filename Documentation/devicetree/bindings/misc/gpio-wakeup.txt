@@ -1,0 +1,18 @@
+GPIO WAKEUP DRIVER BINDINGS
+
+Required:
+
+	compatible:	Must be "gpio-wakeup"
+	gpios:		At list of GPIO nodes that are enabled as wakeup
+			sources.
+
+	Last wake source (the interrupt number in the list) could be read from
+	/sys/bus/platform/drivers/gpio-wakeup/wake_source
+
+Example:
+
+	wake_up {
+		compatible = "gpio-wakeup";
+		interrupts-extended = <&gpio0 19 IRQ_TYPE_EDGE_FALLING>,
+			<&gpio1 20 IRQ_TYPE_EDGE_FALLING>;
+	};

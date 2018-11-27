@@ -29,6 +29,16 @@
 		enable-active-high;
 	};
 
+	wake_up {
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_pb_wake>;
+
+		compatible = "gpio-wakeup";
+
+		interrupt-names = "button-wakeup";
+		interrupts-extended = <&pioE 15 IRQ_TYPE_EDGE_FALLING>;
+	};
+
 	ahb {
 		apb {
 			pinctrl@fffff200 {
@@ -61,6 +71,11 @@
 					pinctrl_eth_int: eth_int {
 						atmel,pins =
 							<AT91_PIOC 10 AT91_PERIPH_GPIO AT91_PINCTRL_DEGLITCH>;
+					};
+
+					pinctrl_pb_wake: pb_wake {
+						atmel,pins =
+							<AT91_PIOE 15 AT91_PERIPH_GPIO AT91_PINCTRL_PULL_UP_DEGLITCH>;
 					};
 				};
 			};
