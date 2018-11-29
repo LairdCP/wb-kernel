@@ -9,6 +9,7 @@
 
 #include <linux/module.h>
 
+#include <linux/interrupt.h>
 #include <linux/irq.h>
 #include <linux/suspend.h>
 #include <linux/platform_device.h>
