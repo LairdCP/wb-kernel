@@ -46,16 +46,13 @@
 		post-power-on-delay-ms = <10>;
 	};
 
-	wake_up_wifi_bt {
+	wakeup_bt {
 		pinctrl-names = "default";
-		pinctrl-0 = <&pinctrl_wifi_wake &pinctrl_bt_wake>;
+		pinctrl-0 = <&pinctrl_bt_wake>;
 
 		compatible = "gpio-wakeup";
 
-		interrupt-names = "wifi-wakeup", "bt-wakeup";
-		interrupts-extended =
-			<&pioD 14 IRQ_TYPE_EDGE_FALLING>,
-			<&pioB 10 IRQ_TYPE_EDGE_FALLING>;
+		interrupts-extended = <&pioB 10 IRQ_TYPE_EDGE_FALLING>;
 	};
 
 	ahb {
@@ -124,7 +121,11 @@
 
 /* Wi-Fi MMC */
 &mmc1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_mmc1_clk_cmd_dat0 &pinctrl_mmc1_dat1_3 &pinctrl_wifi_wake>;
+
 	status = "okay";
+
 	mmc-pwrseq = <&wifi_pwrseq>;
 	autosuspend-delay = <1000>;
 	keep-power-in-suspend;
@@ -134,6 +135,11 @@
 		bus-width = <4>;
 
 		non-removable;
+
+		wifi {
+			compatible = "marvell,sd8997";
+			interrupts-extended = <&pioD 14 IRQ_TYPE_EDGE_FALLING>;
+		};
 	};
 };
 
@@ -156,12 +162,14 @@
 &macb0 {
 	#address-cells = <1>;
 	#size-cells = <0>;
+
 	phy-mode = "rgmii";
 };
 
 &macb1 {
 	#address-cells = <1>;
 	#size-cells = <0>;
+
 	phy-mode = "rmii";
 };
 
