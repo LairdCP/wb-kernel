@@ -47,13 +47,12 @@
 		enable-active-high;
 	};
 
-	wake_up {
+	wakeup_button {
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_pb_wake>;
 
 		compatible = "gpio-wakeup";
 
-		interrupt-names = "button-wakeup";
 		interrupts-extended = <&pioE 15 IRQ_TYPE_EDGE_FALLING>;
 	};
 
