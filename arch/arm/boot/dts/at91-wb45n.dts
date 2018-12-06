@@ -42,6 +42,7 @@
 };
 
 &mmc0 {
+	autosuspend-delay = <(-1)>;
 	status = "okay";
 };
 

@@ -64,6 +64,10 @@
 	status = "okay";
 };
 
+&mmc1 {
+	autosuspend-delay = <(-1)>;
+};
+
 &macb1 {
 	status = "okay";
 };
