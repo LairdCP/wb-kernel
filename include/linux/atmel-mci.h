@@ -38,6 +38,7 @@ struct mci_slot_pdata {
 struct mci_platform_data {
 	struct mci_dma_data	*dma_slave;
 	struct mci_slot_pdata	slot[ATMCI_MAX_NR_SLOTS];
+	u32            autosuspend_delay;
 };
 
 #endif /* __LINUX_ATMEL_MCI_H */

@@ -569,6 +569,9 @@ atmci_of_init(struct platform_device *pdev)
 			of_get_named_gpio(cnp, "wp-gpios", 0);
 	}
 
+	pdata->autosuspend_delay=AUTOSUSPEND_DELAY;
+	of_property_read_u32(np, "autosuspend-delay", &pdata->autosuspend_delay);
+
 	return pdata;
 }
 #else /* CONFIG_OF */
@@ -2436,7 +2439,7 @@ static int atmci_probe(struct platform_device *pdev)
 
 	pm_runtime_get_noresume(&pdev->dev);
 	pm_runtime_set_active(&pdev->dev);
-	pm_runtime_set_autosuspend_delay(&pdev->dev, AUTOSUSPEND_DELAY);
+	pm_runtime_set_autosuspend_delay(&pdev->dev, pdata->autosuspend_delay);
 	pm_runtime_use_autosuspend(&pdev->dev);
 	pm_runtime_enable(&pdev->dev);
 
