@@ -91,6 +91,7 @@
 				status = "okay";
 				/delete-property/dmas;
 				/delete-property/dma-names;
+				autosuspend-delay = <(-1)>;
 				slot@0 {
 					reg = <0>;
 					bus-width = <4>;
