@@ -88,6 +88,10 @@
 	};
 };
 
+&watchdog {
+	status = "okay";
+};
+
 &slow_xtal {
 	clock-frequency = <32768>;
 };
