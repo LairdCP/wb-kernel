@@ -42,7 +42,6 @@ struct mci_platform_data {
 	dma_filter_fn		dma_filter;
 	struct mci_slot_pdata	slot[ATMCI_MAX_NR_SLOTS];
 	mmc_pm_flag_t	pm_caps;
-	u32            autosuspend_delay;
 };
 
 #endif /* __LINUX_ATMEL_MCI_H */

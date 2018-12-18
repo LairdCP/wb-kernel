@@ -704,9 +704,6 @@ atmci_of_init(struct platform_device *pdev)
 		of_property_read_bool(np, "enable-sdio-wakeup")) /* legacy */
 		pdata->pm_caps |= MMC_PM_WAKE_SDIO_IRQ;
 
-	pdata->autosuspend_delay=AUTOSUSPEND_DELAY;
-	of_property_read_u32(np, "autosuspend-delay", &pdata->autosuspend_delay);
-
 	return pdata;
 }
 #else /* CONFIG_OF */
@@ -1588,13 +1585,24 @@ static int atmci_get_cd(struct mmc_host *mmc)
 
 static void atmci_enable_sdio_irq(struct mmc_host *mmc, int enable)
 {
-	struct atmel_mci_slot	*slot = mmc_priv(mmc);
-	struct atmel_mci	*host = slot->host;
+	struct atmel_mci_slot  *slot = mmc_priv(mmc);
+	struct atmel_mci       *host = slot->host;
+	int iflags;
 
-	if (enable)
+	/* Avoid runtime suspending the device when SDIO IRQ is enabled */
+	if (enable) {
+		pm_runtime_get_noresume(&host->pdev->dev);
 		atmci_writel(host, ATMCI_IER, slot->sdio_irq);
-	else
+	}
+	else {
 		atmci_writel(host, ATMCI_IDR, slot->sdio_irq);
+
+		/* verify other slot is not enabled */
+		iflags = atmci_readl(host, ATMCI_IMR);
+		if (!(iflags & ((ATMCI_SDIOIRQA | ATMCI_SDIOIRQB)^slot->sdio_irq))) {
+			pm_runtime_put_noidle(&host->pdev->dev);
+		}
+	}
 }
 
 static const struct mmc_host_ops atmci_ops = {
@@ -2577,7 +2585,7 @@ static int atmci_probe(struct platform_device *pdev)
 
 	pm_runtime_get_noresume(&pdev->dev);
 	pm_runtime_set_active(&pdev->dev);
-	pm_runtime_set_autosuspend_delay(&pdev->dev, pdata->autosuspend_delay);
+	pm_runtime_set_autosuspend_delay(&pdev->dev, AUTOSUSPEND_DELAY);
 	pm_runtime_use_autosuspend(&pdev->dev);
 	pm_runtime_enable(&pdev->dev);
 
@@ -2689,7 +2697,6 @@ static int atmci_runtime_suspend(struct device *dev)
 	struct atmel_mci *host = dev_get_drvdata(dev);
 
 	clk_disable_unprepare(host->mck);
-
 	pinctrl_pm_select_sleep_state(dev);
 
 	return 0;
