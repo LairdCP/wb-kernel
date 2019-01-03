@@ -1589,6 +1589,11 @@ static void atmci_enable_sdio_irq(struct mmc_host *mmc, int enable)
 	struct atmel_mci       *host = slot->host;
 	int iflags;
 
+	iflags = atmci_readl(host, ATMCI_IMR);
+	if (((iflags & slot->sdio_irq) != 0) == enable) {
+		return;
+	}
+
 	/* Avoid runtime suspending the device when SDIO IRQ is enabled */
 	if (enable) {
 		pm_runtime_get_noresume(&host->pdev->dev);
@@ -1596,12 +1601,7 @@ static void atmci_enable_sdio_irq(struct mmc_host *mmc, int enable)
 	}
 	else {
 		atmci_writel(host, ATMCI_IDR, slot->sdio_irq);
-
-		/* verify other slot is not enabled */
-		iflags = atmci_readl(host, ATMCI_IMR);
-		if (!(iflags & ((ATMCI_SDIOIRQA | ATMCI_SDIOIRQB)^slot->sdio_irq))) {
-			pm_runtime_put_noidle(&host->pdev->dev);
-		}
+		pm_runtime_put_noidle(&host->pdev->dev);
 	}
 }
 
