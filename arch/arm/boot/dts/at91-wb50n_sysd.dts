@@ -1,0 +1,109 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * at91-wb50n_rdvk.dts - Device Tree file for wb50n_rdvk evaluation board
+ *
+ *  Copyright (C) 2018 Laird
+ *
+ */
+
+/dts-v1/;
+#include "at91-wb50n_sysd.dtsi"
+
+/ {
+	wakeup-dvk {
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_wake>;
+
+		compatible = "gpio-wakeup";
+
+		interrupt-names = "ext-wake", "button-wake";
+		interrupts-extended = <&pioA 10 IRQ_TYPE_EDGE_FALLING>, 
+			<&pioE 31 IRQ_TYPE_EDGE_FALLING>;
+	};
+
+	leds {
+		compatible = "gpio-leds";
+
+		led0 {
+			label = "wb50n:blue:led0";
+			gpios = <&pioA 12 GPIO_ACTIVE_LOW>;
+			default-state = "off";
+		};
+
+		led1 {
+			label = "wb50n:green:led1";
+			gpios = <&pioA 24 GPIO_ACTIVE_LOW>;
+			default-state = "off";
+		};
+
+		led2 {
+			label = "wb50n:red:led2";
+			gpios = <&pioA 26 GPIO_ACTIVE_LOW>;
+			default-state = "off";
+		};
+	};
+};
+
+&pinctrl {
+	board {
+		pinctrl_wake: wake {
+			atmel,pins =
+				<AT91_PIOA 10 AT91_PERIPH_GPIO AT91_PINCTRL_PULL_UP_DEGLITCH>,
+				<AT91_PIOE 31 AT91_PERIPH_GPIO AT91_PINCTRL_PULL_UP_DEGLITCH>;
+		};
+	};
+};
+
+&watchdog {
+	status = "okay";
+};
+
+&mmc0 {
+	pinctrl-0 = <&pinctrl_mmc0_clk_cmd_dat0 &pinctrl_mmc0_dat1_3 &pinctrl_mmc0_cd>;
+	status = "okay";
+};
+
+
+&macb1 {
+	status = "okay";
+
+	ethernet-phy@1 {
+		reg = <1>;
+	};
+};
+
+&dbgu {
+	status = "okay";
+};
+
+/* On BB40 this port is labeled UART1 */
+&usart0 {
+	status = "okay";
+};
+
+/* On BB40 this port is labeled UART0 */
+&usart1 {
+	status = "okay";
+};
+
+&spi1 {
+	status = "okay";
+
+	spidev@0 {
+		compatible = "spidev";
+		reg = <0>;
+		spi-max-frequency = <8000000>;
+	};
+};
+
+&usb0 {
+	status = "okay";
+};
+
+&usb1 {
+	status = "okay";
+};
+
+&usb2 {
+	status = "okay";
+};

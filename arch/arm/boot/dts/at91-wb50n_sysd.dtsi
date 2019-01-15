@@ -1,0 +1,237 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * at91-wb50n.dtsi - Device Tree include file for wb50n cpu module
+ *
+ *  Copyright (C) 2018 Laird
+ *
+ */
+
+#include "sama5d31.dtsi"
+
+/ {
+	model = "Laird Workgroup Bridge 50N - Atmel SAMA5D";
+	compatible = "laird,wb50n", "atmel,sama5d31", "atmel,sama5d3", "atmel,sama5";
+
+	chosen {
+		stdout-path = "serial0:115200n8";
+	};
+
+	memory {
+		reg = <0x20000000 0x4000000>;
+	};
+
+	wifi_pwrseq: wifi_pwrseq {
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_wifi_pmu_en>;
+
+		compatible = "mmc-pwrseq-simple";
+		reset-gpios = <&pioE 3 GPIO_ACTIVE_LOW>;
+		post-power-on-delay-ms = <1>;
+	};
+/*
+	wakeup-wifi-bt {
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_wifi_wake &pinctrl_bt_wake>;
+
+		compatible = "gpio-wakeup";
+
+		interrupt-names = "wifi-wake", "bt-wake";
+		interrupts-extended = <&pioC 31 IRQ_TYPE_EDGE_FALLING>, 
+			<&pioE 10 IRQ_TYPE_EDGE_FALLING>;
+	};
+*/
+	ahb {
+		apb {
+			sha@f8034000 {
+				status = "disabled";
+			};
+		};
+	};
+};
+
+&pinctrl {
+	board {
+		pinctrl_mmc0_cd: mmc0_cd {
+			atmel,pins = <AT91_PIOC 26 AT91_PERIPH_GPIO AT91_PINCTRL_PULL_UP_DEGLITCH>; /* PC26 GPIO with pullup deglitch */
+		};
+
+		pinctrl_usba_vbus: usba_vbus {
+			atmel,pins = <AT91_PIOB 13 AT91_PERIPH_GPIO AT91_PINCTRL_DEGLITCH>; /* PB13 GPIO with deglitch */
+		};
+
+		pinctrl_wifi_pmu_en: wifi_pmu_en {
+			atmel,pins =
+				<AT91_PIOE 3 AT91_PERIPH_GPIO AT91_PINCTRL_PULL_UP>;
+		};
+
+		pinctrl_wifi_wake: wifi_wake {
+			atmel,pins =
+				<AT91_PIOC 31 AT91_PERIPH_GPIO AT91_PINCTRL_PULL_UP_DEGLITCH>;
+		};
+
+		pinctrl_bt_wake: bt_wake {
+			atmel,pins =
+				<AT91_PIOE 10 AT91_PERIPH_GPIO AT91_PINCTRL_PULL_UP_DEGLITCH>;
+		};
+	};
+};
+
+&slow_xtal {
+	clock-frequency = <32768>;
+};
+
+&main_xtal {
+	clock-frequency = <12000000>;
+};
+
+&slow_osc {
+	atmel,osc-bypass;
+};
+
+&usart1_clk {
+	atmel,clk-output-range = <0 132000000>;
+};
+
+&mmc0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_mmc0_clk_cmd_dat0 &pinctrl_mmc0_dat1_3 &pinctrl_mmc0_cd>;
+
+	slot@0 {
+		reg = <0>;
+		bus-width = <4>;
+		cd-gpios = <&pioC 26 GPIO_ACTIVE_LOW>;
+	};
+};
+
+&mmc1 {
+	status = "okay";
+
+	mmc-pwrseq = <&wifi_pwrseq>;
+
+	atheros@0 {
+		compatible = "atheros,ath6kl";
+		atheros,board-id = "SD32";
+		reg = <0>;
+		bus-width = <4>;
+	};
+};
+
+&macb1 {
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	phy-mode = "rmii";
+};
+
+&dbgu {
+	dmas = <0>, <0>;	/*  Do not use DMA for dbgu */
+};
+
+/* On BB40 this port is labeled UART1 */
+&usart0 {
+	atmel,use-dma-rx;
+	atmel,use-dma-tx;
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_usart0 &pinctrl_usart0_rts_cts>;
+};
+
+/* On BB40 this port is labeled UART0 */
+&usart1 {
+	atmel,use-dma-rx;
+	atmel,use-dma-tx;
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_usart1 &pinctrl_usart1_rts_cts>;
+	dtr-gpios = <&pioD 13 GPIO_ACTIVE_LOW>;
+	dsr-gpios = <&pioD 11 GPIO_ACTIVE_LOW>;
+	dcd-gpios = <&pioD 7 GPIO_ACTIVE_LOW>;
+	rng-gpios = <&pioD 8 GPIO_ACTIVE_LOW>;
+};
+
+/* USART3 is direct-connect to the Bluetooth UART on the radio SIP */
+&usart3 {
+	atmel,use-dma-rx;
+	atmel,use-dma-tx;
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_usart3 &pinctrl_usart3_rts_cts>;
+	status = "okay";
+};
+
+&spi1 {
+	cs-gpios = <&pioC 25 0>, <0>, <0>, <0>;
+};
+
+&ebi {
+	pinctrl-0 = <&pinctrl_ebi_nand_addr>;
+	pinctrl-names = "default";
+	status = "okay";
+};
+
+&nand_controller {
+	status = "okay";
+
+	nand: nand@3 {
+		reg = <0x3 0x0 0x2>;
+		atmel,rb = <0>;
+		nand-bus-width = <8>;
+		nand-ecc-mode = "hw";
+		nand-ecc-strength = <8>;
+		nand-ecc-step-size = <512>;
+		nand-on-flash-bbt;
+		label = "atmel_nand";
+
+		partitions {
+			compatible = "fixed-partitions";
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			ubootspl@0 {
+				label = "u-boot-spl";
+				reg = <0x0 0x20000>;
+			};
+
+			uboot@20000 {
+				label = "u-boot";
+				reg = <0x20000 0x80000>;
+			};
+
+			ubootenv@a0000 {
+				label = "u-boot-env";
+				reg = <0xa0000 0x20000>;
+			};
+
+			ubootenv@c0000 {
+				label = "u-boot-env";
+				reg = <0xc0000 0x20000>;
+			};
+
+			ubi@e0000 {
+				label = "ubi";
+				reg = <0xe0000 0x8000000>;
+			};
+		};
+	};
+};
+
+&usb0 {
+	atmel,vbus-gpio = <&pioB 13 GPIO_ACTIVE_LOW>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_usba_vbus>;
+};
+
+&usb1 {
+	num-ports = <3>;
+	atmel,vbus-gpio = <&pioA 2 GPIO_ACTIVE_LOW>;
+	atmel,oc-gpio = <&pioA 4 GPIO_ACTIVE_LOW>;
+};
+
+&tcb0 {
+	timer0: timer@0 {
+		compatible = "atmel,tcb-timer";
+		reg = <0>;
+	};
+
+	timer1: timer@1 {
+		compatible = "atmel,tcb-timer";
+		reg = <1>;
+	};
+};
