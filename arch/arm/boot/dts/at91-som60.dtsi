@@ -89,6 +89,8 @@
 };
 
 &watchdog {
+	atmel,idle-halt;
+
 	status = "okay";
 };
 
