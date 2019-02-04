@@ -1,0 +1,43 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * at91-wb60.dts - Device Tree file for the WB60 board
+ *
+ *  Copyright (C) 2019 Laird,
+ *		  2019 Boris Krasnovskiy <boris.krasnovskiy@lairdtech.com>
+ *
+ * Licensed under GPLv2 or later.
+ */
+
+#include "at91-som60.dtsi"
+
+/ {
+	model = "Laird WB60";
+	compatible = "laird,wb60", "laird,som60", "atmel,sama5d36", "atmel,sama5d3", "atmel,sama5";
+};
+
+&pinctrl {
+	board {
+		pinctrl_usb_vbus: usb_vbus {
+		   atmel,pins =
+				<AT91_PIOA 4 AT91_PERIPH_GPIO AT91_PINCTRL_NONE>;
+		};
+	};
+};
+
+&usart3 {
+	pinctrl-0 = <&pinctrl_usart3 &pinctrl_usart3_rts_cts>;
+	status = "okay";
+	atmel,use-dma-rx;
+	atmel,use-dma-tx;
+};
+
+&usb1 {
+	num-ports = <3>;
+	atmel,vbus-gpio = <0>, <0>, <&pioA 4 GPIO_ACTIVE_HIGH>;
+
+	status = "diabled";
+};
+
+&usb2 {
+	status = "disabled";
+};
