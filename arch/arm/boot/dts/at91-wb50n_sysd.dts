@@ -17,7 +17,7 @@
 		compatible = "gpio-wakeup";
 
 		interrupt-names = "ext-wake", "button-wake";
-		interrupts-extended = <&pioA 10 IRQ_TYPE_EDGE_FALLING>, 
+		interrupts-extended = <&pioA 10 IRQ_TYPE_EDGE_FALLING>,
 			<&pioE 31 IRQ_TYPE_EDGE_FALLING>;
 	};
 

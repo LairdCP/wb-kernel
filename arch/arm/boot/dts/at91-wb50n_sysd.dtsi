@@ -36,7 +36,7 @@
 		compatible = "gpio-wakeup";
 
 		interrupt-names = "wifi-wake", "bt-wake";
-		interrupts-extended = <&pioC 31 IRQ_TYPE_EDGE_FALLING>, 
+		interrupts-extended = <&pioC 31 IRQ_TYPE_EDGE_FALLING>,
 			<&pioE 10 IRQ_TYPE_EDGE_FALLING>;
 	};
 */
@@ -74,6 +74,11 @@
 				<AT91_PIOE 10 AT91_PERIPH_GPIO AT91_PINCTRL_PULL_UP_DEGLITCH>;
 		};
 	};
+};
+
+&watchdog {
+	atmel,idle-halt;
+	status = "okay";
 };
 
 &slow_xtal {
