@@ -10,6 +10,15 @@
 #include "at91-wb50n_sysd.dtsi"
 
 / {
+	ahb {
+		apb {
+			tdes@f803c000 {
+				// Disabled due shortage of DMA channels
+				status = "disabled";
+			};
+		};
+	};
+
 	wakeup-dvk {
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_wake>;
@@ -63,7 +72,6 @@
 	status = "okay";
 };
 
-
 &macb1 {
 	status = "okay";
 
@@ -74,6 +82,8 @@
 
 &dbgu {
 	status = "okay";
+
+	atmel,use-dma-tx;
 };
 
 /* On BB40 this port is labeled UART1 */
