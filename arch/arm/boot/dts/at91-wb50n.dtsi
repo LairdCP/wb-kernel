@@ -83,10 +83,6 @@
 	phy-mode = "rmii";
 };
 
-&dbgu {
-	dmas = <0>, <0>;	/*  Do not use DMA for dbgu */
-};
-
 /* On BB40 this port is labeled UART1 */
 &usart0 {
 	atmel,use-dma-rx;
