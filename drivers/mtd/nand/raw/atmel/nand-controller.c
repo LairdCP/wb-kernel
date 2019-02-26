@@ -151,6 +151,8 @@ struct atmel_nand_cs {
 	int id;
 	struct atmel_nand_rb rb;
 	struct gpio_desc *csgpio;
+	struct gpio_desc *wpgpio;
+
 	struct {
 		void __iomem *virt;
 		dma_addr_t dma;
@@ -1559,7 +1561,12 @@ static int atmel_nand_controller_remove_nand(struct atmel_nand *nand)
 {
 	struct nand_chip *chip = &nand->base;
 	struct mtd_info *mtd = nand_to_mtd(chip);
-	int ret;
+	int ret, i;
+
+	for (i = 0; i < nand->numcs; i++) {
+		if (nand->cs[i].wpgpio)
+			gpiod_set_value(nand->cs[i].wpgpio, 0);
+	}
 
 	ret = mtd_device_unregister(mtd);
 	if (ret)
@@ -1671,6 +1678,19 @@ static struct atmel_nand *atmel_nand_create(struct atmel_nand_controller *nc,
 
 		if (!IS_ERR(gpio))
 			nand->cs[i].csgpio = gpio;
+
+		gpio = devm_fwnode_get_index_gpiod_from_child(nc->dev, "wp",
+							      i, &np->fwnode,
+							      GPIOD_OUT_HIGH,
+							      "nand-wp");
+		if (!IS_ERR(gpio))
+			nand->cs[i].wpgpio = gpio;
+		else if (PTR_ERR(gpio) != -ENOENT) {
+			dev_err(nc->dev,
+				"Failed to get WP gpio (err = %ld)\n",
+				PTR_ERR(gpio));
+			return ERR_CAST(gpio);
+		}
 	}
 
 	nand_set_flash_node(&nand->base, np);
@@ -2521,6 +2541,23 @@ static int atmel_nand_controller_remove(struct platform_device *pdev)
 	return nc->caps->ops->remove(nc);
 }
 
+static __maybe_unused int atmel_nand_controller_suspend(struct device *dev)
+{
+	struct atmel_nand_controller *nc = dev_get_drvdata(dev);
+	struct atmel_nand *nand;
+
+	list_for_each_entry(nand, &nc->chips, node) {
+		int i;
+
+		for (i = 0; i < nand->numcs; i++) {
+			if (nand->cs[i].wpgpio)
+				gpiod_set_value(nand->cs[i].wpgpio, 0);
+		}
+	}
+
+	return 0;
+}
+
 static __maybe_unused int atmel_nand_controller_resume(struct device *dev)
 {
 	struct atmel_nand_controller *nc = dev_get_drvdata(dev);
@@ -2532,6 +2569,17 @@ static __maybe_unused int atmel_nand_controller_resume(struct device *dev)
 	list_for_each_entry(nand, &nc->chips, node) {
 		int i;
 
+		for (i = 0; i < nand->numcs; i++) {
+			if (nand->cs[i].wpgpio)
+				gpiod_set_value(nand->cs[i].wpgpio, 1);
+		}
+	}
+
+	ndelay(100);
+
+	list_for_each_entry(nand, &nc->chips, node) {
+		int i;
+
 		for (i = 0; i < nand->numcs; i++)
 			nand_reset(&nand->base, i);
 	}
@@ -2539,7 +2587,8 @@ static __maybe_unused int atmel_nand_controller_resume(struct device *dev)
 	return 0;
 }
 
-static SIMPLE_DEV_PM_OPS(atmel_nand_controller_pm_ops, NULL,
+static SIMPLE_DEV_PM_OPS(atmel_nand_controller_pm_ops,
+			 atmel_nand_controller_suspend,
 			 atmel_nand_controller_resume);
 
 static struct platform_driver atmel_nand_controller_driver = {

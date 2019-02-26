@@ -68,7 +68,7 @@
 	board {
 		pinctrl_nand0_wp: nand0_wp {
 			atmel,pins =
-				<AT91_PIOE 14 AT91_PERIPH_GPIO AT91_PINCTRL_PULL_UP>;
+				<AT91_PIOE 14 AT91_PERIPH_GPIO AT91_PINCTRL_NONE>;
 		};
 
 		pinctrl_wifi_pmu_en: wifi_pmu_en {
@@ -179,7 +179,6 @@
 &ebi {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_ebi_nand_addr &pinctrl_nand0_wp>;
-	pinctrl-assert-gpios = <&pioE 14 GPIO_ACTIVE_HIGH>;
 	status = "okay";
 };
 
@@ -195,6 +194,8 @@
 		nand-ecc-step-size = <512>;
 		nand-on-flash-bbt;
 		label = "atmel_nand";
+
+		wp-gpios = <&pioE 14 GPIO_ACTIVE_HIGH>;
 
 		partitions {
 			compatible = "fixed-partitions";
