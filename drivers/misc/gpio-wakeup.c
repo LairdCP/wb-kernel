@@ -17,6 +17,7 @@
 
 struct wkup_priv {
 	int irq;
+	const char *name;
 	struct wakeup_source *wks;
 };
 
@@ -41,9 +42,7 @@ static irqreturn_t gpio_wakeup_isr(int irq, void *dev_id)
 	for (i = 0; i < priv->count; i++) {
 		if (priv->wkup[i].irq == irq) {
 			pm_wakeup_ws_event(priv->wkup[i].wks, 0, 0);
-			dev_info(dev, "GPIO Wakeup: %s\n", 
-				priv->wkup[i].wks && priv->wkup[i].wks->name ? 
-				priv->wkup[i].wks->name : dev->init_name);
+			pr_info("GPIO Wakeup: %s\n", priv->wkup[i].name);
 			break;
 		}
 	}
@@ -73,7 +72,6 @@ static int gpio_wakeup_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	priv->count = count;
-	platform_set_drvdata(pdev, priv);
 
 	for (i = 0; i < count; i++) {
 		irq = platform_get_irq(pdev, i);
@@ -87,7 +85,6 @@ static int gpio_wakeup_probe(struct platform_device *pdev)
 			}
 		}
 
-		irq_set_status_flags(irq, IRQ_NOAUTOEN);
 		irqflags = irq_get_trigger_type(irq);
 
 		ret = devm_request_threaded_irq(dev, irq, NULL, gpio_wakeup_isr,
@@ -97,14 +94,24 @@ static int gpio_wakeup_probe(struct platform_device *pdev)
 			continue;
 		}
 
+		disable_irq_nosync(irq);
+
 		priv->wkup[i].irq = irq;
+
+		if (dev->of_node)
+			priv->wkup[i].name = dev->of_node->name;
 
 		ret = of_property_read_string_index(dev->of_node,
 			"interrupt-names", i, &name);
 
-		if (!ret)
-			priv->wkup[i].wks =	wakeup_source_register(name);
+		if (!ret) {
+			priv->wkup[i].wks = wakeup_source_register(name);
+			if (priv->wkup[i].wks->name)
+				priv->wkup[i].name = priv->wkup[i].wks->name;
+		}
 	}
+
+	platform_set_drvdata(pdev, priv);
 
 	device_init_wakeup(dev, true);
 
