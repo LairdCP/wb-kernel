@@ -67,7 +67,7 @@
 
 					pinctrl_mmc0_en: mmc0_en {
 						atmel,pins =
-							<AT91_PIOE 30 AT91_PERIPH_GPIO AT91_PINCTRL_NONE>;
+							<AT91_PIOE 30 AT91_PERIPH_GPIO AT91_PINCTRL_MULTI_DRIVE>;
 					};
 
 					pinctrl_gpiom_int: gpiom_int {
