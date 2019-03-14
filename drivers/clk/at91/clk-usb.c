@@ -210,7 +210,7 @@ at91sam9x5_clk_register_usb(struct regmap *regmap, const char *name,
 	init.parent_names = parent_names;
 	init.num_parents = num_parents;
 	init.flags = CLK_SET_RATE_GATE | CLK_SET_PARENT_GATE |
-		     CLK_SET_RATE_PARENT;
+		     CLK_SET_RATE_PARENT | CLK_OPS_PARENT_ENABLE;
 
 	usb->hw.init = &init;
 	usb->regmap = regmap;
