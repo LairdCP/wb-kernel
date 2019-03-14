@@ -128,7 +128,7 @@ at91sam9x5_clk_register_smd(struct regmap *regmap, const char *name,
 	init.ops = &at91sam9x5_smd_ops;
 	init.parent_names = parent_names;
 	init.num_parents = num_parents;
-	init.flags = CLK_SET_RATE_GATE | CLK_SET_PARENT_GATE;
+	init.flags = CLK_SET_RATE_GATE | CLK_SET_PARENT_GATE | CLK_OPS_PARENT_ENABLE;
 
 	smd->hw.init = &init;
 	smd->regmap = regmap;

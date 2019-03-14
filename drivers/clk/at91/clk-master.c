@@ -143,7 +143,7 @@ at91_clk_register_master(struct regmap *regmap,
 	init.ops = &master_ops;
 	init.parent_names = parent_names;
 	init.num_parents = num_parents;
-	init.flags = 0;
+	init.flags = CLK_OPS_PARENT_ENABLE;
 
 	master->hw.init = &init;
 	master->layout = layout;

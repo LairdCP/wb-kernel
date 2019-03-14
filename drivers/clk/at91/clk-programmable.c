@@ -192,7 +192,8 @@ at91_clk_register_programmable(struct regmap *regmap,
 	init.ops = &programmable_ops;
 	init.parent_names = parent_names;
 	init.num_parents = num_parents;
-	init.flags = CLK_SET_RATE_GATE | CLK_SET_PARENT_GATE;
+	init.flags = CLK_SET_RATE_GATE | CLK_SET_PARENT_GATE |
+		CLK_OPS_PARENT_ENABLE;
 
 	prog->id = id;
 	prog->layout = layout;
