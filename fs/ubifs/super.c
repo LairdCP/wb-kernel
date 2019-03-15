@@ -2098,6 +2098,8 @@ static int ubifs_fill_super(struct super_block *sb, void *data, int silent)
 		goto out_unlock;
 	}
 
+	memcpy(&sb->s_uuid, c->uuid, sizeof(sb->s_uuid));
+
 	/* Read the root inode */
 	root = ubifs_iget(sb, UBIFS_ROOT_INO);
 	if (IS_ERR(root)) {
