@@ -14,6 +14,7 @@
 #include <linux/of_reserved_mem.h>
 #include <linux/platform_device.h>
 #include <linux/key.h>
+#include <linux/evm.h>
 #include <keys/user-type.h>
 
 static struct key *builtin_fs_keys;
@@ -59,7 +60,7 @@ static int laird_fs_insertkey(struct fscrypt_key *fscrypt_key)
 {
 	key_ref_t key_ref;
 
-	/* create or update the requested key and add it to the target
+	/* create or update the logon key and add it to the target
 	 * keyring */
 	key_ref = key_create_or_update(make_key_ref(builtin_fs_keys, 1),
 						"logon",
@@ -121,7 +122,11 @@ static int laird_fs_probe(struct platform_device *pdev)
 	fscrypt_key.size = sizeof(key->key);
 	memcpy(fscrypt_key.raw, key->key, sizeof(key->key));
 	rc = laird_fs_insertkey(&fscrypt_key);
-
+	if (rc)
+		return rc;
+#if CONFIG_LAIRD_FS_EVM_KEY
+	rc = evm_set_key(key->key, sizeof(key->key));
+#endif
 	return rc;
 }
 

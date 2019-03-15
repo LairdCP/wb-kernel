@@ -469,6 +469,12 @@ config LAIRD_FS
 	  This driver is in charge of injecting the FS key for encrypted
 	  filesystems.
 
+config LAIRD_FS_EVM_KEY
+	bool "EVM key support"
+	depends on LAIRD_FS && EVM
+	help
+	  Enable support for loading the EVM key.
+
 config SRAM
 	bool "Generic on-chip SRAM driver"
 	depends on HAS_IOMEM
