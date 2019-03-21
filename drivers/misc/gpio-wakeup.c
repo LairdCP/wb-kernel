@@ -19,6 +19,7 @@ struct wkup_priv {
 	int irq;
 	const char *name;
 	struct wakeup_source *wks;
+	bool enabled;
 };
 
 struct gpio_wakeup_priv {
@@ -41,8 +42,11 @@ static irqreturn_t gpio_wakeup_isr(int irq, void *dev_id)
 
 	for (i = 0; i < priv->count; i++) {
 		if (priv->wkup[i].irq == irq) {
-			pm_wakeup_ws_event(priv->wkup[i].wks, 0, 0);
-			pr_info("GPIO Wakeup: %s\n", priv->wkup[i].name);
+			if (priv->wkup[i].enabled) {
+				priv->wkup[i].enabled = false;
+				pm_wakeup_ws_event(priv->wkup[i].wks, 0, 0);
+				pr_info("GPIO Wakeup: %s\n", priv->wkup[i].name);
+			}
 			break;
 		}
 	}
@@ -140,6 +144,7 @@ static int gpio_wakeup_suspend(struct device *dev)
 		if (priv->wkup[i].irq >= 0) {
 			enable_irq(priv->wkup[i].irq);
 			enable_irq_wake(priv->wkup[i].irq);
+			priv->wkup[i].enabled = true;
 		}
 	}
 
@@ -161,8 +166,10 @@ static int gpio_wakeup_resume(struct device *dev)
 	return 0;
 }
 
-static const SIMPLE_DEV_PM_OPS(gpio_wakeup_pm_ops,
-			 gpio_wakeup_suspend, gpio_wakeup_resume);
+static const struct dev_pm_ops gpio_wakeup_pm_ops = {
+	.suspend  = gpio_wakeup_suspend,
+	.resume   = gpio_wakeup_resume,
+};
 
 static const struct of_device_id gpio_wakeup_of_match[] = {
 	{ .compatible = "gpio-wakeup", },
