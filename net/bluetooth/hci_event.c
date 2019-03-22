@@ -4843,6 +4843,12 @@ static void le_conn_complete_evt(struct hci_dev *hdev, u8 status,
 		 */
 		conn->le_conn_min_interval = hdev->le_conn_min_interval;
 		conn->le_conn_max_interval = hdev->le_conn_max_interval;
+		/* Save the device latency and supervisory timeout
+		 * as slave values, which will also be used to
+		 * trigger a connection update.
+		 */
+		conn->slave_le_conn_latency = hdev->le_conn_latency;
+		conn->slave_le_supv_timeout = hdev->le_supv_timeout;
 	}
 
 	/* Lookup the identity address from the stored connection
