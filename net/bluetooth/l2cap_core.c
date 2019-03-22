@@ -1498,18 +1498,22 @@ static void l2cap_le_conn_ready(struct l2cap_conn *conn)
 
 	/* For LE slave connections, make sure the connection interval
 	 * is in the range of the minium and maximum interval that has
-	 * been configured for this connection. If not, then trigger
+	 * been configured for this connection, the desired latency is
+	 * respected, and the supervisory timeout is as least as long
+	 * as configured via debugfs. If not, then trigger
 	 * the connection update procedure.
 	 */
 	if (hcon->role == HCI_ROLE_SLAVE &&
 	    (hcon->le_conn_interval < hcon->le_conn_min_interval ||
-	     hcon->le_conn_interval > hcon->le_conn_max_interval)) {
+	     hcon->le_conn_interval > hcon->le_conn_max_interval ||
+	     hcon->slave_le_conn_latency != hcon->le_conn_latency ||
+	     hcon->slave_le_supv_timeout > hcon->le_supv_timeout)) {
 		struct l2cap_conn_param_update_req req;
 
 		req.min = cpu_to_le16(hcon->le_conn_min_interval);
 		req.max = cpu_to_le16(hcon->le_conn_max_interval);
-		req.latency = cpu_to_le16(hcon->le_conn_latency);
-		req.to_multiplier = cpu_to_le16(hcon->le_supv_timeout);
+		req.latency = cpu_to_le16(hcon->slave_le_conn_latency);
+		req.to_multiplier = cpu_to_le16(hcon->slave_le_supv_timeout);
 
 		l2cap_send_cmd(conn, l2cap_get_ident(conn),
 			       L2CAP_CONN_PARAM_UPDATE_REQ, sizeof(req), &req);
