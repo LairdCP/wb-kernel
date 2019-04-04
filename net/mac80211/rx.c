@@ -2336,6 +2336,64 @@ __ieee80211_data_to_8023(struct ieee80211_rx_data *rx, bool *port_control)
 	return 0;
 }
 
+#ifndef _REMOVE_LAIRD_MODS_
+/* DMS: auto-detect DMS ipv4 and DMS ipv6 packets */
+static void ieee80211_dms_detect(struct ieee80211_rx_data *rx)
+{
+	struct ethhdr *ehdr = (struct ethhdr *) rx->skb->data;
+
+	if (rx->sdata->vif.type != NL80211_IFTYPE_STATION)
+		return;
+
+	if (!rx->sdata->u.mgd.dms.enabled)
+		return;
+
+	if (!is_multicast_ether_addr(ehdr->h_dest))
+		return;
+
+	if (ehdr->h_proto == cpu_to_be16(ETH_P_IP)) {
+		/* DMS ipv4 packet -- set flag to drop normal mcast ipv4 */
+		if (!rx->sdata->u.mgd.dms.ipv4) {
+			rx->sdata->u.mgd.dms.ipv4 = 1;
+		}
+	} else if (ehdr->h_proto == cpu_to_be16(ETH_P_IPV6)) {
+		/* DMS ipv6 packet -- set flag to drop normal mcast ipv6 */
+		if (!rx->sdata->u.mgd.dms.ipv6) {
+			rx->sdata->u.mgd.dms.ipv6 = 1;
+		}
+	}
+	return;
+}
+
+/* DMS: if using DMS, drop normal multicast */
+static bool ieee80211_dms_allowed(struct ieee80211_rx_data *rx)
+{
+	struct ethhdr *ehdr = (struct ethhdr *) rx->skb->data;
+
+	if (rx->sdata->vif.type != NL80211_IFTYPE_STATION)
+		return true;
+
+	if (!rx->sdata->u.mgd.dms.enabled)
+		return true;
+
+	if (!is_multicast_ether_addr(ehdr->h_dest))
+		return true;
+
+	if (ehdr->h_proto == cpu_to_be16(ETH_P_IP)) {
+		if (rx->sdata->u.mgd.dms.ipv4) {
+			/* drop multicast ipv4 packet */
+			return false;
+		}
+	} else if (ehdr->h_proto == cpu_to_be16(ETH_P_IPV6)) {
+		if (rx->sdata->u.mgd.dms.ipv6) {
+			/* drop multicast ipv6 packet */
+			return false;
+		}
+	}
+	return true;
+}
+#endif /* _REMOVE_LAIRD_MODS_ */
+
 /*
  * requires that rx->skb is a frame with ethernet header
  */
@@ -2498,6 +2556,9 @@ __ieee80211_rx_h_amsdu(struct ieee80211_rx_data *rx, u8 data_offset)
 	struct sk_buff_head frame_list;
 	struct ethhdr ethhdr;
 	const u8 *check_da = ethhdr.h_dest, *check_sa = ethhdr.h_source;
+#ifndef _REMOVE_LAIRD_MODS_
+	int check_dms = 0;
+#endif
 
 	if (unlikely(ieee80211_has_a4(hdr->frame_control))) {
 		check_da = NULL;
@@ -2511,6 +2572,13 @@ __ieee80211_rx_h_amsdu(struct ieee80211_rx_data *rx, u8 data_offset)
 			if (!rx->sta ||
 			    !test_sta_flag(rx->sta, WLAN_STA_TDLS_PEER))
 				check_sa = NULL;
+#ifndef _REMOVE_LAIRD_MODS_
+			/* DMS: check for DMS receives, if A-MSDU is from our AP */
+			if (rx->sdata->u.mgd.dms.enabled) {
+				if (ether_addr_equal(hdr->addr2, rx->sdata->u.mgd.bssid))
+					check_dms = 1;
+			}
+#endif
 			break;
 		case NL80211_IFTYPE_MESH_POINT:
 			check_sa = NULL;
@@ -2540,6 +2608,12 @@ __ieee80211_rx_h_amsdu(struct ieee80211_rx_data *rx, u8 data_offset)
 			dev_kfree_skb(rx->skb);
 			continue;
 		}
+
+#ifndef _REMOVE_LAIRD_MODS_
+		/* DMS: detect DMS packets */
+		if (check_dms)
+			ieee80211_dms_detect(rx);
+#endif
 
 		ieee80211_deliver_skb(rx);
 	}
@@ -2759,6 +2833,13 @@ ieee80211_rx_h_data(struct ieee80211_rx_data *rx)
 
 	if (!ieee80211_frame_allowed(rx, fc))
 		return RX_DROP_MONITOR;
+
+#ifndef _REMOVE_LAIRD_MODS_
+	if (!ieee80211_dms_allowed(rx)) {
+		/* DMS: drop normal multicast that are being DMS delivered */
+		return RX_DROP_MONITOR;
+	}
+#endif
 
 	/* directly handle TDLS channel switch requests/responses */
 	if (unlikely(((struct ethhdr *)rx->skb->data)->h_proto ==

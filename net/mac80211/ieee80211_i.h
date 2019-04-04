@@ -559,6 +559,14 @@ struct ieee80211_if_managed {
 	 * get stuck in a downgraded situation and flush takes forever.
 	 */
 	struct delayed_work tx_tspec_wk;
+
+#ifndef _REMOVE_LAIRD_MODS_
+	struct {
+		int enabled;
+		int ipv4;
+		int ipv6;
+	} dms;
+#endif
 };
 
 struct ieee80211_if_ibss {
