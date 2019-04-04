@@ -4744,6 +4744,16 @@ static int ieee80211_prep_connection(struct ieee80211_sub_if_data *sdata,
 	bool have_sta = false;
 	int err;
 
+#ifndef _REMOVE_LAIRD_MODS_
+	if (sdata->vif.type == NL80211_IFTYPE_STATION) {
+		/* new connection, reset DMS state */
+		/* TBD: add a command to enable DMS */
+		/* for now, just enable, and auto-detect DMS usage */
+		memset(&sdata->u.mgd.dms, 0, sizeof(sdata->u.mgd.dms));
+		sdata->u.mgd.dms.enabled = 1;
+	}
+#endif
+
 	sband = local->hw.wiphy->bands[cbss->channel->band];
 
 	if (WARN_ON(!ifmgd->auth_data && !ifmgd->assoc_data))
