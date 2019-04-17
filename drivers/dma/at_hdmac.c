@@ -327,6 +327,8 @@ static int atc_get_bytes_left(struct dma_chan *chan, dma_cookie_t cookie)
 
 	/* cookie matches to the currently running transfer */
 	ret = desc_first->total_len;
+	if (ret == 0)
+		return ret;
 
 	if (desc_first->lli.dscr) {
 		/* hardware linked list transfer */
@@ -603,22 +605,6 @@ static void atc_handle_cyclic(struct at_dma_chan *atchan)
 
 /*--  IRQ & Tasklet  ---------------------------------------------------*/
 
-static void atc_tasklet(unsigned long data)
-{
-	struct at_dma_chan *atchan = (struct at_dma_chan *)data;
-	unsigned long flags;
-
-	spin_lock_irqsave(&atchan->lock, flags);
-	if (test_and_clear_bit(ATC_IS_ERROR, &atchan->status))
-		atc_handle_error(atchan);
-	else if (atc_chan_is_cyclic(atchan))
-		atc_handle_cyclic(atchan);
-	else
-		atc_advance_work(atchan);
-
-	spin_unlock_irqrestore(&atchan->lock, flags);
-}
-
 static irqreturn_t at_dma_interrupt(int irq, void *dev_id)
 {
 	struct at_dma		*atdma = (struct at_dma *)dev_id;
@@ -649,7 +635,12 @@ static irqreturn_t at_dma_interrupt(int irq, void *dev_id)
 					/* Give information to tasklet */
 					set_bit(ATC_IS_ERROR, &atchan->status);
 				}
-				tasklet_schedule(&atchan->tasklet);
+				if (test_and_clear_bit(ATC_IS_ERROR, &atchan->status))
+					atc_handle_error(atchan);
+				else if (atc_chan_is_cyclic(atchan))
+					atc_handle_cyclic(atchan);
+				else
+					atc_advance_work(atchan);
 				ret = IRQ_HANDLED;
 			}
 		}
@@ -1497,7 +1488,7 @@ atc_tx_status(struct dma_chan *chan,
 	 * no txstate to store the value.
 	 */
 	if (!txstate)
-		return DMA_ERROR;
+		return ret;
 
 	spin_lock_irqsave(&atchan->lock, flags);
 
@@ -1506,12 +1497,19 @@ atc_tx_status(struct dma_chan *chan,
 
 	spin_unlock_irqrestore(&atchan->lock, flags);
 
-	if (unlikely(bytes < 0)) {
-		dev_vdbg(chan2dev(chan), "get residual bytes error\n");
+	if (bytes < 0) {
+		/* -EINVAL means that transaction no longer running */
+		if (bytes == -EINVAL) {
+			ret = dma_cookie_status(chan, cookie, txstate);
+			if (ret == DMA_COMPLETE)
+				return ret;
+		}
+
+		dev_vdbg(chan2dev(chan), "get residual bytes error %d\n", bytes);
 		return DMA_ERROR;
-	} else {
-		dma_set_residue(txstate, bytes);
 	}
+	else
+		dma_set_residue(txstate, bytes);
 
 	dev_vdbg(chan2dev(chan), "tx_status %d: cookie = %d residue = %d\n",
 		 ret, cookie, bytes);
@@ -1906,8 +1904,6 @@ static int __init at_dma_probe(struct platform_device *pdev)
 		INIT_LIST_HEAD(&atchan->queue);
 		INIT_LIST_HEAD(&atchan->free_list);
 
-		tasklet_init(&atchan->tasklet, atc_tasklet,
-				(unsigned long)atchan);
 		atc_enable_chan_irq(atdma, i);
 	}
 
@@ -2008,12 +2004,9 @@ static int at_dma_remove(struct platform_device *pdev)
 
 	list_for_each_entry_safe(chan, _chan, &atdma->dma_common.channels,
 			device_node) {
-		struct at_dma_chan	*atchan = to_at_dma_chan(chan);
-
 		/* Disable interrupts */
 		atc_disable_chan_irq(atdma, chan->chan_id);
 
-		tasklet_kill(&atchan->tasklet);
 		list_del(&chan->device_node);
 	}
 
@@ -2039,6 +2032,7 @@ static void at_dma_shutdown(struct platform_device *pdev)
 	clk_disable_unprepare(atdma->clk);
 }
 
+#if 0
 static int at_dma_prepare(struct device *dev)
 {
 	struct at_dma *atdma = dev_get_drvdata(dev);
@@ -2053,6 +2047,7 @@ static int at_dma_prepare(struct device *dev)
 	}
 	return 0;
 }
+#endif
 
 static void atc_suspend_cyclic(struct at_dma_chan *atchan)
 {
@@ -2141,7 +2136,7 @@ static int at_dma_resume_noirq(struct device *dev)
 }
 
 static const struct dev_pm_ops at_dma_dev_pm_ops = {
-	.prepare = at_dma_prepare,
+/*	.prepare = at_dma_prepare, */
 	.suspend_noirq = at_dma_suspend_noirq,
 	.resume_noirq = at_dma_resume_noirq,
 };

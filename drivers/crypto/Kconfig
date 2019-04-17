@@ -491,6 +491,15 @@ config CRYPTO_DEV_ATMEL_AES
 	  To compile this driver as a module, choose M here: the module
 	  will be called atmel-aes.
 
+config CRYPTO_DEV_ATMEL_AES_SERIAL
+	bool "Support for Atmel AES hw accelerator in serial mode"
+	depends on CRYPTO_DEV_ATMEL_AES
+	help
+	  Select this if you want the Atmel module for
+	  AES algorithms to work serial mode versa asynchronous without it.
+	  This option is useful to enable cryptography acceleration in
+	  network stack.
+
 config CRYPTO_DEV_ATMEL_TDES
 	tristate "Support for Atmel DES/TDES hw accelerator"
 	depends on ARCH_AT91 || COMPILE_TEST
