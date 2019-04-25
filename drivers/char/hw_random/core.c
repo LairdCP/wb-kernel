@@ -617,7 +617,7 @@ static void __exit hwrng_modexit(void)
 	unregister_miscdev();
 }
 
-module_init(hwrng_modinit);
+subsys_initcall(hwrng_modinit);
 module_exit(hwrng_modexit);
 
 MODULE_DESCRIPTION("H/W Random Number Generator (RNG) driver");

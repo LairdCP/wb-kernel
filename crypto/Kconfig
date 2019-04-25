@@ -1798,7 +1798,7 @@ menuconfig CRYPTO_DRBG_MENU
 if CRYPTO_DRBG_MENU
 
 config CRYPTO_DRBG_HMAC
-	bool
+	bool "Enable HMAC DRBG"
 	default y
 	select CRYPTO_HMAC
 	select CRYPTO_SHA256

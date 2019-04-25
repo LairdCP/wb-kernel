@@ -8,13 +8,13 @@
 
 #include <linux/kernel.h>
 #include <linux/module.h>
-#include <linux/mod_devicetable.h>
-#include <linux/slab.h>
-#include <linux/err.h>
+#include <linux/errno.h>
 #include <linux/clk.h>
-#include <linux/io.h>
+#include <linux/of_device.h>
 #include <linux/hw_random.h>
-#include <linux/platform_device.h>
+#include <linux/delay.h>
+#include <crypto/rng.h>
+#include <crypto/internal/rng.h>
 
 #define TRNG_CR		0x00
 #define TRNG_ISR	0x1c
@@ -26,27 +26,73 @@ struct atmel_trng {
 	struct clk *clk;
 	void __iomem *base;
 	struct hwrng rng;
+	unsigned long rng_cycle;
+	u32 last;
 };
 
-static int atmel_trng_read(struct hwrng *rng, void *buf, size_t max,
-			   bool wait)
-{
-	struct atmel_trng *trng = container_of(rng, struct atmel_trng, rng);
-	u32 *data = buf;
+static struct atmel_trng * g_trng;
+static DEFINE_MUTEX(trng_mutex);
 
-	/* data ready? */
-	if (readl(trng->base + TRNG_ISR) & 1) {
-		*data = readl(trng->base + TRNG_ODATA);
-		/*
-		  ensure data ready is only set again AFTER the next data
-		  word is ready in case it got set between checking ISR
-		  and reading ODATA, so we don't risk re-reading the
-		  same word
-		*/
-		readl(trng->base + TRNG_ISR);
-		return 4;
-	} else
-		return 0;
+static int atmel_trng_read_entropy(struct atmel_trng *trng, void *buf,
+	size_t max, bool wait)
+{
+	u32 *data = buf, curr;
+	size_t i = 0;
+	int ret;
+
+	mutex_lock(&trng_mutex);
+
+	if (!trng) {
+		ret = -ENODEV;
+		goto exit;
+	}
+
+	while (i < max) {
+		if (!(readl(trng->base + TRNG_ISR) & 1)) {
+			if (wait) {
+				usleep_range(trng->rng_cycle,
+					trng->rng_cycle + 5);
+				continue;
+			}
+			else
+				break;
+		}
+
+		curr = readl(trng->base + TRNG_ODATA);
+		if (curr != trng->last) {
+			trng->last = curr;
+			*(data++) = curr;
+			i += sizeof(u32);
+		}
+	}
+	ret = (int) i;
+
+exit:
+	mutex_unlock(&trng_mutex);
+
+	return ret;
+}
+
+
+static int atmel_trng_read(struct hwrng *rng, void *buf, size_t max, bool wait)
+{
+	return atmel_trng_read_entropy(g_trng, buf, max, wait);
+}
+
+static int atmel_trng_generate(struct crypto_rng *tfm,
+	const u8 *src, unsigned int slen, u8 *rdata, unsigned int dlen)
+{
+	int ret = atmel_trng_read_entropy(g_trng, rdata, dlen, true);
+	if (ret < 0)
+		return ret;
+
+	return ret == dlen ? 0 : -EFAULT;
+}
+
+static int atmel_trng_seed(struct crypto_rng *tfm,
+			   const u8 *seed, unsigned int slen)
+{
+	return 0;
 }
 
 static void atmel_trng_enable(struct atmel_trng *trng)
@@ -58,6 +104,19 @@ static void atmel_trng_disable(struct atmel_trng *trng)
 {
 	writel(TRNG_KEY, trng->base + TRNG_CR);
 }
+
+static struct rng_alg atmel_trng_alg = {
+	.generate	= atmel_trng_generate,
+	.seed		= atmel_trng_seed,
+	.seedsize	= 0,
+	.base		= {
+		.cra_name		= "jitterentropy_rng",
+		.cra_driver_name	= "atmel-trng",
+		.cra_flags		= CRYPTO_ALG_TYPE_RNG,
+		.cra_priority		= 300,
+		.cra_module		= THIS_MODULE,
+	}
+};
 
 static int atmel_trng_probe(struct platform_device *pdev)
 {
@@ -82,17 +141,31 @@ static int atmel_trng_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
+	trng->rng_cycle = 84000000 / clk_get_rate(trng->clk) + 1;
+
 	atmel_trng_enable(trng);
+
+	g_trng = trng;
+
 	trng->rng.name = pdev->name;
 	trng->rng.read = atmel_trng_read;
+	trng->rng.quality = 1000;
+	trng->rng.priv = (unsigned long)trng;
 
 	ret = hwrng_register(&trng->rng);
 	if (ret)
 		goto err_register;
 
+	ret = crypto_register_rng(&atmel_trng_alg);
+	if (ret)
+		goto err_register_crypto;
+
 	platform_set_drvdata(pdev, trng);
 
 	return 0;
+
+err_register_crypto:
+	hwrng_unregister(&trng->rng);
 
 err_register:
 	clk_disable_unprepare(trng->clk);
@@ -103,6 +176,11 @@ static int atmel_trng_remove(struct platform_device *pdev)
 {
 	struct atmel_trng *trng = platform_get_drvdata(pdev);
 
+	mutex_lock(&trng_mutex);
+	g_trng = NULL;
+	mutex_unlock(&trng_mutex);
+
+	crypto_unregister_rng(&atmel_trng_alg);
 	hwrng_unregister(&trng->rng);
 
 	atmel_trng_disable(trng);
@@ -135,12 +213,10 @@ static int atmel_trng_resume(struct device *dev)
 
 	return 0;
 }
-
-static const struct dev_pm_ops atmel_trng_pm_ops = {
-	.suspend	= atmel_trng_suspend,
-	.resume		= atmel_trng_resume,
-};
 #endif /* CONFIG_PM */
+
+static SIMPLE_DEV_PM_OPS(atmel_trng_pm_ops, atmel_trng_suspend,
+	atmel_trng_resume);
 
 static const struct of_device_id atmel_trng_dt_ids[] = {
 	{ .compatible = "atmel,at91sam9g45-trng" },
@@ -153,14 +229,24 @@ static struct platform_driver atmel_trng_driver = {
 	.remove		= atmel_trng_remove,
 	.driver		= {
 		.name	= "atmel-trng",
-#ifdef CONFIG_PM
 		.pm	= &atmel_trng_pm_ops,
-#endif /* CONFIG_PM */
 		.of_match_table = atmel_trng_dt_ids,
 	},
 };
 
-module_platform_driver(atmel_trng_driver);
+static int __init atmel_trng_init(void)
+{
+	return platform_driver_register(&atmel_trng_driver);
+}
+
+static void __exit atmel_trng_exit(void)
+{
+	platform_driver_unregister(&atmel_trng_driver);
+}
+
+subsys_initcall(atmel_trng_init);
+module_exit(atmel_trng_exit);
+
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Peter Korsgaard <jacmet@sunsite.dk>");
