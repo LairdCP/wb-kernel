@@ -1080,18 +1080,18 @@ static int drbg_seed(struct drbg_state *drbg, struct drbg_string *pers,
 			entropylen = ((entropylen + 1) / 2) * 3;
 		BUG_ON((entropylen * 2) > sizeof(entropy));
 
-		/* Get seed from in-kernel /dev/urandom */
-		get_random_bytes(entropy, entropylen);
-
 		if (!drbg->jent) {
+			/* Get seed from in-kernel /dev/urandom */
+			get_random_bytes(entropy, entropylen);
+
 			drbg_string_fill(&data1, entropy, entropylen);
 			pr_devel("DRBG: (re)seeding with %u bytes of entropy\n",
 				 entropylen);
 		} else {
 			/* Get seed from Jitter RNG */
 			ret = crypto_rng_get_bytes(drbg->jent,
-						   entropy + entropylen,
-						   entropylen);
+						   entropy,
+						   entropylen * 2);
 			if (ret) {
 				pr_devel("DRBG: jent failed with %d\n", ret);
 				return ret;
@@ -1413,11 +1413,17 @@ static int drbg_prepare_hrng(struct drbg_state *drbg)
 
 	switch (err) {
 	case 0:
+		/*
+		 * Require frequent reseeds until the seed source is fully
+		 * initialized.
+		 */
+		drbg->reseed_threshold = 50;
 		break;
 
 	case -EALREADY:
 		err = 0;
-		/* fall through */
+		drbg->random_ready.func = NULL;
+		break;
 
 	default:
 		drbg->random_ready.func = NULL;
@@ -1425,12 +1431,6 @@ static int drbg_prepare_hrng(struct drbg_state *drbg)
 	}
 
 	drbg->jent = crypto_alloc_rng("jitterentropy_rng", 0, 0);
-
-	/*
-	 * Require frequent reseeds until the seed source is fully
-	 * initialized.
-	 */
-	drbg->reseed_threshold = 50;
 
 	return err;
 }
