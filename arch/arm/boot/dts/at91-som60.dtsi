@@ -131,7 +131,7 @@
 
 		non-removable;
 
-		wifi {
+		wifi: wifi {
 			compatible = "marvell,sd8997";
 			interrupts-extended = <&pioD 14 IRQ_TYPE_EDGE_FALLING>;
 			reset-gpios = <&pioE 5 GPIO_ACTIVE_HIGH>;
@@ -209,12 +209,12 @@
 			};
 
 			ubootenv@a0000 {
-				label = "u-boot-env";
+				label = "u-boot-env-a";
 				reg = <0xa0000 0x20000>;
 			};
 
 			ubootenv@c0000 {
-				label = "u-boot-env";
+				label = "u-boot-env-b";
 				reg = <0xc0000 0x20000>;
 			};
 

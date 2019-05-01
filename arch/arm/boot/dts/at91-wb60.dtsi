@@ -35,7 +35,7 @@
 	num-ports = <3>;
 	atmel,vbus-gpio = <0>, <0>, <&pioA 4 GPIO_ACTIVE_HIGH>;
 
-	status = "diabled";
+	status = "disabled";
 };
 
 &usb2 {
