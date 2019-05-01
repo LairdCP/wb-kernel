@@ -3593,8 +3593,6 @@ static int atmel_aes_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct resource *aes_res;
 	int err;
-	
-	pr_err("atmel-aes probe\n");
 
 	pdata = pdev->dev.platform_data;
 	if (!pdata) {
