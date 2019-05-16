@@ -1746,7 +1746,7 @@ static struct skcipher_alg skcipher_aes_algs[] = {
 		.cra_ctxsize		= sizeof(struct atmel_aes_ctx),
 		.cra_alignmask		= 0,
 		.cra_module		= THIS_MODULE,
-		.cra_init		= atmel_aes_cra_init,
+		.cra_init		= atmel_aes_bc_cra_init,
 	}
 },
 {
