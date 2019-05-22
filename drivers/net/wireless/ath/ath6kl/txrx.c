@@ -22,7 +22,7 @@
 #include "htc-ops.h"
 #include "trace.h"
 
-#include "../../laird_fips/laird.h"
+#include "laird_fips.h"
 
 /*
  * tid - tid_mux0..tid_mux3
@@ -355,13 +355,7 @@ fail_ctrl_tx:
 	return status;
 }
 
-#ifdef CONFIG_ATH6KL_LAIRD_FIPS
-netdev_tx_t laird_data_tx_continue(struct sk_buff *skb,
-			   struct net_device *dev,
-			   int isfips)
-#else
 netdev_tx_t ath6kl_data_tx(struct sk_buff *skb, struct net_device *dev)
-#endif
 {
 	struct ath6kl *ar = ath6kl_priv(dev);
 	struct ath6kl_cookie *cookie = NULL;
@@ -379,6 +373,8 @@ netdev_tx_t ath6kl_data_tx(struct sk_buff *skb, struct net_device *dev)
 	u32 flags = 0;
 
 #ifdef CONFIG_ATH6KL_LAIRD_FIPS
+	int isfips;
+	isfips = laird_data_tx(&skb, dev); // note, may return a different skb
 	if (isfips < 0) /* check if fips encryption failed */
 		goto fail_tx;
 #endif
@@ -550,28 +546,6 @@ fail_tx:
 	return 0;
 }
 
-#ifdef CONFIG_ATH6KL_LAIRD_FIPS
-netdev_tx_t ath6kl_data_tx(struct sk_buff *skb, struct net_device *dev)
-{
-	struct ath6kl *ar = ath6kl_priv(dev);
-
-	/* if not in fips_mode use the normal routine */
-	if (!fips_mode)
-		return laird_data_tx_continue(skb, dev, 0);
-
-	/* in fips_mode, convert the socket buffer and then continue */
-	if (laird_skb_encrypt_prep(skb, dev, ar->wmi->is_wmm_enabled,
-				   &laird_data_tx_continue)) {
-		/* failure -- pass to original routine to handle failure */
-		return laird_data_tx_continue(skb, dev, -1);
-	}
-
-	/* laird_data_tx_continue() will be called in laird_skb_tx_tasklet() */
-
-	return 0;
-}
-#endif
-
 /* indicate tx activity or inactivity on a WMI stream */
 void ath6kl_indicate_tx_activity(void *devt, u8 traffic_class, bool active)
 {
@@ -680,12 +654,6 @@ enum htc_send_full_action ath6kl_tx_queue_full(struct htc_target *target,
 			spin_unlock_bh(&ar->list_lock);
 
 			set_bit(NETQ_STOPPED, &vif->flags);
-#ifdef CONFIG_ATH6KL_LAIRD_FIPS
-			if (fips_mode) {
-				/* stop fips packets from being submitted */
-				laird_stop_queue(vif->ndev);
-			}
-#endif
 			netif_stop_queue(vif->ndev);
 
 			return action;
@@ -857,12 +825,6 @@ void ath6kl_tx_complete(struct htc_target *target,
 		if (test_bit(CONNECTED, &vif->flags) &&
 		    !flushing[vif->fw_vif_idx]) {
 			spin_unlock_bh(&ar->list_lock);
-#ifdef CONFIG_ATH6KL_LAIRD_FIPS
-			if (fips_mode) {
-				/* enable fips packets to be submitted */
-				laird_wake_queue(vif->ndev);
-			}
-#endif
 			netif_wake_queue(vif->ndev);
 			spin_lock_bh(&ar->list_lock);
 		}
@@ -1361,37 +1323,6 @@ static void ath6kl_uapsd_trigger_frame_rx(struct ath6kl_vif *vif,
 	return;
 }
 
-/* for forward reference */
-void laird_skb_rx_continue(struct sk_buff *skb, int res);
-
-#ifdef CONFIG_ATH6KL_LAIRD_FIPS
-typedef struct {
-	struct htc_target *target;
-	bool is_amsdu;
-	u16 seq_no;
-	u8 tid;
-	u8 if_idx;
-} rx_stash_t; /* save receive information for later */
-
-static inline void laird_skb_put_stash(struct sk_buff *skb, rx_stash_t *pstash)
-{
-	rx_stash_t **ppstash;
-
-	ppstash = (rx_stash_t **)((u8 *)skb->cb +
-				  sizeof(skb->cb) - sizeof(*ppstash));
-	*ppstash = pstash;
-}
-
-static inline rx_stash_t *laird_skb_get_stash(struct sk_buff *skb)
-{
-	rx_stash_t **ppstash;
-
-	ppstash = (rx_stash_t **)((u8 *)skb->cb +
-				  sizeof(skb->cb) - sizeof(*ppstash));
-	return *ppstash;
-}
-#endif
-
 void ath6kl_rx(struct htc_target *target, struct htc_packet *packet)
 {
 	struct ath6kl *ar = target->dev->ar;
@@ -1640,35 +1571,18 @@ void ath6kl_rx(struct htc_target *target, struct htc_packet *packet)
 #ifdef CONFIG_ATH6KL_LAIRD_FIPS
 	if (fips_mode) {
 		int res;
-		rx_stash_t *stash;
-
-		/* stash fields for use in callback */
-		stash = kmalloc(sizeof(*stash), GFP_ATOMIC);
-		laird_skb_put_stash(skb, stash);
-		if (!stash) {
-			dev_kfree_skb(skb);
-			return;
-		}
-		stash->target = target;
-		stash->if_idx = if_idx;
-		stash->is_amsdu = is_amsdu;
-		stash->tid = tid;
-		stash->seq_no = seq_no;
-
-		res = laird_skb_rx_prep(skb, &laird_skb_rx_continue);
-		if (res == 0) {
-			/* will continue in laird_skb_rx_continue */
-			return;
-		}
-
-		kfree(stash);
-
+		res = laird_data_rx(&skb);
 		if (res < 0) {
 			/* failed -- delete packet */
 			dev_kfree_skb(skb);
 			return;
 		}
+		if (!skb) {
+			// packet consumed by defragmentation
+			return;
+		}
 		/* letting driver finish receive processing */
+		goto fips_already_eth;
 	}
 #endif
 
@@ -1677,6 +1591,9 @@ void ath6kl_rx(struct htc_target *target, struct htc_packet *packet)
 	else if (!is_amsdu)
 		status = ath6kl_wmi_dot3_2_dix(skb);
 
+#ifdef CONFIG_ATH6KL_LAIRD_FIPS
+fips_already_eth:
+#endif
 	if (status) {
 		/*
 		 * Drop frames that could not be processed (lack of
@@ -1748,68 +1665,6 @@ void ath6kl_rx(struct htc_target *target, struct htc_packet *packet)
 
 	ath6kl_deliver_frames_to_nw_stack(vif->ndev, skb);
 }
-
-#ifdef CONFIG_ATH6KL_LAIRD_FIPS
-/* continue receive packet processing */
-void laird_skb_rx_continue(struct sk_buff *skb, int res)
-{
-	rx_stash_t *stash;
-	struct htc_target *target;
-	struct ath6kl *ar;
-	bool is_amsdu;
-	u16 seq_no;
-	u8 tid, if_idx;
-	struct ethhdr *datap;
-	struct ath6kl_vif *vif;
-	struct aggr_info_conn *aggr_conn;
-
-	/* restore data from stash */
-	stash = laird_skb_get_stash(skb);
-	target = stash->target;
-	if_idx = stash->if_idx;
-	is_amsdu = stash->is_amsdu;
-	tid = stash->tid;
-	seq_no = stash->seq_no;
-	kfree(stash);
-
-	if (res < 0) {
-		/* failed decrypt -- free buffer */
-		dev_kfree_skb(skb);
-		return;
-	}
-
-	ar = target->dev->ar;
-	vif = ath6kl_get_vif_by_index(ar, if_idx);
-	if (!vif) {
-		dev_kfree_skb(skb);
-		return;
-	}
-
-	/* following is copied from above with
-	 * deletion of AP_NETWORK
-	 */
-	if (!(vif->ndev->flags & IFF_UP)) {
-		dev_kfree_skb(skb);
-		return;
-	}
-
-	datap = (struct ethhdr *)skb->data;
-
-	if (is_unicast_ether_addr(datap->h_dest)) {
-			aggr_conn = vif->aggr_cntxt->aggr_conn;
-
-		if (aggr_process_recv_frm(aggr_conn, tid, seq_no,
-					  is_amsdu, skb)) {
-			/* aggregation code will handle the skb */
-			return;
-		}
-	} else if (!is_broadcast_ether_addr(datap->h_dest)) {
-		vif->ndev->stats.multicast++;
-	}
-
-	ath6kl_deliver_frames_to_nw_stack(vif->ndev, skb);
-}
-#endif
 
 static void aggr_timeout(struct timer_list *t)
 {

@@ -23,6 +23,8 @@
 #------------------------------------------------------------------------------
 
 obj-$(CONFIG_ATH6KL) += ath6kl_core.o
+ath6kl_core-$(CONFIG_ATH6KL_LAIRD_FIPS) += aead_api.o
+ath6kl_core-$(CONFIG_ATH6KL_LAIRD_FIPS) += laird_kfips.o
 ath6kl_core-y += debug.o
 ath6kl_core-y += hif.o
 ath6kl_core-y += htc_mbox.o

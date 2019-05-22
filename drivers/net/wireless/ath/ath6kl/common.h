@@ -84,7 +84,7 @@ struct ath6kl_htc_credit_info;
 struct sk_buff *ath6kl_buf_alloc(int size);
 
 #ifdef CONFIG_ATH6KL_LAIRD_FIPS
-#include "../../laird_fips/laird.h"
+#include "laird_fips.h"
 #endif
 
 #endif /* COMMON_H */
