@@ -25,7 +25,7 @@
 #include "../regd.h"
 #include "../regd_common.h"
 #ifdef CONFIG_ATH6KL_LAIRD_FIPS
-#include "../../laird_fips/laird.h"
+#include "laird_fips.h"
 #endif
 #include "wmiconfig.h"
 

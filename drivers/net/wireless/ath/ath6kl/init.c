@@ -33,7 +33,7 @@
 #include "htc-ops.h"
 
 #ifdef CONFIG_ATH6KL_LAIRD_FIPS
-#include "../../laird_fips/laird.h"
+#include "laird_fips.h"
 #endif
 
 static const struct ath6kl_hw hw_list[] = {
@@ -1942,13 +1942,6 @@ void ath6kl_stop_txrx(struct ath6kl *ar)
 		ath6kl_err("down_interruptible failed\n");
 		return;
 	}
-
-#ifdef CONFIG_ATH6KL_LAIRD_FIPS
-	if (fips_mode) {
-		/* wait for all fips in progress txrx to complete */
-		laird_stop_txrx();
-	}
-#endif
 
 	for (i = 0; i < AP_MAX_NUM_STA; i++)
 		aggr_reset_state(ar->sta_list[i].aggr_conn);

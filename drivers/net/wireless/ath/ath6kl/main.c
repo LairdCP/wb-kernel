@@ -24,7 +24,7 @@
 #include "debug.h"
 #include "wmiconfig.h"
 #ifdef CONFIG_ATH6KL_LAIRD_FIPS
-#include "../../laird_fips/laird.h"
+#include "laird_fips.h"
 #endif
 
 struct ath6kl_sta *ath6kl_find_sta(struct ath6kl_vif *vif, u8 *node_addr)

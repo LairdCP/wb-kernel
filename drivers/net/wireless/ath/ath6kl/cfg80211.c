@@ -28,6 +28,9 @@
 #include "hif-ops.h"
 #include "testmode.h"
 
+#include "laird_fips.h"
+
+
 #define RATETAB_ENT(_rate, _rateid, _flags) {   \
 	.bitrate    = (_rate),                  \
 	.flags      = (_flags),                 \
@@ -817,11 +820,6 @@ void ath6kl_cfg80211_connect_event(struct ath6kl_vif *vif, u16 channel,
 		/* inform roam event to cfg80211 */
 		cfg80211_roamed(vif->ndev, &roam_info, GFP_KERNEL);
 	}
-
-#ifdef CONFIG_ATH6KL_LAIRD_FIPS
-	if (fips_mode)
-		laird_setbssid(bssid);
-#endif
 }
 
 static int ath6kl_cfg80211_disconnect(struct wiphy *wiphy,
@@ -857,11 +855,6 @@ static int ath6kl_cfg80211_disconnect(struct wiphy *wiphy,
 		memset(vif->req_bssid, 0, sizeof(vif->req_bssid));
 
 	up(&ar->sem);
-
-#ifdef CONFIG_ATH6KL_LAIRD_FIPS
-	if (fips_mode)
-		laird_setbssid(NULL);
-#endif
 
 	return 0;
 }
