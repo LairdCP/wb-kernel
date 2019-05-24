@@ -188,6 +188,11 @@
 		nand-ecc-mode = "hw";
 		nand-ecc-strength = <8>;
 		nand-ecc-step-size = <512>;
+		/*
+		 * Note - nand-on-flash-bbt requires the last 4 blocks on
+		 * flash to be reserved for bad block table.  These blocks
+		 * can be used in partitions only if bbt is not stored on flash.
+		 */
 		nand-on-flash-bbt;
 		label = "atmel_nand";
 
@@ -205,22 +210,23 @@
 
 			uboot@20000 {
 				label = "u-boot";
-				reg = <0x20000 0x80000>;
+				reg = <0x20000 0x120000>;
 			};
 
-			ubootenv@a0000 {
+			ubootenv@140000 {
 				label = "u-boot-env-a";
-				reg = <0xa0000 0x20000>;
+				reg = <0x140000 0x20000>;
 			};
 
-			ubootenv@c0000 {
+			ubootenv@160000 {
 				label = "u-boot-env-b";
-				reg = <0xc0000 0x20000>;
+				reg = <0x160000 0x20000>;
 			};
 
-			ubi@e0000 {
+			/* Leave last 4 blocks for bbt if nand-on-flash-bbt is defined */
+			ubi@180000 {
 				label = "ubi";
-				reg = <0xe0000 0xfe00000>;
+				reg = <0x180000 0xfe00000>;
 			};
 		};
 	};
