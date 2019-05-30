@@ -39,6 +39,7 @@ void ieee80211_aes_cmac(struct crypto_shash *tfm, const u8 *aad,
 		crypto_shash_update(desc, aad, AAD_LEN);
 		crypto_shash_update(desc, data, data_len - CMAC_TLEN);
 		crypto_shash_finup(desc, zero, CMAC_TLEN, out);
+		shash_desc_zero(desc);
 	} else {
 		struct crypto_ahash *tfma = (struct crypto_ahash *)tfm;
 		struct scatterlist sg[3];
@@ -52,6 +53,7 @@ void ieee80211_aes_cmac(struct crypto_shash *tfm, const u8 *aad,
 		ahash_request_set_tfm(ahreq, tfma);
 		ahash_request_set_crypt(ahreq, sg, out, AAD_LEN + data_len);
 		crypto_ahash_digest(ahreq);
+		ahash_request_zero(ahreq);
 	}
 
 	memcpy(mic, out, CMAC_TLEN);
@@ -69,6 +71,7 @@ void ieee80211_aes_cmac_256(struct crypto_shash *tfm, const u8 *aad,
 		crypto_shash_update(desc, aad, AAD_LEN);
 		crypto_shash_update(desc, data, data_len - CMAC_TLEN_256);
 		crypto_shash_finup(desc, zero, CMAC_TLEN_256, mic);
+		shash_desc_zero(desc);
 	} else {
 		struct crypto_ahash *tfma = (struct crypto_ahash *)tfm;
 		struct scatterlist sg[3];
@@ -82,6 +85,7 @@ void ieee80211_aes_cmac_256(struct crypto_shash *tfm, const u8 *aad,
 		ahash_request_set_tfm(ahreq, tfma);
 		ahash_request_set_crypt(ahreq, sg, mic, AAD_LEN + data_len);
 		crypto_ahash_digest(ahreq);
+		ahash_request_zero(ahreq);
 	}
 }
 
