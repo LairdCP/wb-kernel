@@ -1099,10 +1099,14 @@ static int atmel_aes_bc_transfer_complete(struct atmel_aes_dev *dd)
 		memcpy(req->iv, rctx->lastc, AES_BLOCK_SIZE);
 	else {
 		unsigned lbtail = req->cryptlen & (AES_BLOCK_SIZE - 1);
-		unsigned lboff = req->cryptlen - lbtail;
 
-		scatterwalk_map_and_copy(req->iv, req->dst, lboff, lbtail, 0);
-		memset(req->iv + lbtail, 0, AES_BLOCK_SIZE - lbtail);
+		if (lbtail)
+			memset(req->iv + lbtail, 0, AES_BLOCK_SIZE - lbtail);
+		else
+			lbtail = AES_BLOCK_SIZE;
+
+		scatterwalk_map_and_copy(req->iv, req->src,
+			req->cryptlen - lbtail, lbtail, 0);
 	}
 
 	return atmel_aes_complete(dd, 0);
@@ -1300,10 +1304,13 @@ static int atmel_aes_bc_crypt(struct skcipher_request *req, unsigned long mode)
 
 	if (!(mode & AES_FLAGS_ENCRYPT) && (req->src == req->dst)) {
 		unsigned lbtail = req->cryptlen & (AES_BLOCK_SIZE - 1);
+		if (lbtail)
+			memset(rctx->lastc + lbtail, 0, AES_BLOCK_SIZE - lbtail);
+		else
+			lbtail = AES_BLOCK_SIZE;
 
 		scatterwalk_map_and_copy(rctx->lastc, req->src,
 			req->cryptlen - lbtail, lbtail, 0);
-		memset(rctx->lastc + lbtail, 0, AES_BLOCK_SIZE - lbtail);
 	}
 
 	return atmel_aes_handle_queue(&req->base);
