@@ -83,6 +83,7 @@ struct atmel_tdes_ctx {
 
 struct atmel_tdes_reqctx {
 	unsigned long mode;
+	u32		lastc[DES_BLOCK_SIZE / sizeof(u32)];
 };
 
 struct atmel_tdes_dma {
@@ -309,8 +310,8 @@ static int atmel_tdes_write_ctrl(struct atmel_tdes_dev *dd)
 	atmel_tdes_write_n(dd, TDES_KEY1W1R, dd->ctx->key,
 						dd->ctx->keylen >> 2);
 
-	if (((dd->flags & TDES_FLAGS_CBC) || (dd->flags & TDES_FLAGS_CFB) ||
-		(dd->flags & TDES_FLAGS_OFB)) && dd->req->info) {
+	if ((dd->flags & (TDES_FLAGS_CBC | TDES_FLAGS_CFB | TDES_FLAGS_OFB)) &&
+		dd->req->info) {
 		atmel_tdes_write_n(dd, TDES_IV1R, dd->req->info, 2);
 	}
 
@@ -547,7 +548,7 @@ static int atmel_tdes_crypt_start(struct atmel_tdes_dev *dd)
 		addr_out = sg_dma_address(dd->out_sg);
 
 		dd->flags |= TDES_FLAGS_FAST;
-
+		dd->total -= count;
 	} else {
 		/* use cache buffers */
 		count = atmel_tdes_sg_copy(&dd->in_sg, &dd->in_offset,
@@ -557,9 +558,32 @@ static int atmel_tdes_crypt_start(struct atmel_tdes_dev *dd)
 		addr_out = dd->dma_addr_out;
 
 		dd->flags &= ~TDES_FLAGS_FAST;
+		dd->total -= count;
+
+		if (!dd->total) {
+			unsigned lbtail = count & (DES_BLOCK_SIZE - 1);
+			if (lbtail)
+				memzero_explicit((u8*)dd->buf_in + count,
+					DES_BLOCK_SIZE - lbtail);
+		}
 	}
 
-	dd->total -= count;
+	if (dd->flags & (TDES_FLAGS_CBC | TDES_FLAGS_CFB | TDES_FLAGS_OFB)) {
+		struct ablkcipher_request *req = dd->req;
+
+		if (!dd->total && !(dd->flags & TDES_FLAGS_ENCRYPT) &&
+			(req->src == req->dst)) {
+			struct atmel_tdes_reqctx *rctx = ablkcipher_request_ctx(req);
+			unsigned lbtail = req->nbytes & (DES_BLOCK_SIZE - 1);
+			if (lbtail)
+				memset(rctx->lastc + lbtail, 0, DES_BLOCK_SIZE - lbtail);
+			else
+				lbtail = DES_BLOCK_SIZE;
+
+			scatterwalk_map_and_copy(rctx->lastc, req->src,
+				req->nbytes - lbtail, lbtail, 0);
+		}
+	}
 
 	if (dd->caps.has_dma)
 		err = atmel_tdes_crypt_dma(tfm, addr_in, addr_out, count);
@@ -581,6 +605,34 @@ static void atmel_tdes_finish_req(struct atmel_tdes_dev *dd, int err)
 	clk_disable_unprepare(dd->iclk);
 
 	dd->flags &= ~TDES_FLAGS_BUSY;
+
+	if ((dd->flags & (TDES_FLAGS_CBC | TDES_FLAGS_CFB | TDES_FLAGS_OFB)) &&
+		req->info) {
+		if (dd->flags & TDES_FLAGS_ENCRYPT) {
+			unsigned lbtail = req->nbytes & (DES_BLOCK_SIZE - 1);
+			unsigned lboff = req->nbytes - lbtail;
+
+			if (!lbtail)
+				scatterwalk_map_and_copy(req->info, req->dst,
+					lboff - DES_BLOCK_SIZE, DES_BLOCK_SIZE, 0);
+			else
+				memcpy(req->info, dd->buf_out + lboff, DES_BLOCK_SIZE);
+		} else if (req->src == req->dst) {
+			struct atmel_tdes_reqctx *rctx = ablkcipher_request_ctx(req);
+			memcpy(req->info, rctx->lastc, DES_BLOCK_SIZE);
+		}
+		else {
+			unsigned lbtail = req->nbytes & (DES_BLOCK_SIZE - 1);
+
+			if (lbtail)
+				memset(req->info + lbtail, 0, DES_BLOCK_SIZE - lbtail);
+			else
+				lbtail = DES_BLOCK_SIZE;
+
+			scatterwalk_map_and_copy(req->info, req->src,
+				req->nbytes - lbtail, lbtail, 0);
+		}
+	}
 
 	req->base.complete(&req->base, err);
 }
@@ -919,7 +971,7 @@ static struct crypto_alg tdes_algs[] = {
 	.cra_flags		= CRYPTO_ALG_TYPE_ABLKCIPHER | CRYPTO_ALG_ASYNC,
 	.cra_blocksize		= DES_BLOCK_SIZE,
 	.cra_ctxsize		= sizeof(struct atmel_tdes_ctx),
-	.cra_alignmask		= 0x7,
+	.cra_alignmask		= 0,
 	.cra_type		= &crypto_ablkcipher_type,
 	.cra_module		= THIS_MODULE,
 	.cra_init		= atmel_tdes_cra_init,
@@ -938,7 +990,7 @@ static struct crypto_alg tdes_algs[] = {
 	.cra_flags		= CRYPTO_ALG_TYPE_ABLKCIPHER | CRYPTO_ALG_ASYNC,
 	.cra_blocksize		= DES_BLOCK_SIZE,
 	.cra_ctxsize		= sizeof(struct atmel_tdes_ctx),
-	.cra_alignmask		= 0x7,
+	.cra_alignmask		= 0,
 	.cra_type		= &crypto_ablkcipher_type,
 	.cra_module		= THIS_MODULE,
 	.cra_init		= atmel_tdes_cra_init,
@@ -958,7 +1010,7 @@ static struct crypto_alg tdes_algs[] = {
 	.cra_flags		= CRYPTO_ALG_TYPE_ABLKCIPHER | CRYPTO_ALG_ASYNC,
 	.cra_blocksize		= DES_BLOCK_SIZE,
 	.cra_ctxsize		= sizeof(struct atmel_tdes_ctx),
-	.cra_alignmask		= 0x7,
+	.cra_alignmask		= 0,
 	.cra_type		= &crypto_ablkcipher_type,
 	.cra_module		= THIS_MODULE,
 	.cra_init		= atmel_tdes_cra_init,
@@ -998,7 +1050,7 @@ static struct crypto_alg tdes_algs[] = {
 	.cra_flags		= CRYPTO_ALG_TYPE_ABLKCIPHER | CRYPTO_ALG_ASYNC,
 	.cra_blocksize		= CFB16_BLOCK_SIZE,
 	.cra_ctxsize		= sizeof(struct atmel_tdes_ctx),
-	.cra_alignmask		= 0x1,
+	.cra_alignmask		= 0,
 	.cra_type		= &crypto_ablkcipher_type,
 	.cra_module		= THIS_MODULE,
 	.cra_init		= atmel_tdes_cra_init,
@@ -1018,7 +1070,7 @@ static struct crypto_alg tdes_algs[] = {
 	.cra_flags		= CRYPTO_ALG_TYPE_ABLKCIPHER | CRYPTO_ALG_ASYNC,
 	.cra_blocksize		= CFB32_BLOCK_SIZE,
 	.cra_ctxsize		= sizeof(struct atmel_tdes_ctx),
-	.cra_alignmask		= 0x3,
+	.cra_alignmask		= 0,
 	.cra_type		= &crypto_ablkcipher_type,
 	.cra_module		= THIS_MODULE,
 	.cra_init		= atmel_tdes_cra_init,
@@ -1038,7 +1090,7 @@ static struct crypto_alg tdes_algs[] = {
 	.cra_flags		= CRYPTO_ALG_TYPE_ABLKCIPHER | CRYPTO_ALG_ASYNC,
 	.cra_blocksize		= DES_BLOCK_SIZE,
 	.cra_ctxsize		= sizeof(struct atmel_tdes_ctx),
-	.cra_alignmask		= 0x7,
+	.cra_alignmask		= 0,
 	.cra_type		= &crypto_ablkcipher_type,
 	.cra_module		= THIS_MODULE,
 	.cra_init		= atmel_tdes_cra_init,
@@ -1058,7 +1110,7 @@ static struct crypto_alg tdes_algs[] = {
 	.cra_flags		= CRYPTO_ALG_TYPE_ABLKCIPHER | CRYPTO_ALG_ASYNC,
 	.cra_blocksize		= DES_BLOCK_SIZE,
 	.cra_ctxsize		= sizeof(struct atmel_tdes_ctx),
-	.cra_alignmask		= 0x7,
+	.cra_alignmask		= 0,
 	.cra_type		= &crypto_ablkcipher_type,
 	.cra_module		= THIS_MODULE,
 	.cra_init		= atmel_tdes_cra_init,
@@ -1077,7 +1129,7 @@ static struct crypto_alg tdes_algs[] = {
 	.cra_flags		= CRYPTO_ALG_TYPE_ABLKCIPHER | CRYPTO_ALG_ASYNC,
 	.cra_blocksize		= DES_BLOCK_SIZE,
 	.cra_ctxsize		= sizeof(struct atmel_tdes_ctx),
-	.cra_alignmask		= 0x7,
+	.cra_alignmask		= 0,
 	.cra_type		= &crypto_ablkcipher_type,
 	.cra_module		= THIS_MODULE,
 	.cra_init		= atmel_tdes_cra_init,
@@ -1097,7 +1149,7 @@ static struct crypto_alg tdes_algs[] = {
 	.cra_flags		= CRYPTO_ALG_TYPE_ABLKCIPHER | CRYPTO_ALG_ASYNC,
 	.cra_blocksize		= DES_BLOCK_SIZE,
 	.cra_ctxsize		= sizeof(struct atmel_tdes_ctx),
-	.cra_alignmask		= 0x7,
+	.cra_alignmask		= 0,
 	.cra_type		= &crypto_ablkcipher_type,
 	.cra_module		= THIS_MODULE,
 	.cra_init		= atmel_tdes_cra_init,
@@ -1137,7 +1189,7 @@ static struct crypto_alg tdes_algs[] = {
 	.cra_flags		= CRYPTO_ALG_TYPE_ABLKCIPHER | CRYPTO_ALG_ASYNC,
 	.cra_blocksize		= CFB16_BLOCK_SIZE,
 	.cra_ctxsize		= sizeof(struct atmel_tdes_ctx),
-	.cra_alignmask		= 0x1,
+	.cra_alignmask		= 0,
 	.cra_type		= &crypto_ablkcipher_type,
 	.cra_module		= THIS_MODULE,
 	.cra_init		= atmel_tdes_cra_init,
@@ -1157,7 +1209,7 @@ static struct crypto_alg tdes_algs[] = {
 	.cra_flags		= CRYPTO_ALG_TYPE_ABLKCIPHER | CRYPTO_ALG_ASYNC,
 	.cra_blocksize		= CFB32_BLOCK_SIZE,
 	.cra_ctxsize		= sizeof(struct atmel_tdes_ctx),
-	.cra_alignmask		= 0x3,
+	.cra_alignmask		= 0,
 	.cra_type		= &crypto_ablkcipher_type,
 	.cra_module		= THIS_MODULE,
 	.cra_init		= atmel_tdes_cra_init,
@@ -1177,7 +1229,7 @@ static struct crypto_alg tdes_algs[] = {
 	.cra_flags		= CRYPTO_ALG_TYPE_ABLKCIPHER | CRYPTO_ALG_ASYNC,
 	.cra_blocksize		= DES_BLOCK_SIZE,
 	.cra_ctxsize		= sizeof(struct atmel_tdes_ctx),
-	.cra_alignmask		= 0x7,
+	.cra_alignmask		= 0,
 	.cra_type		= &crypto_ablkcipher_type,
 	.cra_module		= THIS_MODULE,
 	.cra_init		= atmel_tdes_cra_init,

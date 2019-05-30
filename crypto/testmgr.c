@@ -1154,7 +1154,9 @@ static int __test_skcipher(struct crypto_skcipher *tfm, int enc,
 		if (fips_enabled && template[i].fips_skip)
 			continue;
 
-		if (template[i].iv && !(template[i].generates_iv && enc))
+		if (template[i].generates_iv && !enc)
+			memcpy(iv, template[i].iv_out, ivsize);
+		else if (template[i].iv)
 			memcpy(iv, template[i].iv, ivsize);
 		else
 			memset(iv, 0, MAX_IVLEN);
@@ -1211,8 +1213,8 @@ static int __test_skcipher(struct crypto_skcipher *tfm, int enc,
 			goto out;
 		}
 
-		if (template[i].generates_iv && enc &&
-		    memcmp(iv, template[i].iv, crypto_skcipher_ivsize(tfm))) {
+		if (template[i].iv_out &&
+		    memcmp(iv, template[i].iv_out, crypto_skcipher_ivsize(tfm))) {
 			pr_err("alg: skcipher%s: Test %d failed (invalid output IV) on %s for %s\n",
 			       d, j, e, algo);
 			hexdump(iv, crypto_skcipher_ivsize(tfm));
@@ -1233,7 +1235,9 @@ static int __test_skcipher(struct crypto_skcipher *tfm, int enc,
 		if (fips_enabled && template[i].fips_skip)
 			continue;
 
-		if (template[i].iv && !(template[i].generates_iv && enc))
+		if (template[i].generates_iv && !enc)
+			memcpy(iv, template[i].iv_out, ivsize);
+		else if (template[i].iv)
 			memcpy(iv, template[i].iv, ivsize);
 		else
 			memset(iv, 0, MAX_IVLEN);
