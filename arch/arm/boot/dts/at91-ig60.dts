@@ -270,7 +270,11 @@
 		nand-on-flash-bbt;
 		label = "atmel_nand";
 
+		/* Delete inherited 60-SOM partitions */
+		/delete-node/ partitions;
+
 		partitions {
+
 			compatible = "fixed-partitions";
 			#address-cells = <1>;
 			#size-cells = <1>;
