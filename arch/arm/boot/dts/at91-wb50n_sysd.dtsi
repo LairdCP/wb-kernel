@@ -199,22 +199,22 @@
 
 			uboot@20000 {
 				label = "u-boot";
-				reg = <0x20000 0x80000>;
+				reg = <0x20000 0x100000>;
 			};
 
-			ubootenv@a0000 {
+			ubootenv@120000 {
 				label = "u-boot-env";
-				reg = <0xa0000 0x20000>;
+				reg = <0x120000 0x20000>;
 			};
 
-			ubootenv@c0000 {
+			ubootenv@140000 {
 				label = "u-boot-env";
-				reg = <0xc0000 0x20000>;
+				reg = <0x140000 0x20000>;
 			};
 
-			ubi@e0000 {
+			ubi@160000 {
 				label = "ubi";
-				reg = <0xe0000 0x7f20000>;
+				reg = <0x160000 0x7e20000>;
 			};
 		};
 	};
