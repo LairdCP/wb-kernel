@@ -20,6 +20,21 @@
 		reg = <0x20000000 0x4000000>;
 	};
 
+	reserved-memory {
+		#address-cells = <1>;
+		#size-cells = <1>;
+		ranges;
+		fs_reserved: fs_mem@31e000{
+			reg = <0x31e000 0x2000>;
+			no-map;
+		};
+	};
+
+	fs_mem {
+		compatible = "laird,fs_mem";
+		memory-region = <&fs_reserved>;
+	};
+
 	wifi_pwrseq: wifi_pwrseq {
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_wifi_pmu_en>;
