@@ -26,6 +26,7 @@
 		regulator-max-microvolt = <3300000>;
 
 		gpio = <&pioE 30 GPIO_ACTIVE_HIGH>;
+		startup-delay-us = <110>;
 		enable-active-high;
 	};
 
@@ -145,6 +146,7 @@
 
 &dbgu {
 	atmel,use-dma-tx;
+	atmel,use-dma-rx;
 	status = "okay";
 };
 
