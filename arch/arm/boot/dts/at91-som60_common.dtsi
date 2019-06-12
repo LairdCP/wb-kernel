@@ -1,0 +1,200 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * at91-som60_common.dtsi - Device Tree common file for the SOM60 module
+ *
+ *  Copyright (C) 2018 Laird,
+ *		  2018 Ben Whitten <ben.whitten@lairdtech.com>
+ *		  2018 Boris Krasnovskiy <boris.krasnovskiy@lairdtech.com>
+ *
+ */
+#include "sama5d36.dtsi"
+
+/ {
+	chosen {
+		stdout-path = "serial0:115200n8";
+	};
+
+	reserved-memory {
+		#address-cells = <1>;
+		#size-cells = <1>;
+		ranges;
+
+		fs_reserved: fs_mem@31e000{
+			reg = <0x31e000 0x2000>;
+			no-map;
+		};
+	};
+
+	fs_mem {
+		compatible = "laird,fs_mem";
+		memory-region = <&fs_reserved>;
+	};
+
+	wakeup_bt {
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_bt_wake>;
+
+		compatible = "gpio-wakeup";
+
+		interrupts-extended = <&pioB 10 IRQ_TYPE_EDGE_FALLING>;
+	};
+
+	ahb {
+		apb {
+			sha@f8034000 {
+				status = "disabled";
+			};
+		};
+	};
+};
+
+&pinctrl {
+	board {
+		pinctrl_nand0_wp: nand0_wp {
+			atmel,pins =
+				<AT91_PIOE 14 AT91_PERIPH_GPIO AT91_PINCTRL_NONE>;
+		};
+
+		pinctrl_wifi_pmu_en: wifi_pmu_en {
+			atmel,pins =
+				<AT91_PIOE 5 AT91_PERIPH_GPIO AT91_PINCTRL_PULL_UP>;
+		};
+
+		pinctrl_wifi_wake: wifi_wake {
+			atmel,pins =
+				<AT91_PIOD 14 AT91_PERIPH_GPIO AT91_PINCTRL_PULL_UP_DEGLITCH>;
+		};
+
+		pinctrl_bt_wake: bt_wake {
+			atmel,pins =
+				<AT91_PIOB 10 AT91_PERIPH_GPIO AT91_PINCTRL_PULL_UP_DEGLITCH>;
+		};
+	};
+};
+
+&watchdog {
+	atmel,idle-halt;
+
+	status = "okay";
+};
+
+&slow_xtal {
+	clock-frequency = <32768>;
+};
+
+&main_xtal {
+	clock-frequency = <12000000>;
+};
+
+&slow_osc {
+	atmel,osc-bypass;
+};
+
+&tcb0 {
+	timer0: timer@0 {
+		compatible = "atmel,tcb-timer";
+		reg = <0>;
+	};
+
+	timer1: timer@1 {
+		compatible = "atmel,tcb-timer";
+		reg = <1>;
+	};
+};
+
+&mmc0 {
+	slot@0 {
+		reg = <0>;
+		bus-width = <4>;
+	};
+};
+
+&mmc1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_mmc1_clk_cmd_dat0 &pinctrl_mmc1_dat1_3
+		&pinctrl_wifi_wake &pinctrl_wifi_pmu_en>;
+
+	status = "okay";
+
+	keep-power-in-suspend;
+
+	slot@0 {
+		reg = <0>;
+		bus-width = <4>;
+
+		non-removable;
+
+		wifi: wifi {
+			compatible = "marvell,sd8997";
+			interrupts-extended = <&pioD 14 IRQ_TYPE_EDGE_FALLING>;
+			reset-gpios = <&pioE 5 GPIO_ACTIVE_HIGH>;
+
+			//remove-power-on-link-down;
+		};
+	};
+};
+
+&usart0 {
+	atmel,use-dma-rx;
+	atmel,use-dma-tx;
+	status = "okay";
+	pinctrl-0 = <&pinctrl_usart0 &pinctrl_usart0_rts_cts>;
+};
+
+&adc0 {
+	pinctrl-0 = <
+		&pinctrl_adc0_adtrg &pinctrl_adc0_ad0 &pinctrl_adc0_ad1
+		&pinctrl_adc0_ad2   &pinctrl_adc0_ad3 &pinctrl_adc0_ad4
+		&pinctrl_adc0_ad5
+	>;
+
+	atmel,adc-vref = <3300>;
+};
+
+&macb0 {
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	phy-mode = "rgmii";
+};
+
+&macb1 {
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	phy-mode = "rmii";
+};
+
+&ebi {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_ebi_nand_addr &pinctrl_nand0_wp>;
+	status = "okay";
+};
+
+&nand_controller {
+	status = "okay";
+
+	nand: nand@3 {
+		reg = <0x3 0x0 0x2>;
+		atmel,rb = <0>;
+		nand-bus-width = <8>;
+		nand-ecc-mode = "hw";
+		nand-ecc-strength = <8>;
+		nand-ecc-step-size = <512>;
+		/*
+		 * Note - nand-on-flash-bbt requires the last 4 blocks on
+		 * flash to be reserved for bad block table.  These blocks
+		 * can be used in partitions only if bbt is not stored on flash.
+		 */
+		nand-on-flash-bbt;
+		label = "atmel_nand";
+
+		wp-gpios = <&pioE 14 GPIO_ACTIVE_HIGH>;
+
+		nand_partitions: partitions {
+			compatible = "fixed-partitions";
+			#address-cells = <1>;
+			#size-cells = <1>;
+		};
+	};
+};
