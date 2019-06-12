@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * at91-wb60.dts - Device Tree file for the WB60 board
+ * at91-wb60.dts - Device Tree file for the WB60 module
  *
  *  Copyright (C) 2019 Laird,
  *		  2019 Boris Krasnovskiy <boris.krasnovskiy@lairdtech.com>
