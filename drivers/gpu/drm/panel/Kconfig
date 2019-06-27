@@ -46,6 +46,15 @@ config DRM_PANEL_ILITEK_IL9322
 	  Say Y here if you want to enable support for Ilitek IL9322
 	  QVGA (320x240) RGB, YUV and ITU-T BT.656 panels.
 
+config DRM_PANEL_ILITEK_IL9488
+	tristate "Ilitek ILI9488 320x480 TFT panels"
+	depends on OF
+	depends on BACKLIGHT_CLASS_DEVICE
+	depends on SPI
+	help
+	  Say Y here if you want to enable support for Ilitek IL9488
+	  320x480 RGB panels.
+
 config DRM_PANEL_ILITEK_ILI9881C
 	tristate "Ilitek ILI9881C-based panels"
 	depends on OF

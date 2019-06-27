@@ -570,7 +570,8 @@ static int atmel_hlcdc_dc_modeset_init(struct drm_device *dev)
 
 	ret = atmel_hlcdc_create_outputs(dev);
 	if (ret) {
-		dev_err(dev->dev, "failed to create HLCDC outputs: %d\n", ret);
+		if (ret != -EPROBE_DEFER)
+			dev_err(dev->dev, "failed to create HLCDC outputs: %d\n", ret);
 		return ret;
 	}
 
@@ -642,7 +643,8 @@ static int atmel_hlcdc_dc_load(struct drm_device *dev)
 
 	ret = atmel_hlcdc_dc_modeset_init(dev);
 	if (ret < 0) {
-		dev_err(dev->dev, "failed to initialize mode setting\n");
+		if (ret != -EPROBE_DEFER)
+			dev_err(dev->dev, "failed to initialize mode setting\n");
 		goto err_periph_clk_disable;
 	}
 
