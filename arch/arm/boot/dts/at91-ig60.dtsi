@@ -220,9 +220,9 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_usb_oc &pinctrl_usb_vbus>;
 
-	num-ports = <1>;
-	atmel,vbus-gpio = <&pioE 20 GPIO_ACTIVE_HIGH>;
-	atmel,oc-gpio = <&pioE 15 GPIO_ACTIVE_LOW>;
+	num-ports = <2>;
+	atmel,vbus-gpio = <0>, <&pioE 20 GPIO_ACTIVE_HIGH>;
+	atmel,oc-gpio = <0>, <&pioE 15 GPIO_ACTIVE_LOW>;
 
 	status = "okay";
 };
