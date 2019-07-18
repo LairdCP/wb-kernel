@@ -17,6 +17,7 @@
 #include <linux/module.h>
 #include <linux/delay.h>
 #include <linux/gpio/consumer.h>
+#include <linux/pinctrl/consumer.h>
 #include <linux/regulator/consumer.h>
 #include <linux/spi/spi.h>
 
@@ -24,6 +25,9 @@ struct ili9488 {
 	struct spi_device	*spi;
 	struct backlight_device *backlight;
 	struct regulator	*power;
+	struct pinctrl		*pinctrl;
+	struct pinctrl_state	*pins_sleep;
+	struct pinctrl_state	*pins_boot;
 	struct gpio_desc	*reset_gpio;
 	struct drm_panel	panel;
 };
@@ -193,7 +197,11 @@ static int ili9488_power_on(struct ili9488 *ctx)
 	int ret;
 
 	/* Assert RESET */
-	gpiod_set_value(ctx->reset_gpio, 0);
+	if (ctx->pinctrl) {
+		pinctrl_select_state(ctx->pinctrl, ctx->pins_boot);
+		gpiod_direction_output(ctx->reset_gpio, 0);
+	} else
+		gpiod_set_value(ctx->reset_gpio, 0);
 
 	ret = regulator_enable(ctx->power);
 	if (ret < 0) {
@@ -212,8 +220,12 @@ static int ili9488_power_on(struct ili9488 *ctx)
 
 static int ili9488_power_off(struct ili9488 *ctx)
 {
-	/* De-assert RESET */
-	gpiod_set_value(ctx->reset_gpio, 0);
+	/* Assert RESET */
+	if (ctx->pinctrl) {
+		pinctrl_select_state(ctx->pinctrl, ctx->pins_sleep);
+		gpiod_direction_output(ctx->reset_gpio, 0);
+	} else
+		gpiod_set_value(ctx->reset_gpio, 0);
 
 	return regulator_disable(ctx->power);
 }
@@ -325,12 +337,6 @@ static int ili9488_probe(struct spi_device *spi)
 		return PTR_ERR(ctx->power);
 	}
 
-	ctx->reset_gpio = devm_gpiod_get(dev, "reset", GPIOD_OUT_LOW);
-	if (IS_ERR(ctx->reset_gpio)) {
-		dev_err(dev, "Couldn't get our reset GPIO\n");
-		return PTR_ERR(ctx->reset_gpio);
-	}
-
 	np = of_parse_phandle(dev->of_node, "backlight", 0);
 	if (np) {
 		ctx->backlight = of_find_backlight_by_node(np);
@@ -339,6 +345,35 @@ static int ili9488_probe(struct spi_device *spi)
 		if (!ctx->backlight)
 			return -EPROBE_DEFER;
 	}
+
+	ctx->pinctrl = devm_pinctrl_get(dev);
+	if (!IS_ERR(ctx->pinctrl)) {
+		ctx->pins_boot = pinctrl_lookup_state(ctx->pinctrl,
+			PINCTRL_STATE_DEFAULT);
+		if (IS_ERR(ctx->pins_boot)) {
+			dev_err(dev, "Couldn't get default pinctrl\n");
+			return PTR_ERR(ctx->pins_boot);
+		}
+
+		ctx->pins_sleep = pinctrl_lookup_state(ctx->pinctrl,
+			PINCTRL_STATE_SLEEP);
+		if (IS_ERR(ctx->pins_sleep)) {
+			dev_err(dev, "Couldn't get sleep pinctrl\n");
+			ctx->pins_sleep = NULL;
+		}
+
+		pinctrl_select_state(ctx->pinctrl,
+			ctx->pins_sleep ? ctx->pins_sleep : ctx->pins_boot);
+	}
+	else
+		ctx->pinctrl = NULL;
+
+	ctx->reset_gpio = devm_gpiod_get(dev, "reset", GPIOD_OUT_LOW);
+	if (IS_ERR(ctx->reset_gpio)) {
+		dev_err(dev, "Couldn't get our reset GPIO\n");
+		return PTR_ERR(ctx->reset_gpio);
+	}
+	gpiod_set_consumer_name(ctx->reset_gpio, "Panel Reset");
 
 	spi_set_drvdata(spi, ctx);
 

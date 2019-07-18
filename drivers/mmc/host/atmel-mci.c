@@ -694,10 +694,13 @@ atmci_of_init(struct platform_device *pdev)
 
 		pdata->slot[slot_id].wp_pin =
 			of_get_named_gpio(cnp, "wp-gpios", 0);
+
+		pdata->slot[slot_id].power_off =
+			of_property_read_bool(cnp, "cap-power-off-card");
 	}
 
-	//get power management capabilities
-	pdata->pm_caps=0; // start with none set
+	// get power management capabilities
+	pdata->pm_caps = 0; // start with none set
 	if (of_property_read_bool(np, "keep-power-in-suspend"))
 		pdata->pm_caps |= MMC_PM_KEEP_POWER;
 	if (of_property_read_bool(np, "wakeup-source") ||
@@ -1541,6 +1544,7 @@ static void atmci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 
 	switch (ios->power_mode) {
 	case MMC_POWER_OFF:
+		pinctrl_pm_select_sleep_state(&host->pdev->dev);
 		if (!IS_ERR(mmc->supply.vmmc))
 			mmc_regulator_set_ocr(mmc, mmc->supply.vmmc, 0);
 		break;
@@ -1548,6 +1552,7 @@ static void atmci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 		set_bit(ATMCI_CARD_NEED_INIT, &slot->flags);
 		if (!IS_ERR(mmc->supply.vmmc))
 			mmc_regulator_set_ocr(mmc, mmc->supply.vmmc, ios->vdd);
+		pinctrl_pm_select_default_state(&host->pdev->dev);
 		break;
 	default:
 		break;
@@ -2360,6 +2365,9 @@ static int atmci_init_slot(struct atmel_mci *host,
 		}
 	}
 
+	if (slot_data->power_off)
+		mmc->caps |= MMC_CAP_POWER_OFF_CARD;
+
 	host->slot[id] = slot;
 	mmc_pwrseq_alloc(mmc);
 	mmc_regulator_get_supply(mmc);
@@ -2697,7 +2705,6 @@ static int atmci_runtime_suspend(struct device *dev)
 	struct atmel_mci *host = dev_get_drvdata(dev);
 
 	clk_disable_unprepare(host->mck);
-	pinctrl_pm_select_sleep_state(dev);
 
 	return 0;
 }
@@ -2705,8 +2712,6 @@ static int atmci_runtime_suspend(struct device *dev)
 static int atmci_runtime_resume(struct device *dev)
 {
 	struct atmel_mci *host = dev_get_drvdata(dev);
-
-	pinctrl_pm_select_default_state(dev);
 
 	return clk_prepare_enable(host->mck);
 }

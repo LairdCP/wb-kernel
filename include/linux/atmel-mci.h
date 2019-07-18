@@ -30,6 +30,7 @@ struct mci_slot_pdata {
 	int			wp_pin;
 	bool			detect_is_active_high;
 	bool			non_removable;
+	bool			power_off;
 };
 
 /**

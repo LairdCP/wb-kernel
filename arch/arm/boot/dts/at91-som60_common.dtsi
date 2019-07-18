@@ -70,6 +70,174 @@
 				<AT91_PIOB 10 AT91_PERIPH_GPIO AT91_PINCTRL_PULL_UP_DEGLITCH>;
 		};
 	};
+
+	adc0 {
+		pinctrl_adc0_adtrg_sleep: adc0_adtrg_1 {
+			atmel,pins =
+				<AT91_PIOD 19 AT91_PERIPH_GPIO AT91_PINCTRL_NONE>;
+		};
+		pinctrl_adc0_ad0_sleep: adc0_ad0_1 {
+			atmel,pins =
+				<AT91_PIOD 20 AT91_PERIPH_GPIO AT91_PINCTRL_NONE>;
+		};
+		pinctrl_adc0_ad1_sleep: adc0_ad1_1 {
+			atmel,pins =
+				<AT91_PIOD 21 AT91_PERIPH_GPIO AT91_PINCTRL_NONE>;
+		};
+		pinctrl_adc0_ad2_sleep: adc0_ad2_1 {
+			atmel,pins =
+				<AT91_PIOD 22 AT91_PERIPH_GPIO AT91_PINCTRL_NONE>;
+		};
+		pinctrl_adc0_ad3_sleep: adc0_ad3_1 {
+			atmel,pins =
+				<AT91_PIOD 23 AT91_PERIPH_GPIO AT91_PINCTRL_NONE>;
+		};
+		pinctrl_adc0_ad4_sleep: adc0_ad4_1 {
+			atmel,pins =
+				<AT91_PIOD 24 AT91_PERIPH_GPIO AT91_PINCTRL_NONE>;
+		};
+		pinctrl_adc0_ad5_sleep: adc0_ad5_1 {
+			atmel,pins =
+				<AT91_PIOD 25 AT91_PERIPH_GPIO AT91_PINCTRL_NONE>;	/* PD25 periph A AD5 */
+		};
+	};
+
+	mmc0 {
+		pinctrl_mmc0_clk_cmd_dat0_sleep: mmc0_clk_cmd_dat0_sleep {
+			atmel,pins =
+				<AT91_PIOD 9 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* PD9 periph A MCI0_CK */
+				 AT91_PIOD 0 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* PD0 periph A MCI0_CDA with pullup */
+				 AT91_PIOD 1 AT91_PERIPH_GPIO AT91_PINCTRL_NONE>;	/* PD1 periph A MCI0_DA0 with pullup */
+		};
+		pinctrl_mmc0_dat1_3_sleep: mmc0_dat1_3_sleep {
+			atmel,pins =
+				<AT91_PIOD 2 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* PD2 periph A MCI0_DA1 with pullup */
+				 AT91_PIOD 3 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* PD3 periph A MCI0_DA2 with pullup */
+				 AT91_PIOD 4 AT91_PERIPH_GPIO AT91_PINCTRL_NONE>;	/* PD4 periph A MCI0_DA3 with pullup */
+		};
+		pinctrl_mmc0_dat4_7_sleep: mmc0_dat4_7_sleep {
+			atmel,pins =
+				<AT91_PIOD 5 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* PD5 periph A MCI0_DA4 with pullup, conflicts with TIOA0, PWMH2 */
+				 AT91_PIOD 6 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* PD6 periph A MCI0_DA5 with pullup, conflicts with TIOB0, PWML2 */
+				 AT91_PIOD 7 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* PD7 periph A MCI0_DA6 with pullup, conlicts with TCLK0, PWMH3 */
+				 AT91_PIOD 8 AT91_PERIPH_GPIO AT91_PINCTRL_NONE>;	/* PD8 periph A MCI0_DA7 with pullup, conflicts with PWML3 */
+		};
+	};
+
+	spi0 {
+		pinctrl_spi0_sleep: spi0-0_sleep {
+			atmel,pins =
+				<AT91_PIOD 10 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* PD10 periph A SPI0_MISO pin */
+				 AT91_PIOD 11 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* PD11 periph A SPI0_MOSI pin */
+				 AT91_PIOD 12 AT91_PERIPH_GPIO AT91_PINCTRL_NONE>;	/* PD12 periph A SPI0_SPCK pin */
+		};
+	};
+
+	spi1 {
+		pinctrl_spi1_sleep: spi1-0_sleep {
+			atmel,pins =
+				<AT91_PIOC 22 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* PC22 periph A SPI1_MISO pin */
+				 AT91_PIOC 23 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* PC23 periph A SPI1_MOSI pin */
+				 AT91_PIOC 24 AT91_PERIPH_GPIO AT91_PINCTRL_NONE>;	/* PC24 periph A SPI1_SPCK pin */
+		};
+	};
+
+	lcd {
+		pinctrl_lcd_base_sleep: lcd-base-0_sleep {
+			atmel,pins =
+				<AT91_PIOA 26 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDVSYNC */
+				 AT91_PIOA 27 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDHSYNC */
+				 AT91_PIOA 25 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDDISP */
+				 AT91_PIOA 29 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDDEN */
+				 AT91_PIOA 28 AT91_PERIPH_GPIO AT91_PINCTRL_NONE>;	/* LCDPCK */
+		};
+
+		pinctrl_lcd_rgb444_sleep: lcd-rgb-0_sleep {
+			atmel,pins =
+				<AT91_PIOA 0 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD0 pin */
+				 AT91_PIOA 1 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD1 pin */
+				 AT91_PIOA 2 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD2 pin */
+				 AT91_PIOA 3 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD3 pin */
+				 AT91_PIOA 4 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD4 pin */
+				 AT91_PIOA 5 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD5 pin */
+				 AT91_PIOA 6 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD6 pin */
+				 AT91_PIOA 7 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD7 pin */
+				 AT91_PIOA 8 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD8 pin */
+				 AT91_PIOA 9 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD9 pin */
+				 AT91_PIOA 10 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD10 pin */
+				 AT91_PIOA 11 AT91_PERIPH_GPIO AT91_PINCTRL_NONE>;	/* LCDD11 pin */
+		};
+
+		pinctrl_lcd_rgb565_sleep: lcd-rgb-1_sleep {
+			atmel,pins =
+				<AT91_PIOA 0 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD0 pin */
+				 AT91_PIOA 1 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD1 pin */
+				 AT91_PIOA 2 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD2 pin */
+				 AT91_PIOA 3 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD3 pin */
+				 AT91_PIOA 4 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD4 pin */
+				 AT91_PIOA 5 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD5 pin */
+				 AT91_PIOA 6 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD6 pin */
+				 AT91_PIOA 7 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD7 pin */
+				 AT91_PIOA 8 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD8 pin */
+				 AT91_PIOA 9 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD9 pin */
+				 AT91_PIOA 10 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD10 pin */
+				 AT91_PIOA 11 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD11 pin */
+				 AT91_PIOA 12 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD12 pin */
+				 AT91_PIOA 13 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD13 pin */
+				 AT91_PIOA 14 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD14 pin */
+				 AT91_PIOA 15 AT91_PERIPH_GPIO AT91_PINCTRL_NONE>;	/* LCDD15 pin */
+		};
+
+		pinctrl_lcd_rgb666_sleep: lcd-rgb-2_sleep {
+			atmel,pins =
+				<AT91_PIOA 0 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD0 pin */
+				 AT91_PIOA 1 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD1 pin */
+				 AT91_PIOA 2 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD2 pin */
+				 AT91_PIOA 3 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD3 pin */
+				 AT91_PIOA 4 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD4 pin */
+				 AT91_PIOA 5 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD5 pin */
+				 AT91_PIOA 6 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD6 pin */
+				 AT91_PIOA 7 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD7 pin */
+				 AT91_PIOA 8 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD8 pin */
+				 AT91_PIOA 9 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD9 pin */
+				 AT91_PIOA 10 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD10 pin */
+				 AT91_PIOA 11 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD11 pin */
+				 AT91_PIOA 12 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD12 pin */
+				 AT91_PIOA 13 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD13 pin */
+				 AT91_PIOA 14 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD14 pin */
+				 AT91_PIOA 15 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD15 pin */
+				 AT91_PIOA 16 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD16 pin */
+				 AT91_PIOA 17 AT91_PERIPH_GPIO AT91_PINCTRL_NONE>;	/* LCDD17 pin */
+		};
+
+		pinctrl_lcd_rgb888_sleep: lcd-rgb-3_sleep {
+			atmel,pins =
+				<AT91_PIOA 0 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD0 pin */
+				 AT91_PIOA 1 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD1 pin */
+				 AT91_PIOA 2 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD2 pin */
+				 AT91_PIOA 3 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD3 pin */
+				 AT91_PIOA 4 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD4 pin */
+				 AT91_PIOA 5 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD5 pin */
+				 AT91_PIOA 6 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD6 pin */
+				 AT91_PIOA 7 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD7 pin */
+				 AT91_PIOA 8 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD8 pin */
+				 AT91_PIOA 9 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD9 pin */
+				 AT91_PIOA 10 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD10 pin */
+				 AT91_PIOA 11 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD11 pin */
+				 AT91_PIOA 12 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD12 pin */
+				 AT91_PIOA 13 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD13 pin */
+				 AT91_PIOA 14 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD14 pin */
+				 AT91_PIOA 15 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD15 pin */
+				 AT91_PIOA 16 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD16 pin */
+				 AT91_PIOA 17 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD17 pin */
+				 AT91_PIOA 18 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD18 pin */
+				 AT91_PIOA 19 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD19 pin */
+				 AT91_PIOA 20 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD20 pin */
+				 AT91_PIOA 21 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD21 pin */
+				 AT91_PIOA 22 AT91_PERIPH_GPIO AT91_PINCTRL_NONE	/* LCDD22 pin */
+				 AT91_PIOA 23 AT91_PERIPH_GPIO AT91_PINCTRL_NONE>;	/* LCDD23 pin */
+		};
+	};
 };
 
 &watchdog {
@@ -110,7 +278,6 @@
 };
 
 &mmc1 {
-	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_mmc1_clk_cmd_dat0 &pinctrl_mmc1_dat1_3
 		&pinctrl_wifi_wake &pinctrl_wifi_pmu_en>;
 
@@ -128,25 +295,40 @@
 			compatible = "marvell,sd8997";
 			interrupts-extended = <&pioD 14 IRQ_TYPE_EDGE_FALLING>;
 			reset-gpios = <&pioE 5 GPIO_ACTIVE_HIGH>;
-
-			//remove-power-on-link-down;
 		};
 	};
 };
 
 &usart0 {
+	pinctrl-0 = <&pinctrl_usart0 &pinctrl_usart0_rts_cts>;
+
+	status = "okay";
+
 	atmel,use-dma-rx;
 	atmel,use-dma-tx;
-	status = "okay";
-	pinctrl-0 = <&pinctrl_usart0 &pinctrl_usart0_rts_cts>;
 };
 
 &adc0 {
+	pinctrl-names = "default", "sleep";
 	pinctrl-0 = <
-		&pinctrl_adc0_adtrg &pinctrl_adc0_ad0 &pinctrl_adc0_ad1
-		&pinctrl_adc0_ad2   &pinctrl_adc0_ad3 &pinctrl_adc0_ad4
+		&pinctrl_adc0_adtrg
+		&pinctrl_adc0_ad0
+		&pinctrl_adc0_ad1
+		&pinctrl_adc0_ad2
+		&pinctrl_adc0_ad3
+		&pinctrl_adc0_ad4
 		&pinctrl_adc0_ad5
-	>;
+		>;
+
+	pinctrl-1 = <
+		&pinctrl_adc0_adtrg_sleep
+		&pinctrl_adc0_ad0_sleep
+		&pinctrl_adc0_ad1_sleep
+		&pinctrl_adc0_ad2_sleep
+		&pinctrl_adc0_ad3_sleep
+		&pinctrl_adc0_ad4_sleep
+		&pinctrl_adc0_ad5_sleep
+		>;
 
 	atmel,adc-vref = <3300>;
 };
@@ -181,6 +363,7 @@
 		nand-ecc-mode = "hw";
 		nand-ecc-strength = <8>;
 		nand-ecc-step-size = <512>;
+
 		/*
 		 * Note - nand-on-flash-bbt requires the last 4 blocks on
 		 * flash to be reserved for bad block table.  These blocks

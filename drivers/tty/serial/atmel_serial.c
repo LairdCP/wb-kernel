@@ -61,6 +61,7 @@
 
 static void atmel_start_rx(struct uart_port *port);
 static void atmel_stop_rx(struct uart_port *port);
+static inline bool atmel_is_console_port(struct uart_port *port);
 
 #ifdef CONFIG_SERIAL_ATMEL_TTYAT
 
@@ -1640,9 +1641,11 @@ static void atmel_init_property(struct atmel_uart_port *atmel_port,
 				struct platform_device *pdev)
 {
 	struct device_node *np = pdev->dev.of_node;
+	bool no_dma = atmel_is_console_port(&atmel_port->uart) &&
+		!console_suspend_enabled;
 
 	/* DMA/PDC usage specification */
-	if (of_property_read_bool(np, "atmel,use-dma-rx")) {
+	if (!no_dma && of_property_read_bool(np, "atmel,use-dma-rx")) {
 		if (of_property_read_bool(np, "dmas")) {
 			atmel_port->use_dma_rx  = true;
 			atmel_port->use_pdc_rx  = false;
@@ -1655,7 +1658,7 @@ static void atmel_init_property(struct atmel_uart_port *atmel_port,
 		atmel_port->use_pdc_rx  = false;
 	}
 
-	if (of_property_read_bool(np, "atmel,use-dma-tx")) {
+	if (!no_dma && of_property_read_bool(np, "atmel,use-dma-tx")) {
 		if (of_property_read_bool(np, "dmas")) {
 			atmel_port->use_dma_tx  = true;
 			atmel_port->use_pdc_tx  = false;
@@ -1992,6 +1995,9 @@ static void atmel_serial_pm(struct uart_port *port, unsigned int state,
 		/* Back up the interrupt mask and disable all interrupts */
 		atmel_port->backup_imr = atmel_uart_readl(port, ATMEL_US_IMR);
 		atmel_uart_writel(port, ATMEL_US_IDR, -1);
+
+		/* Disable serial port */
+		atmel_uart_writel(port, ATMEL_US_BRGR, 0);
 
 		/*
 		 * Disable the peripheral clock for this serial port.

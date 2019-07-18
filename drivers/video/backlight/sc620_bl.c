@@ -13,6 +13,7 @@
 #include <linux/err.h>
 #include <linux/of.h>
 #include <linux/regulator/consumer.h>
+#include <linux/delay.h>
 
 /* SC620 Registers */
 #define CHN_ON_OFF_REG		0x00
@@ -45,26 +46,52 @@ static void sc620_set_brightness(struct sc620_bl_data *ctx, u8 val)
 	}
 }
 
-static int sc620_on_off(struct sc620_bl_data *ctx, bool on)
+static int sc620_on_off_reg(struct sc620_bl_data *ctx, bool on)
+{
+	if (on)
+		return regulator_enable(ctx->power_supply);
+
+	return regulator_disable(ctx->power_supply);
+}
+
+static int sc620_on_off_i2c(struct sc620_bl_data *ctx, int brightness, bool on)
+{
+	if (on) {
+		int ret = i2c_smbus_write_byte_data(ctx->i2c, CHN_GAIN_REG,
+			ctx->gain);
+		if (ret)
+			return ret;
+
+		sc620_set_brightness(ctx, brightness);
+	}
+
+	return i2c_smbus_write_byte_data(ctx->i2c, CHN_ON_OFF_REG,
+		on ? ctx->ctrl_mask & 0xff : 0);
+}
+
+static int sc620_on_off(struct sc620_bl_data *ctx, int brightness, bool on)
 {
 	int ret;
 
+	if (ctx->on == on)
+		return 0;
+
 	if (on) {
-		ret = regulator_enable(ctx->power_supply);
+		ret = sc620_on_off_reg(ctx, on);
 		if (ret)
 			return ret;
 
-		i2c_smbus_write_byte_data(ctx->i2c, CHN_ON_OFF_REG,
-			ctx->ctrl_mask & 0xff);
-
-		i2c_smbus_write_byte_data(ctx->i2c, CHN_GAIN_REG,
-			ctx->gain);
-	} else if (regulator_is_enabled(ctx->power_supply)) {
-		i2c_smbus_write_byte_data(ctx->i2c, CHN_ON_OFF_REG, 0);
-
-		ret = regulator_disable(ctx->power_supply);
+		ret = sc620_on_off_i2c(ctx, brightness, on);
+		if (ret) {
+			sc620_on_off_reg(ctx, false);
+			return ret;
+		}
+	} else {
+		ret = sc620_on_off_i2c(ctx, brightness, on);
 		if (ret)
 			return ret;
+
+		sc620_on_off_reg(ctx, on);
 	}
 
 	ctx->on = on;
@@ -80,13 +107,7 @@ static int sc620_bl_update_status(struct backlight_device *bl)
 		&& bl->props.power != FB_BLANK_POWERDOWN
 		&& bl->props.brightness != 0;
 
-	if (on != ctx->on)
-		sc620_on_off(ctx, on);
-
-	if (on)
-		sc620_set_brightness(ctx, bl->props.brightness);
-
-	return 0;
+	return sc620_on_off(ctx, bl->props.brightness, on);
 }
 
 static const struct backlight_ops sc620_bl_ops = {
@@ -162,7 +183,8 @@ static int sc620_probe(struct i2c_client *i2c, const struct i2c_device_id *id)
 		return ret;
 	}
 
-	sc620_on_off(ctx, false);
+	if (regulator_is_enabled(ctx->power_supply))
+		sc620_on_off_i2c(ctx, 0, false);
 
 	dev_info(dev, "Semtech SC620 Backlight driver Initialized\n");
 
@@ -173,7 +195,7 @@ static int sc620_remove(struct i2c_client *i2c)
 {
 	struct sc620_bl_data *ctx = i2c_get_clientdata(i2c);
 
-	sc620_on_off(ctx, false);
+	sc620_on_off(ctx, 0, false);
 
 	return 0;
 }

@@ -124,7 +124,7 @@ static int laird_fs_probe(struct platform_device *pdev)
 	rc = laird_fs_insertkey(&fscrypt_key);
 	if (rc)
 		return rc;
-#if CONFIG_LAIRD_FS_EVM_KEY
+#ifdef CONFIG_LAIRD_FS_EVM_KEY
 	rc = evm_set_key(key->key, sizeof(key->key));
 #endif
 	return rc;
