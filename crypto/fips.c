@@ -20,6 +20,9 @@
 int fips_enabled;
 EXPORT_SYMBOL_GPL(fips_enabled);
 
+int fips_wifi_enabled;
+EXPORT_SYMBOL_GPL(fips_wifi_enabled);
+
 /* Process kernel command-line parameter at boot time. fips=0 or fips=1 */
 static int fips_enable(char *str)
 {
@@ -31,10 +34,28 @@ static int fips_enable(char *str)
 
 __setup("fips=", fips_enable);
 
+static int fips_wifi_enable(char *str)
+{
+	fips_wifi_enabled = !!simple_strtol(str, NULL, 0);
+	printk(KERN_INFO "fips Wi-Fi mode: %s\n",
+		fips_wifi_enabled ? "enabled" : "disabled");
+	return 1;
+}
+
+__setup("fips_wifi=", fips_wifi_enable);
+
+
 static struct ctl_table crypto_sysctl_table[] = {
 	{
 		.procname       = "fips_enabled",
 		.data           = &fips_enabled,
+		.maxlen         = sizeof(int),
+		.mode           = 0444,
+		.proc_handler   = proc_dointvec
+	},
+	{
+		.procname       = "fips_wifi_enabled",
+		.data           = &fips_wifi_enabled,
 		.maxlen         = sizeof(int),
 		.mode           = 0444,
 		.proc_handler   = proc_dointvec
