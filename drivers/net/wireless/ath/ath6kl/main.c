@@ -23,9 +23,6 @@
 #include "target.h"
 #include "debug.h"
 #include "wmiconfig.h"
-#ifdef CONFIG_ATH6KL_LAIRD_FIPS
-#include "laird_fips.h"
-#endif
 
 struct ath6kl_sta *ath6kl_find_sta(struct ath6kl_vif *vif, u8 *node_addr)
 {
@@ -642,7 +639,7 @@ void ath6kl_connect_event(struct ath6kl_vif *vif, u16 channel, u8 *bssid,
 	memcpy(vif->bssid, bssid, sizeof(vif->bssid));
 	vif->bss_ch = channel;
 
-	if ((vif->nw_type == INFRA_NETWORK)) {
+	if (vif->nw_type == INFRA_NETWORK) {
 		ath6kl_wmi_listeninterval_cmd(ar->wmi, vif->fw_vif_idx,
 					      vif->listen_intvl_t, 0);
 		ath6kl_check_ch_switch(ar, channel);
@@ -1135,7 +1132,7 @@ static int ath6kl_set_features(struct net_device *dev,
 		ar->rx_meta_ver = WMI_META_VERSION_2;
 		err = ath6kl_wmi_set_rx_frame_format_cmd(ar->wmi,
 							 vif->fw_vif_idx,
-							 ar->rx_meta_ver, 0, 0);
+							 ar->rx_meta_ver, 0, 0, ar->fips_mode);
 		if (err) {
 			dev->features = features & ~NETIF_F_RXCSUM;
 			return err;
@@ -1145,7 +1142,7 @@ static int ath6kl_set_features(struct net_device *dev,
 		ar->rx_meta_ver = 0;
 		err = ath6kl_wmi_set_rx_frame_format_cmd(ar->wmi,
 							 vif->fw_vif_idx,
-							 ar->rx_meta_ver, 0, 0);
+							 ar->rx_meta_ver, 0, 0, ar->fips_mode);
 		if (err) {
 			dev->features = features | NETIF_F_RXCSUM;
 			return err;
@@ -1300,27 +1297,26 @@ void init_netdev(struct net_device *dev)
 	dev->needs_free_netdev = true;
 	dev->watchdog_timeo = ATH6KL_TX_TIMEOUT;
 
-#ifdef CONFIG_ATH6KL_LAIRD_FIPS
-	if (fips_mode) {
+	if (ar->fips_mode) {
 		dev->needed_headroom = 32 + 8;
 		/* need tailroom for adding ICV */
 		dev->needed_tailroom = 8;
 	} else
-#endif
-	dev->needed_headroom = ETH_HLEN;
+		dev->needed_headroom = ETH_HLEN;
+
 	dev->needed_headroom += roundup(sizeof(struct ath6kl_llc_snap_hdr) +
 					sizeof(struct wmi_data_hdr) +
 					HTC_HDR_LENGTH +
 					WMI_MAX_TX_META_SZ +
 					ATH6KL_HTC_ALIGN_BYTES, 4);
 
-#ifdef CONFIG_ATH6KL_LAIRD_FIPS
-	if (!fips_mode)
+	if (!ar->fips_mode) {
 		/* can only support hardware ip checksum in non-fips mode */
-#endif
-	if (!test_bit(ATH6KL_FW_CAPABILITY_NO_IP_CHECKSUM,
-		      ar->fw_capabilities))
-		dev->hw_features |= NETIF_F_IP_CSUM | NETIF_F_RXCSUM;
+
+		if (!test_bit(ATH6KL_FW_CAPABILITY_NO_IP_CHECKSUM,
+			      ar->fw_capabilities))
+			dev->hw_features |= NETIF_F_IP_CSUM | NETIF_F_RXCSUM;
+	}
 
 	return;
 }

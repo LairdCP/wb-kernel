@@ -32,10 +32,6 @@
 #include "hif-ops.h"
 #include "htc-ops.h"
 
-#ifdef CONFIG_ATH6KL_LAIRD_FIPS
-#include "laird_fips.h"
-#endif
-
 static const struct ath6kl_hw hw_list[] = {
 	{
 		.id				= AR6003_HW_2_0_VERSION,
@@ -482,7 +478,7 @@ static int ath6kl_target_config_wlan_params(struct ath6kl *ar, int idx)
 	 * RxMetaVersion to 2.
 	 */
 	ret = ath6kl_wmi_set_rx_frame_format_cmd(ar->wmi, idx,
-						 ar->rx_meta_ver, 0, 0);
+						 ar->rx_meta_ver, 0, 0, ar->fips_mode);
 	if (ret) {
 		ath6kl_err("unable to set the rx frame format: %d\n", ret);
 		return ret;
@@ -1190,7 +1186,7 @@ static int ath6kl_fetch_fw_apin(struct ath6kl *ar, const char *name)
 
 		len -= ie_len;
 		data += ie_len;
-	};
+	}
 
 	ret = 0;
 out:

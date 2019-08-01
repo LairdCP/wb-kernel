@@ -16,9 +16,8 @@
 #include <linux/scatterlist.h>
 #include <crypto/aead.h>
 
-//#include "aead_api.h"
+#include "aead_api.h"
 
-static inline
 int aead_encrypt(struct crypto_aead *tfm, u8 *b_0, u8 *aad, size_t aad_len,
 		 u8 *data, size_t data_len, u8 *mic)
 {
@@ -50,7 +49,6 @@ int aead_encrypt(struct crypto_aead *tfm, u8 *b_0, u8 *aad, size_t aad_len,
 	return 0;
 }
 
-static inline
 int aead_decrypt(struct crypto_aead *tfm, u8 *b_0, u8 *aad, size_t aad_len,
 		 u8 *data, size_t data_len, u8 *mic)
 {
@@ -86,7 +84,6 @@ int aead_decrypt(struct crypto_aead *tfm, u8 *b_0, u8 *aad, size_t aad_len,
 	return err;
 }
 
-static inline
 struct crypto_aead *
 aead_key_setup_encrypt(const char *alg, const u8 key[],
 		       size_t key_len, size_t mic_len)
@@ -112,37 +109,7 @@ free_aead:
 	return ERR_PTR(err);
 }
 
-static inline
 void aead_key_free(struct crypto_aead *tfm)
 {
-	crypto_free_aead(tfm);
-}
-
-/*======================================================================*/
-/* Laird: functions to adapt to aead_xxx() functions */
-int _ccm_encrypt(void *_tfm, u8 *b_0, u8 *aad, size_t aad_len,
-		 u8 *data, size_t data_len, u8 *mic)
-{
-	struct crypto_aead *tfm = (struct crypto_aead *)_tfm;
-	return aead_encrypt(tfm, b_0, aad, aad_len, data, data_len, mic);
-}
-
-int _ccm_decrypt(void *_tfm, u8 *b_0, u8 *aad, size_t aad_len,
-		 u8 *data, size_t data_len, u8 *mic)
-{
-	struct crypto_aead *tfm = (struct crypto_aead *)_tfm;
-	return aead_decrypt(tfm, b_0, aad, aad_len, data, data_len, mic);
-}
-
-void *
-_ccm_key_setup_encrypt(const char *alg, const u8 key[],
-		       size_t key_len, size_t mic_len)
-{
-	return (void*)aead_key_setup_encrypt(alg, key, key_len, mic_len);
-}
-
-void _ccm_key_free(void *_tfm)
-{
-	struct crypto_aead *tfm = (struct crypto_aead *)_tfm;
 	crypto_free_aead(tfm);
 }

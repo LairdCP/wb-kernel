@@ -29,6 +29,8 @@
 #include "bmi.h"
 #include "target.h"
 
+#include "laird_kfips.h"
+
 #define MAX_ATH6KL                        1
 #define ATH6KL_MAX_RX_BUFFERS             16
 #define ATH6KL_BUFFER_SIZE                1664
@@ -901,6 +903,8 @@ struct ath6kl {
 	u8 btcoex_chip_type;
 	u8 btcoex_ant_config;
 	bool disable_fw_dbglog;
+
+	bool fips_mode;
 
 	struct {
 		enum wmi_phy_mode phy_mode;

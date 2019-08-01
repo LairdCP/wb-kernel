@@ -24,9 +24,6 @@
 #include "trace.h"
 #include "../regd.h"
 #include "../regd_common.h"
-#ifdef CONFIG_ATH6KL_LAIRD_FIPS
-#include "laird_fips.h"
-#endif
 #include "wmiconfig.h"
 
 static int ath6kl_wmi_sync_point(struct wmi *wmi, u8 if_idx);
@@ -275,7 +272,7 @@ u8 ath6kl_wmi_get_traffic_class(u8 user_priority)
 int ath6kl_wmi_implicit_create_pstream(struct wmi *wmi, u8 if_idx,
 				       struct sk_buff *skb,
 				       u32 layer2_priority, bool wmm_enabled,
-				       u8 *ac)
+				       u8 *ac, bool fips_mode)
 {
 	struct wmi_data_hdr *data_hdr;
 	struct ath6kl_llc_snap_hdr *llc_hdr;
@@ -298,7 +295,6 @@ int ath6kl_wmi_implicit_create_pstream(struct wmi *wmi, u8 if_idx,
 	if (!wmm_enabled) {
 		/* If WMM is disabled all traffic goes as BE traffic */
 		usr_pri = 0;
-#ifdef CONFIG_ATH6KL_LAIRD_FIPS
 	} else if (fips_mode) {
 		struct ieee80211_qos_hdr *pwh;
 
@@ -318,7 +314,6 @@ int ath6kl_wmi_implicit_create_pstream(struct wmi *wmi, u8 if_idx,
 		/* NOTE: wmm_enabled is still true when
 		 * associated to non-qos AP
 		 */
-#endif
 	} else {
 		hdr_size = sizeof(struct ethhdr);
 
@@ -774,10 +769,8 @@ int ath6kl_wmi_set_roam_lrssi_cmd(struct wmi *wmi, u8 lrssi)
 	cmd->info.params.roam_rssi_floor = DEF_LRSSI_ROAM_FLOOR;
 	cmd->roam_ctrl = WMI_SET_LRSSI_SCAN_PARAMS;
 
-	ath6kl_wmi_cmd_send(wmi, 0, skb, WMI_SET_ROAM_CTRL_CMDID,
+	return ath6kl_wmi_cmd_send(wmi, 0, skb, WMI_SET_ROAM_CTRL_CMDID,
 			    NO_SYNC_WMIFLAG);
-
-	return 0;
 }
 
 int ath6kl_wmi_force_roam_cmd(struct wmi *wmi, const u8 *bssid)
@@ -3525,7 +3518,7 @@ int ath6kl_wmi_set_pvb_cmd(struct wmi *wmi, u8 if_idx, u16 aid,
 
 int ath6kl_wmi_set_rx_frame_format_cmd(struct wmi *wmi, u8 if_idx,
 				       u8 rx_meta_ver,
-				       bool rx_dot11_hdr, bool defrag_on_host)
+				       bool rx_dot11_hdr, bool defrag_on_host, bool fips_mode)
 {
 	struct sk_buff *skb;
 	struct wmi_rx_frame_format_cmd *cmd;
@@ -3536,14 +3529,13 @@ int ath6kl_wmi_set_rx_frame_format_cmd(struct wmi *wmi, u8 if_idx,
 		return -ENOMEM;
 
 	cmd = (struct wmi_rx_frame_format_cmd *) skb->data;
-#ifdef CONFIG_ATH6KL_LAIRD_FIPS
 	if (fips_mode) {
 		/* force FIPS mode */
 		rx_dot11_hdr = 1;
 		defrag_on_host = 1;
 		cmd->reserved[0] = 1;
 	}
-#endif
+
 	cmd->dot11_hdr = rx_dot11_hdr ? 1 : 0;
 	cmd->defrag_on_host = defrag_on_host ? 1 : 0;
 	cmd->meta_ver = rx_meta_ver;

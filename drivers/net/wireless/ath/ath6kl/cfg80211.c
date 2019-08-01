@@ -28,9 +28,6 @@
 #include "hif-ops.h"
 #include "testmode.h"
 
-#include "laird_fips.h"
-
-
 #define RATETAB_ENT(_rate, _rateid, _flags) {   \
 	.bitrate    = (_rate),                  \
 	.flags      = (_flags),                 \
@@ -294,7 +291,7 @@ static bool ath6kl_cfg80211_ready(struct ath6kl_vif *vif)
 	}
 
 	if (!test_bit(WLAN_ENABLED, &vif->flags)) {
-		ath6kl_err("wlan disabled\n");
+		ath6kl_dbg(ATH6KL_DBG_WLAN_CFG, "wlan disabled\n");
 		return false;
 	}
 
@@ -1176,13 +1173,11 @@ static int ath6kl_cfg80211_add_key(struct wiphy *wiphy, struct net_device *ndev,
 	memcpy(key->seq, params->seq, key->seq_len);
 	key->cipher = params->cipher;
 
-#ifdef CONFIG_ATH6KL_LAIRD_FIPS
-	if (fips_mode) {
+	if (ar->fips_mode) {
 		laird_addkey(ndev, key_index, pairwise, mac_addr,
 			     key->key, key->key_len, key->seq,
 			     key->seq_len);
 	}
-#endif
 
 	switch (key->cipher) {
 	case WLAN_CIPHER_SUITE_WEP40:
@@ -1283,11 +1278,8 @@ static int ath6kl_cfg80211_del_key(struct wiphy *wiphy, struct net_device *ndev,
 
 	vif->keys[key_index].key_len = 0;
 
-#ifdef CONFIG_ATH6KL_LAIRD_FIPS
-	if (fips_mode) {
+	if (ar->fips_mode)
 		laird_delkey(ndev, key_index);
-	}
-#endif
 
 	return ath6kl_wmi_deletekey_cmd(ar->wmi, vif->fw_vif_idx, key_index);
 }

@@ -1,25 +1,63 @@
-extern bool fips_mode;
+/*
+ * Copyright (c) 2019 Laird Connectivity Inc.
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+ * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
 
-extern int laird_data_rx(struct sk_buff **pskb);
-extern int laird_data_tx(struct sk_buff **pskb, struct net_device *dev);
-extern void laird_addkey(struct net_device *ndev, u8 key_index,
-						 bool pairwise,
-						 const u8 * mac_addr,
-						 const u8 * key, int keylen,
-						 const u8 * seq, int seqlen);
-extern void laird_delkey(struct net_device *ndev, u8 key_index);
-extern void laird_deinit(void);
+#ifndef LAIRD_KFIPS_H
+#define LAIRD_KFIPS_H
+
+#ifdef CONFIG_ATH6KL_LAIRD_FIPS
+
+#include <linux/fips.h>
 
 // helper functions to get to aead functions
-#define CCM_AAD_LEN	32
-#ifndef AES_BLOCK_SIZE
-#define AES_BLOCK_SIZE 16
-#endif
-extern int _ccm_encrypt(void *tfm, u8 *b_0, u8 *aad, size_t aad_len,
-						u8 *data, size_t data_len, u8 *mic);
-extern int _ccm_decrypt(void *tfm, u8 *b_0, u8 *aad, size_t aad_len,
-						u8 *data, size_t data_len, u8 *mic);
-extern void *_ccm_key_setup_encrypt(const char *alg, const u8 key[],
-									size_t key_len, size_t mic_len);
-extern void _ccm_key_free(void *_tfm);
+#define LAIRD_HDR_TYPE (ar->fips_mode ? WMI_DATA_HDR_DATA_TYPE_802_11 : 0)
 
+int laird_data_rx(struct sk_buff **pskb);
+int laird_data_tx(struct sk_buff **pskb, struct net_device *dev);
+void laird_addkey(struct net_device *ndev, u8 key_index,
+		  bool pairwise,
+		  const u8 * mac_addr,
+		  const u8 * key, int keylen,
+		  const u8 * seq, int seqlen);
+void laird_delkey(struct net_device *ndev, u8 key_index);
+void laird_deinit(void);
+
+#else
+
+#define LAIRD_HDR_TYPE 0
+
+static inline
+int laird_data_rx(struct sk_buff **pskb) { return -ENODEV; }
+
+static inline
+int laird_data_tx(struct sk_buff **pskb, struct net_device *dev)
+{ return -ENODEV; }
+
+static inline
+void laird_addkey(struct net_device *ndev, u8 key_index,
+		  bool pairwise,
+		  const u8 * mac_addr,
+		  const u8 * key, int keylen,
+		  const u8 * seq, int seqlen) {}
+
+static inline
+void laird_delkey(struct net_device *ndev, u8 key_index) {}
+
+static inline
+void laird_deinit(void) {}
+
+#endif /* CONFIG_ATH6KL_LAIRD_FIPS */
+
+#endif
