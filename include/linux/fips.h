@@ -4,8 +4,10 @@
 
 #ifdef CONFIG_CRYPTO_FIPS
 extern int fips_enabled;
+extern int fips_wifi_enabled;
 #else
 #define fips_enabled 0
+#define fips_wifi_enabled 0
 #endif
 
 #endif
