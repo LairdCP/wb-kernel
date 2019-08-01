@@ -27,10 +27,6 @@
 #include "htc-ops.h"
 #include "cfg80211.h"
 
-#ifdef CONFIG_ATH6KL_LAIRD_FIPS
-#include "laird_fips.h"
-#endif
-
 unsigned int debug_mask;
 static unsigned int suspend_mode;
 static unsigned int wow_mode;
@@ -82,6 +78,10 @@ int ath6kl_core_init(struct ath6kl *ar, enum ath6kl_htc_type htc_type)
 	struct ath6kl_bmi_target_info targ_info;
 	struct wireless_dev *wdev;
 	int ret = 0, i;
+
+#ifdef CONFIG_ATH6KL_LAIRD_FIPS
+	ar->fips_mode = fips_enabled && fips_wifi_enabled;
+#endif
 
 	switch (htc_type) {
 	case ATH6KL_HTC_TYPE_MBOX:
@@ -380,9 +380,7 @@ EXPORT_SYMBOL(ath6kl_core_cleanup);
 
 void ath6kl_core_destroy(struct ath6kl *ar)
 {
-#ifdef CONFIG_ATH6KL_LAIRD_FIPS
 	laird_deinit();
-#endif
 	ath6kl_cfg80211_destroy(ar);
 }
 EXPORT_SYMBOL(ath6kl_core_destroy);
@@ -390,18 +388,3 @@ EXPORT_SYMBOL(ath6kl_core_destroy);
 MODULE_AUTHOR("Qualcomm Atheros");
 MODULE_DESCRIPTION("Core module for AR600x SDIO and USB devices.");
 MODULE_LICENSE("Dual BSD/GPL");
-
-#ifdef CONFIG_ATH6KL_LAIRD_FIPS
-/* module parameter for enabling fips mode on load */
-bool fips_mode = 0;
-module_param(fips_mode, bool, S_IRUGO);
-
-/* dummy function called by external module to register fips support */
-/* return -1 to indicate failure, as this version is using kernel crypto */
-/* TBD: remove when ath6kl_laird/sdc2u are removed */
-int ath6kl_laird_register(const void *ptr)
-{
-	return -1;
-}
-EXPORT_SYMBOL(ath6kl_laird_register);
-#endif

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019 Laird Connect Inc.
+ * Copyright (c) 2019 Laird Connectivity Inc.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -16,14 +16,20 @@
 
 /* Laird: Single Station 802.11 data packets using Kernel Crypto */
 
+
+#include <crypto/aes.h>
+#include <crypto/aead.h>
+
 #include "core.h"
 #include "debug.h"
 #include "htc-ops.h"
 #include "trace.h"
 
-#include "laird_fips.h"
-#ifdef CONFIG_ATH6KL_LAIRD_FIPS
+#include "aead_api.h"
 
+#include "laird_kfips.h"
+
+#define CCM_AAD_LEN	32
 #define is_ethertype(type_or_len)	((type_or_len) >= 0x0600)
 
 struct _llc_snap_hdr {
@@ -35,11 +41,6 @@ struct _llc_snap_hdr {
 } __packed;
 
 static const unsigned char llc_snap[] = { 0xaa, 0xaa, 0x03, 0x00, 0x00, 0x00 };
-
-#if 1
-#ifndef __packed
-#define __packed __attribute((packed))
-#endif
 
 struct laird_wlanhdr {
 	u8 fc[2];
@@ -70,8 +71,6 @@ struct laird_wlanhdr_qos {
 #define QOS0_AMSDU (1<<7)
 } __packed;
 #define WLANHDR_QOS_PAD 2
-
-#endif
 
 static int wlanhdrlen(struct laird_wlanhdr *hdr);
 
@@ -354,19 +353,23 @@ typedef struct {
 	lrd_seq_t rsc;
 	lrd_seq_t rscqos[16];
 	u64 tsc;
-	void *tfm;
+	struct crypto_aead *tfm;
 } lrd_key_t;
 
 
 // call without spinlock (tfm alloc is non-atomic)
 static lrd_key_t *lrd_key_malloc(const u8 *key, int keylen)
 {
-	void *tfm;
+	struct crypto_aead *tfm;
 	lrd_key_t *pk;
+
+	if (!keylen)
+		return NULL;
+
 	pk = kmalloc(sizeof(*pk), GFP_ATOMIC);
 	if (pk) {
 		memset(pk, 0, sizeof(*pk));
-		tfm = _ccm_key_setup_encrypt("ccm(aes)", key, keylen, 8);
+		tfm = aead_key_setup_encrypt("ccm(aes)", key, keylen, 8);
 		if (IS_ERR(tfm)) {
 			// failed to initialize crypto
 			printk(KERN_ERR "%s: 802.11 ccmp key setup failed", __func__);
@@ -384,10 +387,8 @@ static lrd_key_t *lrd_key_malloc(const u8 *key, int keylen)
 // should be called with spinlock
 static void lrd_key_unref(lrd_key_t *pk)
 {
-	if (!pk)
-		return;
-	if (--pk->refcount < 0) {
-		_ccm_key_free(pk->tfm);
+	if (pk && --pk->refcount < 0) {
+		aead_key_free(pk->tfm);
 		memset(pk, 0, sizeof(*pk));
 		kfree(pk);
 	}
@@ -547,7 +548,7 @@ static int laird_skb_encrypt(struct sk_buff *skb)
 	aadlen = ecr_set_aad(wlan_hdr, aad, b_0) ;
 	pdata = (u8*)wlan_hdr + wlanhdrlen(wlan_hdr) + 8;
 	pmic = (u8*)(skb->data) + skb->len - 8;
-	res = _ccm_encrypt(pk->tfm, b_0, aad+2, aadlen,
+	res = aead_encrypt(pk->tfm, b_0, aad+2, aadlen,
 					   pdata, pmic - pdata, pmic);
 	if (res) {
 		// encrypt failure
@@ -614,8 +615,8 @@ static int laird_skb_decrypt(struct sk_buff *skb)
 	pdata = (u8*)wlan_hdr + wlanhdrlen(wlan_hdr) + 8;
 	pmic = (u8*)(skb->data) + skb->len - 8;
 
-	res = _ccm_decrypt(pk->tfm, b_0, aad+2, aadlen,
-						pdata, pmic - pdata, pmic);
+	res = aead_decrypt(pk->tfm, b_0, aad + 2, aadlen,
+		pdata, pmic - pdata, pmic);
 
 	if (res) {
 		// decrypt failure
@@ -640,18 +641,13 @@ int laird_data_tx(struct sk_buff **skbin, struct net_device *dev)
 	int wmm = ar->wmi->is_wmm_enabled;
 	struct sk_buff *skb = *skbin;
 	struct ethhdr *eth_hdr;
-	//struct ieee80211_hdr *hdr;
 	struct laird_wlanhdr *wlan_hdr;
 	struct _llc_snap_hdr *llc_hdr;
 	u16 type;
 	int res = 0;
 	size_t size;
-	int up;
+	int up = 0;
 	int do_encrypt = 1;
-
-	/* if not in fips_mode use the normal routine */
-	if (!fips_mode)
-		return 0;
 
 	if (skb->len < sizeof(struct ethhdr))
 		return -EINVAL;
@@ -750,7 +746,7 @@ int laird_data_tx(struct sk_buff **skbin, struct net_device *dev)
 		dev_kfree_skb(*skbin);
 		*skbin = skb;
 	}
-	return 1;
+	return 0;
 
 fail:
 	if (skb != *skbin) {
@@ -771,11 +767,6 @@ int laird_data_rx(struct sk_buff **skbin)
 	int mlen;
 
 	int do_decrypt, is_qos, hdrlen, fragNum, is_amsdu;
-
-	/* if not in fips_mode use the normal routine */
-	if (!fips_mode) {
-		return 0;
-	}
 
 	if (skb->len < sizeof(struct laird_wlanhdr)) {
 		return -EINVAL;
@@ -910,12 +901,11 @@ void laird_addkey(struct net_device *ndev, u8 key_index,
 	if (seqlen > 8)
 		return;
 
-	if (keylen != 0) {
-		// allocate before the spinlock, delete if unused
-		pk = lrd_key_malloc(key, keylen);
-	}
+	// allocate before the spinlock, delete if unused
+	pk = lrd_key_malloc(key, keylen);
 
 	spin_lock_bh(&laird_key_spinlock);
+
 	if (pairwise)
 		__glob.tx_index = key_index;
 	ki = &__glob.ki[key_index & 3];
@@ -941,6 +931,7 @@ void laird_addkey(struct net_device *ndev, u8 key_index,
 			}
 		}
 	}
+
 	spin_unlock_bh(&laird_key_spinlock);
 }
 
@@ -952,9 +943,9 @@ void laird_delkey(struct net_device *ndev, u8 key_index)
 void laird_deinit(void)
 {
 	int i;
+
 	lairdReassemblyPurgeAll();
-	for (i=0; i<4; i++) {
+
+	for (i = 0; i < 4; i++)
 		laird_delkey(NULL, i);
-	}
 }
-#endif

@@ -2602,7 +2602,7 @@ int ath6kl_wmi_dot11_hdr_remove(struct wmi *wmi, struct sk_buff *skb);
 int ath6kl_wmi_dot3_2_dix(struct sk_buff *skb);
 int ath6kl_wmi_implicit_create_pstream(struct wmi *wmi, u8 if_idx,
 				       struct sk_buff *skb, u32 layer2_priority,
-				       bool wmm_enabled, u8 *ac);
+				       bool wmm_enabled, u8 *ac, bool fips_mode);
 
 int ath6kl_wmi_control_rx(struct wmi *wmi, struct sk_buff *skb);
 
@@ -2748,7 +2748,7 @@ int ath6kl_wmi_set_pvb_cmd(struct wmi *wmi, u8 if_idx, u16 aid, bool flag);
 
 int ath6kl_wmi_set_rx_frame_format_cmd(struct wmi *wmi, u8 if_idx,
 				       u8 rx_meta_version,
-				       bool rx_dot11_hdr, bool defrag_on_host);
+				       bool rx_dot11_hdr, bool defrag_on_host, bool fips_mode);
 
 int ath6kl_wmi_set_appie_cmd(struct wmi *wmi, u8 if_idx, u8 mgmt_frm_type,
 			     const u8 *ie, u8 ie_len);

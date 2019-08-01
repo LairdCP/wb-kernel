@@ -22,8 +22,6 @@
 #include "htc-ops.h"
 #include "trace.h"
 
-#include "laird_fips.h"
-
 /*
  * tid - tid_mux0..tid_mux3
  * aid - tid_mux4..tid_mux7
@@ -372,12 +370,11 @@ netdev_tx_t ath6kl_data_tx(struct sk_buff *skb, struct net_device *dev)
 	u8 meta_ver = 0;
 	u32 flags = 0;
 
-#ifdef CONFIG_ATH6KL_LAIRD_FIPS
-	int isfips;
-	isfips = laird_data_tx(&skb, dev); // note, may return a different skb
-	if (isfips < 0) /* check if fips encryption failed */
-		goto fail_tx;
-#endif
+	if (ar->fips_mode) {
+		// note, may return a different skb
+		if (laird_data_tx(&skb, dev))
+			goto fail_tx;
+	}
 
 	ath6kl_dbg(ATH6KL_DBG_WLAN_TX,
 		   "%s: skb=0x%p, data=0x%p, len=0x%x\n", __func__,
@@ -400,12 +397,9 @@ netdev_tx_t ath6kl_data_tx(struct sk_buff *skb, struct net_device *dev)
 	}
 
 	if (test_bit(WMI_ENABLED, &ar->flag)) {
-#ifdef CONFIG_ATH6KL_LAIRD_FIPS
-		if (isfips)
-			goto fips_skip1;
-
+		if (!ar->fips_mode) {
 		/* only do the following for non-fips mode */
-#endif
+
 		if ((dev->features & NETIF_F_IP_CSUM) &&
 		    (csum == CHECKSUM_PARTIAL)) {
 			csum_start = skb->csum_start -
@@ -424,11 +418,9 @@ netdev_tx_t ath6kl_data_tx(struct sk_buff *skb, struct net_device *dev)
 			ath6kl_err("ath6kl_wmi_dix_2_dot3 failed\n");
 			goto fail_tx;
 		}
+		}
 
-#ifdef CONFIG_ATH6KL_LAIRD_FIPS
-fips_skip1: /* continue fips processing here */
-#endif /* CONFIG_ATH6KL_LAIRD_FIPS */
-
+		/* continue fips processing here */
 		if ((dev->features & NETIF_F_IP_CSUM) &&
 		    (csum == CHECKSUM_PARTIAL)) {
 			meta_v2.csum_start = csum_start;
@@ -442,12 +434,6 @@ fips_skip1: /* continue fips processing here */
 			meta_ver = 0;
 			meta = NULL;
 		}
-
-#ifdef CONFIG_ATH6KL_LAIRD_FIPS
-#define LAIRD_HDR_TYPE (isfips ? WMI_DATA_HDR_DATA_TYPE_802_11 : 0)
-#else
-#define LAIRD_HDR_TYPE 0
-#endif /* CONFIG_ATH6KL_LAIRD_FIPS */
 
 		ret = ath6kl_wmi_data_hdr_add(ar->wmi, skb,
 				DATA_MSGTYPE, flags, LAIRD_HDR_TYPE,
@@ -467,7 +453,7 @@ fips_skip1: /* continue fips processing here */
 			/* get the stream mapping */
 			ret = ath6kl_wmi_implicit_create_pstream(ar->wmi,
 				    vif->fw_vif_idx, skb,
-				    0, test_bit(WMM_ENABLED, &vif->flags), &ac);
+				    0, test_bit(WMM_ENABLED, &vif->flags), &ac, ar->fips_mode);
 			if (ret)
 				goto fail_tx;
 		}
@@ -1568,8 +1554,7 @@ void ath6kl_rx(struct htc_target *target, struct htc_packet *packet)
 
 	skb_pull(skb, pad_before_data_start);
 
-#ifdef CONFIG_ATH6KL_LAIRD_FIPS
-	if (fips_mode) {
+	if (ar->fips_mode) {
 		int res;
 		res = laird_data_rx(&skb);
 		if (res < 0) {
@@ -1581,19 +1566,11 @@ void ath6kl_rx(struct htc_target *target, struct htc_packet *packet)
 			// packet consumed by defragmentation
 			return;
 		}
-		/* letting driver finish receive processing */
-		goto fips_already_eth;
-	}
-#endif
-
-	if (dot11_hdr)
+	} else if (dot11_hdr)
 		status = ath6kl_wmi_dot11_hdr_remove(ar->wmi, skb);
 	else if (!is_amsdu)
 		status = ath6kl_wmi_dot3_2_dix(skb);
 
-#ifdef CONFIG_ATH6KL_LAIRD_FIPS
-fips_already_eth:
-#endif
 	if (status) {
 		/*
 		 * Drop frames that could not be processed (lack of
