@@ -25,6 +25,7 @@
 #include <linux/dmaengine.h>
 #include <linux/of_device.h>
 #include <linux/delay.h>
+#include <linux/fips.h>
 #include <linux/crypto.h>
 #include <crypto/scatterwalk.h>
 #include <crypto/aes.h>
@@ -82,18 +83,12 @@
 
 #define ATMEL_AES_QUEUE_LENGTH	50
 
-#define ATMEL_AES_DMA_THRESHOLD		256
-#define ATMEL_AES_SYNC_THRESHOLD	64
+#define ATMEL_AES_DMA_THRESHOLD 256
+#define ATMEL_AES_SYNC_THRESHOLD 64
 
-#ifdef CONFIG_CRYPTO_DEV_ATMEL_AES_SERIAL
+#define ATMEL_CRYPTO_ALG_FLAGS_SYNC (CRYPTO_ALG_KERN_DRIVER_ONLY)
 
-#define ATMEL_CRYPTO_ALG_FLAGS (CRYPTO_ALG_KERN_DRIVER_ONLY)
-
-#else
-
-#define ATMEL_CRYPTO_ALG_FLAGS (CRYPTO_ALG_ASYNC | CRYPTO_ALG_KERN_DRIVER_ONLY)
-
-#endif
+#define ATMEL_CRYPTO_ALG_FLAGS_ASYNC (CRYPTO_ALG_ASYNC | CRYPTO_ALG_KERN_DRIVER_ONLY)
 
 struct atmel_aes_caps {
 	bool			has_dualbuff;
@@ -264,6 +259,7 @@ struct atmel_aes_drv {
 	struct crypto_queue	queue;
 	struct atmel_aes_dev	*dd;
 	spinlock_t		lock;
+	bool			sync_mode;
 };
 
 static struct atmel_aes_drv atmel_aes = {
@@ -532,15 +528,13 @@ static int atmel_aes_complete(struct atmel_aes_dev *dd, int err)
 	if (dd->ctx->is_aead)
 		atmel_aes_authenc_complete(dd, err);
 #endif
-
 	atmel_aes_write(dd, AES_CR, AES_CR_SWRST);
 
-#ifndef CONFIG_CRYPTO_DEV_ATMEL_AES_SERIAL
 	if (dd->is_async)
 		dd->areq->complete(dd->areq, err);
 
 	atmel_aes_handle_queue(NULL);
-#endif
+
 	return err;
 }
 
@@ -571,8 +565,16 @@ static void atmel_aes_write_ctrl_key(struct atmel_aes_dev *dd, bool use_dma,
 
 	atmel_aes_write_n(dd, AES_KEYWR(0), key, SIZE_IN_WORDS(keylen));
 
-	if (iv && (valmr & AES_MR_OPMOD_MASK) != AES_MR_OPMOD_ECB)
-		atmel_aes_write_block(dd, AES_IVR(0), iv);
+	if (iv && (valmr & AES_MR_OPMOD_MASK) != AES_MR_OPMOD_ECB) {
+		/* Perform 4 byte alignment for iv if needed */
+		if ((unsigned long)iv & 3) {
+			u32 ivbuf[AES_BLOCK_SIZE / sizeof(u32)];
+			memcpy(ivbuf, iv, AES_BLOCK_SIZE);
+
+			atmel_aes_write_block(dd, AES_IVR(0), ivbuf);
+		} else
+			atmel_aes_write_block(dd, AES_IVR(0), iv);
+	}
 }
 
 static inline void atmel_aes_write_ctrl(struct atmel_aes_dev *dd, bool use_dma,
@@ -632,6 +634,7 @@ static int atmel_aes_cpu_start(struct atmel_aes_dev *dd,
 	sg_copy_to_buffer(src, sg_nents(src), dd->buf, len);
 	memset(dd->buf + len, 0, padlen);
 
+	dd->src.sg = NULL;
 	dd->total = len;
 	dd->real_dst = dst;
 	dd->cpu_transfer_complete = resume;
@@ -770,6 +773,9 @@ static int atmel_aes_map(struct atmel_aes_dev *dd,
 
 static void atmel_aes_unmap(struct atmel_aes_dev *dd)
 {
+	if (!dd->src.sg)
+		return;
+
 	if (dd->src.sg == dd->dst.sg) {
 		dma_unmap_sg(dd->dev, dd->src.sg, dd->src.nents,
 			     DMA_BIDIRECTIONAL);
@@ -844,7 +850,10 @@ static int atmel_aes_dma_transfer_start(struct atmel_aes_dev *dd,
 	if (!desc)
 		return -ENOMEM;
 
-	if (!dd->force_sync) {
+	if (dd->force_sync) {
+		desc->callback = NULL;
+		desc->callback_param = NULL;
+	} else {
 		desc->callback = callback;
 		desc->callback_param = dd;
 	}
@@ -858,31 +867,10 @@ static int atmel_aes_dma_transfer_start(struct atmel_aes_dev *dd,
 	return 0;
 }
 
-static void atmel_aes_dma_transfer_stop(struct atmel_aes_dev *dd,
-					enum dma_transfer_direction dir)
+static inline void atmel_aes_dma_stop(struct atmel_aes_dev *dd)
 {
-	struct atmel_aes_dma *dma;
-
-	switch (dir) {
-	case DMA_MEM_TO_DEV:
-		dma = &dd->src;
-		break;
-
-	case DMA_DEV_TO_MEM:
-		dma = &dd->dst;
-		break;
-
-	default:
-		return;
-	}
-
-	dmaengine_terminate_all(dma->chan);
-}
-
-static void atmel_aes_dma_stop(struct atmel_aes_dev *dd)
-{
-	atmel_aes_dma_transfer_stop(dd, DMA_MEM_TO_DEV);
-	atmel_aes_dma_transfer_stop(dd, DMA_DEV_TO_MEM);
+	dmaengine_terminate_async(dd->src.chan);
+	dmaengine_terminate_async(dd->dst.chan);
 	atmel_aes_unmap(dd);
 }
 
@@ -904,6 +892,11 @@ static int atmel_aes_dma_start(struct atmel_aes_dev *dd,
 	int err;
 
 	switch (dd->ctx->block_size) {
+	case AES_BLOCK_SIZE:
+		addr_width = DMA_SLAVE_BUSWIDTH_4_BYTES;
+		maxburst = dd->caps.max_burst_size;
+		break;
+
 	case CFB8_BLOCK_SIZE:
 		addr_width = DMA_SLAVE_BUSWIDTH_1_BYTE;
 		maxburst = 1;
@@ -918,11 +911,6 @@ static int atmel_aes_dma_start(struct atmel_aes_dev *dd,
 	case CFB64_BLOCK_SIZE:
 		addr_width = DMA_SLAVE_BUSWIDTH_4_BYTES;
 		maxburst = 1;
-		break;
-
-	case AES_BLOCK_SIZE:
-		addr_width = DMA_SLAVE_BUSWIDTH_4_BYTES;
-		maxburst = dd->caps.max_burst_size;
 		break;
 
 	default:
@@ -958,7 +946,8 @@ static int atmel_aes_dma_start(struct atmel_aes_dev *dd,
 	 else
 		wait_dma_complete(&dd->dst);
 
-	atmel_aes_dma_stop(dd);
+	atmel_aes_unmap(dd);
+
 	return dd->resume(dd);
 
 unmap:
@@ -971,9 +960,6 @@ static void atmel_aes_dma_callback(void *data)
 {
 	struct atmel_aes_dev *dd = data;
 
-	atmel_aes_dma_stop(dd);
-	dd->is_async = true;
-
 	tasklet_schedule(&dd->done_task);
 }
 
@@ -981,15 +967,10 @@ static void atmel_aes_dma_src_callback(void *data)
 {
 	struct atmel_aes_dev *dd = data;
 
-	atmel_aes_dma_stop(dd);
-	dd->is_async = true;
-
 	atmel_aes_write(dd, AES_IER, AES_INT_DATARDY);
 }
 
-#ifdef CONFIG_CRYPTO_DEV_ATMEL_AES_SERIAL
-
-static int atmel_aes_handle_queue(struct crypto_async_request *new_areq)
+static int atmel_aes_handle_queue_sync(struct crypto_async_request *new_areq)
 {
 	struct atmel_aes_base_ctx *ctx;
 	struct atmel_aes_dev *dd;
@@ -1025,9 +1006,7 @@ static int atmel_aes_handle_queue(struct crypto_async_request *new_areq)
 	return ret;
 }
 
-#else
-
-static int atmel_aes_handle_queue(struct crypto_async_request *new_areq)
+static int atmel_aes_handle_queue_async(struct crypto_async_request *new_areq)
 {
 	struct crypto_async_request *areq = NULL, *backlog = NULL;
 	struct atmel_aes_base_ctx *ctx;
@@ -1077,7 +1056,13 @@ static int atmel_aes_handle_queue(struct crypto_async_request *new_areq)
 
 	return ret;
 }
-#endif
+
+static inline int atmel_aes_handle_queue(struct crypto_async_request *new_areq)
+{
+	return atmel_aes.sync_mode ?
+		atmel_aes_handle_queue_sync(new_areq) :
+		atmel_aes_handle_queue_async(new_areq);
+}
 
 /* AES async block ciphers */
 
@@ -1125,9 +1110,8 @@ static int atmel_aes_bc_start(struct atmel_aes_dev *dd)
 	bool use_dma = (req->cryptlen >= ATMEL_AES_DMA_THRESHOLD ||
 			dd->ctx->block_size != AES_BLOCK_SIZE);
 
-#ifndef CONFIG_CRYPTO_DEV_ATMEL_AES_SERIAL
-	dd->force_sync = (req->cryptlen <= ATMEL_AES_SYNC_THRESHOLD);
-#endif
+	dd->force_sync = atmel_aes.sync_mode ||
+		(req->cryptlen <= ATMEL_AES_SYNC_THRESHOLD);
 
 	atmel_aes_set_mode(dd, rctx);
 
@@ -1150,9 +1134,8 @@ static int atmel_aes_start(struct atmel_aes_dev *dd)
 
 	bool use_dma = (req->cryptlen >= ATMEL_AES_DMA_THRESHOLD);
 
-#ifndef CONFIG_CRYPTO_DEV_ATMEL_AES_SERIAL
-	dd->force_sync = (req->cryptlen <= ATMEL_AES_SYNC_THRESHOLD);
-#endif
+	dd->force_sync = atmel_aes.sync_mode ||
+		(req->cryptlen <= ATMEL_AES_SYNC_THRESHOLD);
 
 	atmel_aes_set_mode(dd, rctx);
 
@@ -1230,9 +1213,8 @@ static int atmel_aes_ctr_transfer(struct atmel_aes_dev *dd)
 
 	use_dma = (datalen >= ATMEL_AES_DMA_THRESHOLD);
 
-#ifndef CONFIG_CRYPTO_DEV_ATMEL_AES_SERIAL
-	dd->force_sync = (datalen <= ATMEL_AES_SYNC_THRESHOLD);
-#endif
+	dd->force_sync = atmel_aes.sync_mode ||
+		(datalen <= ATMEL_AES_SYNC_THRESHOLD);
 
 	/* Jump to offset. */
 	src = scatterwalk_ffwd(rctx->src, rctx->rsrc, rctx->offset);
@@ -1595,7 +1577,7 @@ static struct skcipher_alg skcipher_aes_algs[] = {
 		.cra_name		= "ecb(aes)",
 		.cra_driver_name	= "atmel-ecb-aes",
 		.cra_priority		= ATMEL_AES_PRIORITY,
-		.cra_flags		= ATMEL_CRYPTO_ALG_FLAGS,
+		.cra_flags		= ATMEL_CRYPTO_ALG_FLAGS_ASYNC,
 		.cra_blocksize		= AES_BLOCK_SIZE,
 		.cra_ctxsize		= sizeof(struct atmel_aes_ctx),
 		.cra_alignmask		= 0,
@@ -1614,7 +1596,7 @@ static struct skcipher_alg skcipher_aes_algs[] = {
 		.cra_name		= "cbc(aes)",
 		.cra_driver_name	= "atmel-cbc-aes",
 		.cra_priority		= ATMEL_AES_PRIORITY,
-		.cra_flags		= ATMEL_CRYPTO_ALG_FLAGS,
+		.cra_flags		= ATMEL_CRYPTO_ALG_FLAGS_ASYNC,
 		.cra_blocksize		= AES_BLOCK_SIZE,
 		.cra_ctxsize		= sizeof(struct atmel_aes_ctx),
 		.cra_alignmask		= 0,
@@ -1633,7 +1615,7 @@ static struct skcipher_alg skcipher_aes_algs[] = {
 		.cra_name		= "ofb(aes)",
 		.cra_driver_name	= "atmel-ofb-aes",
 		.cra_priority		= ATMEL_AES_PRIORITY,
-		.cra_flags		= ATMEL_CRYPTO_ALG_FLAGS,
+		.cra_flags		= ATMEL_CRYPTO_ALG_FLAGS_ASYNC,
 		.cra_blocksize		= AES_BLOCK_SIZE,
 		.cra_ctxsize		= sizeof(struct atmel_aes_ctx),
 		.cra_alignmask		= 0,
@@ -1652,7 +1634,7 @@ static struct skcipher_alg skcipher_aes_algs[] = {
 		.cra_name		= "cfb(aes)",
 		.cra_driver_name	= "atmel-cfb-aes",
 		.cra_priority		= ATMEL_AES_PRIORITY,
-		.cra_flags		= ATMEL_CRYPTO_ALG_FLAGS,
+		.cra_flags		= ATMEL_CRYPTO_ALG_FLAGS_ASYNC,
 		.cra_blocksize		= AES_BLOCK_SIZE,
 		.cra_ctxsize		= sizeof(struct atmel_aes_ctx),
 		.cra_alignmask		= 0,
@@ -1671,7 +1653,7 @@ static struct skcipher_alg skcipher_aes_algs[] = {
 		.cra_name		= "cfb32(aes)",
 		.cra_driver_name	= "atmel-cfb32-aes",
 		.cra_priority		= ATMEL_AES_PRIORITY,
-		.cra_flags		= ATMEL_CRYPTO_ALG_FLAGS,
+		.cra_flags		= ATMEL_CRYPTO_ALG_FLAGS_ASYNC,
 		.cra_blocksize		= CFB32_BLOCK_SIZE,
 		.cra_ctxsize		= sizeof(struct atmel_aes_ctx),
 		.cra_alignmask		= 0,
@@ -1690,7 +1672,7 @@ static struct skcipher_alg skcipher_aes_algs[] = {
 		.cra_name		= "cfb16(aes)",
 		.cra_driver_name	= "atmel-cfb16-aes",
 		.cra_priority		= ATMEL_AES_PRIORITY,
-		.cra_flags		= ATMEL_CRYPTO_ALG_FLAGS,
+		.cra_flags		= ATMEL_CRYPTO_ALG_FLAGS_ASYNC,
 		.cra_blocksize		= CFB16_BLOCK_SIZE,
 		.cra_ctxsize		= sizeof(struct atmel_aes_ctx),
 		.cra_alignmask		= 0,
@@ -1709,7 +1691,7 @@ static struct skcipher_alg skcipher_aes_algs[] = {
 		.cra_name		= "cfb8(aes)",
 		.cra_driver_name	= "atmel-cfb8-aes",
 		.cra_priority		= ATMEL_AES_PRIORITY,
-		.cra_flags		= ATMEL_CRYPTO_ALG_FLAGS,
+		.cra_flags		= ATMEL_CRYPTO_ALG_FLAGS_ASYNC,
 		.cra_blocksize		= CFB8_BLOCK_SIZE,
 		.cra_ctxsize		= sizeof(struct atmel_aes_ctx),
 		.cra_alignmask		= 0,
@@ -1729,7 +1711,7 @@ static struct skcipher_alg skcipher_aes_algs[] = {
 		.cra_name		= "ctr(aes)",
 		.cra_driver_name	= "atmel-ctr-aes",
 		.cra_priority		= ATMEL_AES_PRIORITY,
-		.cra_flags		= ATMEL_CRYPTO_ALG_FLAGS,
+		.cra_flags		= ATMEL_CRYPTO_ALG_FLAGS_ASYNC,
 		.cra_blocksize		= 1,
 		.cra_ctxsize		= sizeof(struct atmel_aes_ctx),
 		.cra_alignmask		= 0,
@@ -1748,7 +1730,7 @@ static struct skcipher_alg skcipher_aes_algs[] = {
 		.cra_name		= "cfb64(aes)",
 		.cra_driver_name	= "atmel-cfb64-aes",
 		.cra_priority		= ATMEL_AES_PRIORITY,
-		.cra_flags		= ATMEL_CRYPTO_ALG_FLAGS,
+		.cra_flags		= ATMEL_CRYPTO_ALG_FLAGS_ASYNC,
 		.cra_blocksize		= CFB64_BLOCK_SIZE,
 		.cra_ctxsize		= sizeof(struct atmel_aes_ctx),
 		.cra_alignmask		= 0,
@@ -1767,7 +1749,7 @@ static struct skcipher_alg skcipher_aes_algs[] = {
 		.cra_name		= "xts(aes)",
 		.cra_driver_name	= "atmel-xts-aes",
 		.cra_priority		= ATMEL_AES_PRIORITY,
-		.cra_flags		= ATMEL_CRYPTO_ALG_FLAGS,
+		.cra_flags		= ATMEL_CRYPTO_ALG_FLAGS_ASYNC,
 		.cra_blocksize		= AES_BLOCK_SIZE,
 		.cra_ctxsize		= sizeof(struct atmel_aes_xts_ctx),
 		.cra_alignmask		= 0,
@@ -1782,9 +1764,8 @@ static int atmel_aes_cbcmac_do_start(struct atmel_aes_dev *dd,
 {
 	bool use_dma = (cryptlen >= ATMEL_AES_DMA_THRESHOLD);
 
-#ifndef CONFIG_CRYPTO_DEV_ATMEL_AES_SERIAL
-	dd->force_sync = (cryptlen <= ATMEL_AES_SYNC_THRESHOLD);
-#endif
+	dd->force_sync = atmel_aes.sync_mode ||
+		(cryptlen <= ATMEL_AES_SYNC_THRESHOLD);
 
 	dd->flags = (dd->flags & AES_FLAGS_PERSISTENT) |
 		AES_FLAGS_CBCMAC | AES_FLAGS_ENCRYPT;
@@ -2169,7 +2150,7 @@ static struct ahash_alg ahash_aes_algs[] = {
 			.cra_name	  = "cbcmac(aes)",
 			.cra_driver_name  = "atmel-cbcmac-aes",
 			.cra_priority	  = ATMEL_AES_PRIORITY,
-			.cra_flags	  = ATMEL_CRYPTO_ALG_FLAGS,
+			.cra_flags	  = ATMEL_CRYPTO_ALG_FLAGS_ASYNC,
 			.cra_blocksize	  = 1,
 			.cra_ctxsize	  = sizeof(struct atmel_aes_ctx),
 			.cra_alignmask	  = 0,
@@ -2194,7 +2175,7 @@ static struct ahash_alg ahash_aes_algs[] = {
 			.cra_name	  = "cmac(aes)",
 			.cra_driver_name  = "atmel-cmac-aes",
 			.cra_priority	  = ATMEL_AES_PRIORITY,
-			.cra_flags	  = ATMEL_CRYPTO_ALG_FLAGS,
+			.cra_flags	  = ATMEL_CRYPTO_ALG_FLAGS_ASYNC,
 			.cra_blocksize	  = 1,
 			.cra_ctxsize	  = sizeof(struct atmel_aes_cmac_ctx),
 			.cra_alignmask	  = 0,
@@ -3124,7 +3105,7 @@ static struct aead_alg aead_aes_algs[] = {
 		.cra_name		= "ccm(aes)",
 		.cra_driver_name	= "atmel-ccm-aes",
 		.cra_priority		= ATMEL_AES_PRIORITY,
-		.cra_flags		= ATMEL_CRYPTO_ALG_FLAGS,
+		.cra_flags		= ATMEL_CRYPTO_ALG_FLAGS_ASYNC,
 		.cra_blocksize		= 1,
 		.cra_ctxsize		= sizeof(struct atmel_aes_ctx),
 		.cra_alignmask		= 0,
@@ -3145,7 +3126,7 @@ static struct aead_alg aead_aes_algs[] = {
 		.cra_name		= "gcm(aes)",
 		.cra_driver_name	= "atmel-gcm-aes",
 		.cra_priority		= ATMEL_AES_PRIORITY,
-		.cra_flags		= ATMEL_CRYPTO_ALG_FLAGS,
+		.cra_flags		= ATMEL_CRYPTO_ALG_FLAGS_ASYNC,
 		.cra_blocksize		= 1,
 		.cra_ctxsize		= sizeof(struct atmel_aes_ctx),
 		.cra_alignmask		= 0,
@@ -3166,7 +3147,7 @@ static struct aead_alg aead_aes_algs[] = {
 		.cra_name		= "authenc(hmac(sha1),cbc(aes))",
 		.cra_driver_name	= "atmel-authenc-hmac-sha1-cbc-aes",
 		.cra_priority		= ATMEL_AES_PRIORITY,
-		.cra_flags		= ATMEL_CRYPTO_ALG_FLAGS,
+		.cra_flags		= ATMEL_CRYPTO_ALG_FLAGS_ASYNC,
 		.cra_blocksize		= AES_BLOCK_SIZE,
 		.cra_ctxsize		= sizeof(struct atmel_aes_authenc_ctx),
 		.cra_alignmask		= 0,
@@ -3186,7 +3167,7 @@ static struct aead_alg aead_aes_algs[] = {
 		.cra_name		= "authenc(hmac(sha224),cbc(aes))",
 		.cra_driver_name	= "atmel-authenc-hmac-sha224-cbc-aes",
 		.cra_priority		= ATMEL_AES_PRIORITY,
-		.cra_flags		= ATMEL_CRYPTO_ALG_FLAGS,
+		.cra_flags		= ATMEL_CRYPTO_ALG_FLAGS_ASYNC,
 		.cra_blocksize		= AES_BLOCK_SIZE,
 		.cra_ctxsize		= sizeof(struct atmel_aes_authenc_ctx),
 		.cra_alignmask		= 0,
@@ -3206,7 +3187,7 @@ static struct aead_alg aead_aes_algs[] = {
 		.cra_name		= "authenc(hmac(sha256),cbc(aes))",
 		.cra_driver_name	= "atmel-authenc-hmac-sha256-cbc-aes",
 		.cra_priority		= ATMEL_AES_PRIORITY,
-		.cra_flags		= ATMEL_CRYPTO_ALG_FLAGS,
+		.cra_flags		= ATMEL_CRYPTO_ALG_FLAGS_ASYNC,
 		.cra_blocksize		= AES_BLOCK_SIZE,
 		.cra_ctxsize		= sizeof(struct atmel_aes_authenc_ctx),
 		.cra_alignmask		= 0,
@@ -3226,7 +3207,7 @@ static struct aead_alg aead_aes_algs[] = {
 		.cra_name		= "authenc(hmac(sha384),cbc(aes))",
 		.cra_driver_name	= "atmel-authenc-hmac-sha384-cbc-aes",
 		.cra_priority		= ATMEL_AES_PRIORITY,
-		.cra_flags		= ATMEL_CRYPTO_ALG_FLAGS,
+		.cra_flags		= ATMEL_CRYPTO_ALG_FLAGS_ASYNC,
 		.cra_blocksize		= AES_BLOCK_SIZE,
 		.cra_ctxsize		= sizeof(struct atmel_aes_authenc_ctx),
 		.cra_alignmask		= 0,
@@ -3246,7 +3227,7 @@ static struct aead_alg aead_aes_algs[] = {
 		.cra_name		= "authenc(hmac(sha512),cbc(aes))",
 		.cra_driver_name	= "atmel-authenc-hmac-sha512-cbc-aes",
 		.cra_priority		= ATMEL_AES_PRIORITY,
-		.cra_flags		= ATMEL_CRYPTO_ALG_FLAGS,
+		.cra_flags		= ATMEL_CRYPTO_ALG_FLAGS_ASYNC,
 		.cra_blocksize		= AES_BLOCK_SIZE,
 		.cra_ctxsize		= sizeof(struct atmel_aes_authenc_ctx),
 		.cra_alignmask		= 0,
@@ -3255,8 +3236,6 @@ static struct aead_alg aead_aes_algs[] = {
 },
 #endif
 };
-
-#ifdef CONFIG_CRYPTO_DEV_ATMEL_AES_SERIAL
 
 static void atmel_aes_cia_blk(struct atmel_aes_base_ctx *ctx, u8 *dst,
 	const u8 *src, unsigned long mode)
@@ -3274,6 +3253,7 @@ static void atmel_aes_cia_blk(struct atmel_aes_base_ctx *ctx, u8 *dst,
 
 		atmel_aes_write_ctrl_key(dd, false, NULL, ctx->key,
 			ctx->keylen);
+
 		atmel_aes_write_block(dd, AES_IDATAR(0), (u32*)src);
 
 		while (!(atmel_aes_read(dd, AES_ISR) & AES_INT_DATARDY)) {}
@@ -3337,7 +3317,6 @@ static struct crypto_alg aes_alg = {
 		.cia_decrypt		= atmel_aes_cia_decrypt,
 	}
 };
-#endif	/* CONFIG_CRYPTO_DEV_ATMEL_AES_SERIAL */
 
 /* Probe functions */
 
@@ -3413,8 +3392,11 @@ static void atmel_aes_done_task(unsigned long data)
 {
 	struct atmel_aes_dev *dd = (struct atmel_aes_dev *)data;
 
+	atmel_aes_unmap(dd);
+
 	dd->is_async = true;
-	(void)dd->resume(dd);
+
+	dd->resume(dd);
 }
 
 static irqreturn_t atmel_aes_irq(int irq, void *dev_id)
@@ -3447,9 +3429,8 @@ static void atmel_aes_unregister_algs(struct atmel_aes_dev *dd)
 		len_aeads += 5;
 #endif
 
-#ifdef CONFIG_CRYPTO_DEV_ATMEL_AES_SERIAL
-	crypto_unregister_alg(&aes_alg);
-#endif
+	if (atmel_aes.sync_mode)
+		crypto_unregister_alg(&aes_alg);
 
 	crypto_unregister_aeads(aead_aes_algs, len_aeads);
 	crypto_unregister_ahashes(ahash_aes_algs, ARRAY_SIZE(ahash_aes_algs));
@@ -3458,7 +3439,7 @@ static void atmel_aes_unregister_algs(struct atmel_aes_dev *dd)
 
 static int atmel_aes_register_algs(struct atmel_aes_dev *dd)
 {
-	int err;
+	int err, i;
 
 	int len_skciphers = ARRAY_SIZE(skcipher_aes_algs) - 2 +
 		dd->caps.has_cfb64 + dd->caps.has_xts;
@@ -3470,31 +3451,47 @@ static int atmel_aes_register_algs(struct atmel_aes_dev *dd)
 		len_aeads += 5;
 #endif
 
+	for (i = 0; i < len_skciphers; ++i) {
+		skcipher_aes_algs[i].base.cra_flags = atmel_aes.sync_mode ?
+			ATMEL_CRYPTO_ALG_FLAGS_SYNC :
+			ATMEL_CRYPTO_ALG_FLAGS_ASYNC;
+	}
+
 	err = crypto_register_skciphers(skcipher_aes_algs, len_skciphers);
 	if (err)
 		goto err_aes_skciphers;
+
+	for (i = 0; i < ARRAY_SIZE(ahash_aes_algs); ++i) {
+		ahash_aes_algs[i].halg.base.cra_flags = atmel_aes.sync_mode ?
+			ATMEL_CRYPTO_ALG_FLAGS_SYNC :
+			ATMEL_CRYPTO_ALG_FLAGS_ASYNC;
+	}
 
 	err = crypto_register_ahashes(ahash_aes_algs,
 		ARRAY_SIZE(ahash_aes_algs));
 	if (err)
 		goto err_aes_ahashes;
 
+	for (i = 0; i < len_aeads; ++i) {
+		aead_aes_algs[i].base.cra_flags = atmel_aes.sync_mode ?
+			ATMEL_CRYPTO_ALG_FLAGS_SYNC :
+			ATMEL_CRYPTO_ALG_FLAGS_ASYNC;
+	}
+
 	err = crypto_register_aeads(aead_aes_algs, len_aeads);
 	if (err)
 		goto err_aes_aeads;
 
-#ifdef CONFIG_CRYPTO_DEV_ATMEL_AES_SERIAL
-	err = crypto_register_alg(&aes_alg);
-	if (err)
-		goto err_aes_block;
-#endif
+	if (atmel_aes.sync_mode) {
+		err = crypto_register_alg(&aes_alg);
+		if (err)
+			goto err_aes_block;
+	}
 
 	return 0;
 
-#ifdef CONFIG_CRYPTO_DEV_ATMEL_AES_SERIAL
 err_aes_block:
 	crypto_unregister_aeads(aead_aes_algs, len_aeads);
-#endif
 
 err_aes_aeads:
 	crypto_unregister_ahashes(ahash_aes_algs, ARRAY_SIZE(ahash_aes_algs));
@@ -3590,6 +3587,7 @@ static inline void atmel_aes_dev_register(struct atmel_aes_dev *dd)
 {
 	spin_lock_bh(&atmel_aes.lock);
 	atmel_aes.dd = dd;
+	atmel_aes.sync_mode = fips_enabled && fips_wifi_enabled;
 	spin_unlock_bh(&atmel_aes.lock);
 }
 
