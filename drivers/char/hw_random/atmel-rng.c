@@ -12,7 +12,6 @@
 #include <linux/clk.h>
 #include <linux/of_device.h>
 #include <linux/hw_random.h>
-#include <linux/delay.h>
 #include <crypto/rng.h>
 #include <crypto/internal/rng.h>
 
@@ -37,7 +36,7 @@ static int atmel_trng_read_entropy(struct atmel_trng *trng, void *buf,
 	size_t max, bool wait)
 {
 	u32 *data = buf, curr;
-	size_t i = 0;
+	size_t len = 0;
 	int ret;
 
 	mutex_lock(&trng_mutex);
@@ -47,25 +46,32 @@ static int atmel_trng_read_entropy(struct atmel_trng *trng, void *buf,
 		goto exit;
 	}
 
-	while (i < max) {
+	for (;;) {
 		if (!(readl(trng->base + TRNG_ISR) & 1)) {
-			if (wait) {
-				usleep_range(trng->rng_cycle,
-					trng->rng_cycle + 5);
-				continue;
-			}
-			else
+			if (!wait)
 				break;
+
+			cpu_relax();
+			continue;
 		}
 
 		curr = readl(trng->base + TRNG_ODATA);
-		if (curr != trng->last) {
-			trng->last = curr;
-			*(data++) = curr;
-			i += sizeof(u32);
-		}
+
+		/* Clear ready flag again in case it have changed */
+		readl(trng->base + TRNG_ISR);
+
+		if (curr == trng->last)
+			panic("atmel-rng: Duplicate output detected\n");
+
+		trng->last = curr;
+		*(data++) = curr;
+		len += sizeof(u32);
+
+		if (len >= max)
+			break;
 	}
-	ret = (int) i;
+
+	ret = (int) len;
 
 exit:
 	mutex_unlock(&trng_mutex);
