@@ -471,6 +471,9 @@ static int ksz9031_of_load_skew_values(struct phy_device *phydev,
 	u16 newval;
 	int i;
 
+	if (of_property_read_bool(of_node, "ksz9031_ignore_skew"))
+		return 0;
+
 	for (i = 0; i < numfields; i++)
 		if (!of_property_read_u32(of_node, field[i], val + i))
 			matches++;
