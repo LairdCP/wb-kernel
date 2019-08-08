@@ -106,6 +106,107 @@
 			default-state = "off";
 		};
 	};
+
+	gpio {
+		compatible = "gpio-of-helper";
+		status = "okay";
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_gpio_misc>;
+
+		bt_boot_status {
+			gpio-name = "bt_boot_status";
+			gpio = <&pioA 26 GPIO_ACTIVE_HIGH>;
+			input;
+		};
+
+		bt_boot_mode {
+			gpio-name = "bt_boot_mode";
+			gpio = <&pioA 23 GPIO_ACTIVE_HIGH>;
+			output;
+			init-low;
+		};
+
+		bt_nautorun {
+			gpio-name = "bt_nautorun";
+			gpio = <&pioA 21 GPIO_ACTIVE_HIGH>;
+			output;
+			init-low;
+		};
+
+		card_detect1 {
+			gpio-name = "card_detect1";
+			gpio = <&pioA 8 GPIO_ACTIVE_HIGH>;
+			input;
+		};
+
+		card_detect2 {
+			gpio-name = "card_detect2";
+			gpio = <&pioA 10 GPIO_ACTIVE_HIGH>;
+			input;
+		};
+
+		card_detect3 {
+			gpio-name = "card_detect3";
+			gpio = <&pioA 19 GPIO_ACTIVE_HIGH>;
+			input;
+		};
+
+		card_nreset {
+			gpio-name = "card_nreset";
+			gpio = <&pioA 24 GPIO_ACTIVE_HIGH>;
+			output;
+			init-high;
+		};
+
+		ser_rs485_hd {
+			gpio-name = "ser_rs485_hd";
+			gpio = <&pioA 20 GPIO_ACTIVE_HIGH>;
+			output;
+			init-high;
+		};
+
+		ser_nrs232 {
+			gpio-name = "ser_nrs232";
+			gpio = <&pioA 22 GPIO_ACTIVE_HIGH>;
+			output;
+			init-high;
+		};
+
+		ser_term {
+			gpio-name = "ser_term";
+			gpio = <&pioA 28 GPIO_ACTIVE_HIGH>;
+			output;
+			init-low;
+		};
+
+		lte_on {
+			gpio-name = "lte_on";
+			gpio = <&pioA 7 GPIO_ACTIVE_HIGH>;
+			output;
+			init-high;
+		};
+
+		lte_emerg_off {
+			gpio-name = "lte_emerg_off";
+			gpio = <&pioC 28 GPIO_ACTIVE_HIGH>;
+			output;
+			init-low;
+		};
+
+		lte_fast_shdn {
+			gpio-name = "lte_fast_shdn";
+			gpio = <&pioC 25 GPIO_ACTIVE_HIGH>;
+			output;
+			init-high;
+		};
+
+		lte_status {
+			gpio-name = "lte_status";
+			gpio = <&pioA 9 GPIO_ACTIVE_HIGH>;
+			input;
+		};
+
+	};
 };
 
 &pinctrl {
@@ -130,6 +231,11 @@
 				<AT91_PIOE 15 AT91_PERIPH_GPIO AT91_PINCTRL_DEGLITCH>;
 		};
 
+		pinctrl_lte_usb_vbus: lte_usb_vbus {
+			atmel,pins =
+				<AT91_PIOE 16 AT91_PERIPH_GPIO AT91_PINCTRL_NONE>;
+		};
+
 		pinctrl_geth_int: geth_int {
 			atmel,pins =
 				<AT91_PIOB 25 AT91_PERIPH_GPIO AT91_PINCTRL_DEGLITCH>;
@@ -138,6 +244,24 @@
 		pinctrl_eth_int: eth_int {
 			atmel,pins =
 				<AT91_PIOC 10 AT91_PERIPH_GPIO AT91_PINCTRL_DEGLITCH>;
+		};
+
+		pinctrl_gpio_misc: gpio_misc {
+			atmel,pins =
+				<AT91_PIOA 26 AT91_PERIPH_GPIO AT91_PINCTRL_NONE>,
+				<AT91_PIOA 23 AT91_PERIPH_GPIO AT91_PINCTRL_NONE>,
+				<AT91_PIOA 21 AT91_PERIPH_GPIO AT91_PINCTRL_NONE>,
+				<AT91_PIOA 8 AT91_PERIPH_GPIO AT91_PINCTRL_PULL_UP>,
+				<AT91_PIOA 10 AT91_PERIPH_GPIO AT91_PINCTRL_PULL_UP>,
+				<AT91_PIOA 19 AT91_PERIPH_GPIO AT91_PINCTRL_PULL_UP>,
+				<AT91_PIOA 24 AT91_PERIPH_GPIO AT91_PINCTRL_NONE>,
+				<AT91_PIOA 20 AT91_PERIPH_GPIO AT91_PINCTRL_NONE>,
+				<AT91_PIOA 28 AT91_PERIPH_GPIO AT91_PINCTRL_NONE>,
+				<AT91_PIOA 22 AT91_PERIPH_GPIO AT91_PINCTRL_NONE>,
+				<AT91_PIOA 7 AT91_PERIPH_GPIO AT91_PINCTRL_NONE>,
+				<AT91_PIOC 28 AT91_PERIPH_GPIO AT91_PINCTRL_NONE>,
+				<AT91_PIOC 25 AT91_PERIPH_GPIO AT91_PINCTRL_NONE>,
+				<AT91_PIOA 9 AT91_PERIPH_GPIO AT91_PINCTRL_NONE>;
 		};
 	};
 };
@@ -199,13 +323,6 @@
 	status = "okay";
 };
 
-&usart3 {
-	pinctrl-0 = <&pinctrl_usart3 &pinctrl_usart3_rts_cts>;
-	atmel,use-dma-rx;
-	atmel,use-dma-tx;
-	status = "okay";
-};
-
 &uart0 {
 	status = "okay";
 };
@@ -220,11 +337,11 @@
 
 &usb1 {
 	pinctrl-names = "default";
-	pinctrl-0 = <&pinctrl_usb_oc &pinctrl_usb_vbus>;
+	pinctrl-0 = <&pinctrl_usb_oc &pinctrl_usb_vbus &pinctrl_lte_usb_vbus>;
 
-	num-ports = <2>;
-	atmel,vbus-gpio = <0>, <&pioE 20 GPIO_ACTIVE_HIGH>;
-	atmel,oc-gpio = <0>, <&pioE 15 GPIO_ACTIVE_LOW>;
+	num-ports = <3>;
+	atmel,vbus-gpio = <0>, <&pioE 20 GPIO_ACTIVE_HIGH>, <&pioE 16 GPIO_ACTIVE_LOW>;
+	atmel,oc-gpio = <0>, <&pioE 15 GPIO_ACTIVE_LOW>, <0>;
 
 	status = "okay";
 };
