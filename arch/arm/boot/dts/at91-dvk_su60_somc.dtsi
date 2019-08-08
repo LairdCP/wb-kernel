@@ -191,6 +191,9 @@
 		reg = <7>;
 		interrupt-parent = <&pioB>;
 		interrupts = <25 IRQ_TYPE_EDGE_FALLING>;
+
+		vsc8531,vddmac		= <3300>;
+		vsc8531,edge-slowdown	= <7>;
 	};
 };
 

@@ -58,10 +58,18 @@ enum rgmii_rx_clock_delay {
 #define LED_0_MODE_SEL_MASK		  0x000F
 #define LED_1_MODE_SEL_POS		  4
 
+#define MSCC_PHY_CLKOUT_CNTL		  13
+#define MSCC_CLKOUT_EN			  0x8000
+#define MSCC_CLKOUT_FREQ_MASK		  0x6000
+#define MSCC_CLKOUT_FREQ_25_MHZ		  0x0000
+#define MSCC_CLKOUT_FREQ_50_MHZ		  0x2000
+#define MSCC_CLKOUT_FREQ_125_MHZ	  0x4000
+
 #define MSCC_EXT_PAGE_ACCESS		  31
 #define MSCC_PHY_PAGE_STANDARD		  0x0000 /* Standard registers */
 #define MSCC_PHY_PAGE_EXTENDED		  0x0001 /* Extended registers */
 #define MSCC_PHY_PAGE_EXTENDED_2	  0x0002 /* Extended reg - page 2 */
+#define MSCC_PHY_PAGE_GENERAL_PURP	  0x0010 /* General Purpose reg */
 
 /* Extended Page 1 Registers */
 #define MSCC_PHY_EXT_MODE_CNTL		  19
@@ -512,6 +520,16 @@ static int vsc85xx_default_config(struct phy_device *phydev)
 	reg_val &= ~(RGMII_RX_CLK_DELAY_MASK);
 	reg_val |= (RGMII_RX_CLK_DELAY_1_1_NS << RGMII_RX_CLK_DELAY_POS);
 	phy_write(phydev, MSCC_PHY_RGMII_CNTL, reg_val);
+	rc = vsc85xx_phy_page_set(phydev, MSCC_PHY_PAGE_STANDARD);
+
+	rc = vsc85xx_phy_page_set(phydev, MSCC_PHY_PAGE_GENERAL_PURP);
+	if (rc != 0)
+		goto out_unlock;
+
+	reg_val = phy_read(phydev, MSCC_PHY_CLKOUT_CNTL);
+	reg_val &= ~MSCC_CLKOUT_FREQ_MASK;
+	reg_val |= MSCC_CLKOUT_FREQ_125_MHZ;
+	phy_write(phydev, MSCC_PHY_CLKOUT_CNTL, reg_val);
 	rc = vsc85xx_phy_page_set(phydev, MSCC_PHY_PAGE_STANDARD);
 
 out_unlock:
