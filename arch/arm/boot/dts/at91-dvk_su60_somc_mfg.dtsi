@@ -119,6 +119,8 @@
 		interrupt-parent = <&pioB>;
 		interrupts = <25 IRQ_TYPE_EDGE_FALLING>;
 
+		ksz9021,rgmii_2.0_timing;
+
 		vsc8531,vddmac		= <3300>;
 		vsc8531,edge-slowdown	= <7>;
 	};
