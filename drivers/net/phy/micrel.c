@@ -415,6 +415,12 @@ static int ksz9021_config_init(struct phy_device *phydev)
 
 	} while (!of_node && dev_walker);
 
+	if (of_property_read_bool(of_node, "ksz9021,rgmii_2.0_timing")) {
+		kszphy_extended_write(phydev, MII_KSZPHY_CLK_CONTROL_PAD_SKEW, 0xf0f0);
+		kszphy_extended_write(phydev, MII_KSZPHY_RX_DATA_PAD_SKEW, 0);
+		kszphy_extended_write(phydev, MII_KSZPHY_TX_DATA_PAD_SKEW, 0);
+	}
+
 	if (of_node) {
 		ksz9021_load_values_from_of(phydev, of_node,
 				    MII_KSZPHY_CLK_CONTROL_PAD_SKEW,
@@ -481,9 +487,6 @@ static int ksz9031_of_load_skew_values(struct phy_device *phydev,
 	u16 maxval;
 	u16 newval;
 	int i;
-
-	if (of_property_read_bool(of_node, "ksz9031_ignore_skew"))
-		return 0;
 
 	for (i = 0; i < numfields; i++)
 		if (!of_property_read_u32(of_node, field[i], val + i))
