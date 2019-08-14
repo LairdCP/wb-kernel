@@ -24,6 +24,13 @@
 	};
 };
 
+&usart1 {
+	pinctrl-0 = <&pinctrl_usart1 &pinctrl_usart1_rts_cts>;
+	status = "okay";
+	atmel,use-dma-rx;
+	atmel,use-dma-tx;
+};
+
 &usart3 {
 	pinctrl-0 = <&pinctrl_usart3 &pinctrl_usart3_rts_cts>;
 	status = "okay";
