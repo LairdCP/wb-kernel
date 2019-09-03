@@ -169,7 +169,7 @@
 			gpio-name = "ser_nrs232";
 			gpio = <&pioA 22 GPIO_ACTIVE_HIGH>;
 			output;
-			init-high;
+			init-low;
 		};
 
 		ser_term {
