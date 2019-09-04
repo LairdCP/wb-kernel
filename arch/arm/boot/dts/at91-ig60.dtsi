@@ -45,7 +45,7 @@
 			panic-indicator;
 		};
 
-		led@2 {
+		power_led_green: led@2 {
 			label = "ig60:green:power";
 			gpios = <&pioA 17 GPIO_ACTIVE_LOW>;
 			linux,default-trigger = "timer";

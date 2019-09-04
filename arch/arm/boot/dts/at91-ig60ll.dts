@@ -25,3 +25,8 @@
 &dbgu {
 	status = "disabled";
 };
+
+&power_led_green {
+	/delete-property/ linux,default-trigger;
+	default-state = "on";
+};
