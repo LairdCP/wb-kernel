@@ -218,12 +218,12 @@
 			};
 
 			ubootenv@120000 {
-				label = "u-boot-env";
+				label = "u-boot-env-a";
 				reg = <0x120000 0x20000>;
 			};
 
 			ubootenv@140000 {
-				label = "u-boot-env";
+				label = "u-boot-env-b";
 				reg = <0x140000 0x20000>;
 			};
 
