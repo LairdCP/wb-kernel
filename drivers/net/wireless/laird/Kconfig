@@ -11,6 +11,7 @@ config WLAN_VENDOR_LAIRD
 
 if WLAN_VENDOR_LAIRD
 
-source "drivers/net/wireless/laird/lrdmwl/Kconfig"
+# -- for FIPS kernel, do not include lrdmwl
+#source "drivers/net/wireless/laird/lrdmwl/Kconfig"
 
 endif # WLAN_VENDOR_LAIRD
