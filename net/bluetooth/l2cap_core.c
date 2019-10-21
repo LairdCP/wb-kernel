@@ -1352,7 +1352,7 @@ static bool l2cap_check_enc_key_size(struct hci_conn *hcon)
 	 * actually encrypted before enforcing a key size.
 	 */
 	return (!test_bit(HCI_CONN_ENCRYPT, &hcon->flags) ||
-		hcon->enc_key_size > HCI_MIN_ENC_KEY_SIZE);
+		hcon->enc_key_size >= HCI_MIN_ENC_KEY_SIZE);
 }
 
 static void l2cap_do_start(struct l2cap_chan *chan)
@@ -4387,6 +4387,12 @@ static inline int l2cap_disconnect_rsp(struct l2cap_conn *conn,
 	}
 
 	l2cap_chan_lock(chan);
+
+	if (chan->state != BT_DISCONN) {
+		l2cap_chan_unlock(chan);
+		mutex_unlock(&conn->chan_lock);
+		return 0;
+	}
 
 	l2cap_chan_hold(chan);
 	l2cap_chan_del(chan, 0);
