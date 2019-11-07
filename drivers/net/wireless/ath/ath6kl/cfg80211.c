@@ -27,6 +27,7 @@
 #include "debug.h"
 #include "hif-ops.h"
 #include "testmode.h"
+#include "vendor_cmd.h"
 
 #define RATETAB_ENT(_rate, _rateid, _flags) {   \
 	.bitrate    = (_rate),                  \
@@ -648,8 +649,13 @@ static int ath6kl_cfg80211_connect(struct wiphy *wiphy, struct net_device *dev,
 		sme->bg_scan_period = DEFAULT_BG_SCAN_PERIOD;
 	}
 
-	ath6kl_wmi_scanparams_cmd(ar->wmi, vif->fw_vif_idx, 0, 0,
-				  sme->bg_scan_period, 0, 0, 0, 3, 0, 0, 0);
+	// Laird: Use scan parameters from host provided profile data where relevant.
+	// Parameters will be zero if not initialized by the host, resulting in default values
+	ath6kl_wmi_scanparams_cmd(ar->wmi, vif->fw_vif_idx, ar->laird.fg_start_period, ar->laird.fg_end_period,
+				  sme->bg_scan_period, 0, 0, ar->laird.pas_chdwell_time, 3, ar->laird.scan_ctrl_flags, 0, 0);
+
+	// Laird: Update roam parameters if available
+	lrd_update_roam_params(ar,vif->fw_vif_idx);
 
 	up(&ar->sem);
 
@@ -1507,6 +1513,9 @@ static int ath6kl_cfg80211_set_power_mgmt(struct wiphy *wiphy,
 		ath6kl_err("wmi_powermode_cmd failed\n");
 		return -EIO;
 	}
+
+	// Laird: Configure PM parameters as required by Laird firmware
+	lrd_update_pm_params(ar, vif->fw_vif_idx);
 
 	return 0;
 }
@@ -3930,6 +3939,8 @@ int ath6kl_cfg80211_init(struct ath6kl *ar)
 		NL80211_PROBE_RESP_OFFLOAD_SUPPORT_P2P;
 
 	ar->wiphy->regulatory_flags = REGULATORY_WIPHY_SELF_MANAGED;
+
+	lrd_set_vendor_commands(wiphy);
 
 	ret = wiphy_register(wiphy);
 	if (ret < 0) {

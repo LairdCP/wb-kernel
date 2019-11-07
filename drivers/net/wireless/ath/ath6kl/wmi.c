@@ -751,7 +751,7 @@ static int ath6kl_wmi_ready_event_rx(struct wmi *wmi, u8 *datap, int len)
  * WMI_SET_LRSSI_SCAN_PARAMS. Subtract 96 from RSSI to get the signal level
  * in dBm.
  */
-int ath6kl_wmi_set_roam_lrssi_cmd(struct wmi *wmi, u8 lrssi)
+int ath6kl_wmi_set_roam_lrssi_cmd(struct wmi *wmi, u8 lrssi, u16 scan_period)
 {
 	struct sk_buff *skb;
 	struct roam_ctrl_cmd *cmd;
@@ -762,9 +762,8 @@ int ath6kl_wmi_set_roam_lrssi_cmd(struct wmi *wmi, u8 lrssi)
 
 	cmd = (struct roam_ctrl_cmd *) skb->data;
 
-	cmd->info.params.lrssi_scan_period = cpu_to_le16(DEF_LRSSI_SCAN_PERIOD);
-	cmd->info.params.lrssi_scan_threshold = a_cpu_to_sle16(lrssi +
-						       DEF_SCAN_FOR_ROAM_INTVL);
+	cmd->info.params.lrssi_scan_period = cpu_to_le16(scan_period);
+	cmd->info.params.lrssi_scan_threshold = a_cpu_to_sle16(lrssi);
 	cmd->info.params.lrssi_roam_threshold = a_cpu_to_sle16(lrssi);
 	cmd->info.params.roam_rssi_floor = DEF_LRSSI_ROAM_FLOOR;
 	cmd->roam_ctrl = WMI_SET_LRSSI_SCAN_PARAMS;
@@ -790,6 +789,24 @@ int ath6kl_wmi_force_roam_cmd(struct wmi *wmi, const u8 *bssid)
 	ath6kl_dbg(ATH6KL_DBG_WMI, "force roam to %pM\n", bssid);
 	return ath6kl_wmi_cmd_send(wmi, 0, skb, WMI_SET_ROAM_CTRL_CMDID,
 				   NO_SYNC_WMIFLAG);
+}
+
+int ath6kl_wmi_set_roam_delta_cmd(struct wmi *wmi, u8 delta)
+{
+	struct sk_buff *skb;
+	struct roam_ctrl_cmd *cmd;
+
+	skb = ath6kl_wmi_get_new_buf(sizeof(*cmd));
+	if (!skb)
+		return -ENOMEM;
+
+	cmd = (struct roam_ctrl_cmd *) skb->data;
+
+	cmd->info.roam_delta = delta;
+	cmd->roam_ctrl = WMI_SET_ROAM_DELTA;
+
+	return ath6kl_wmi_cmd_send(wmi, 0, skb, WMI_SET_ROAM_CTRL_CMDID,
+			    NO_SYNC_WMIFLAG);
 }
 
 int ath6kl_wmi_ap_set_beacon_intvl_cmd(struct wmi *wmi, u8 if_idx,
@@ -1930,7 +1947,7 @@ int ath6kl_wmi_connect_cmd(struct wmi *wmi, u8 if_idx,
 	if (bssid != NULL)
 		memcpy(cc->bssid, bssid, ETH_ALEN);
 
-	ath6kl_wmi_send_radio_mode(wmi, if_idx);
+	lrd_ath6kl_wmi_send_radio_mode(wmi, if_idx);
 
 	ret = ath6kl_wmi_cmd_send(wmi, if_idx, skb, WMI_CONNECT_CMDID,
 				  NO_SYNC_WMIFLAG);
@@ -1960,7 +1977,7 @@ int ath6kl_wmi_reconnect_cmd(struct wmi *wmi, u8 if_idx, u8 *bssid,
 	if (bssid != NULL)
 		memcpy(cc->bssid, bssid, ETH_ALEN);
 
-	ath6kl_wmi_send_radio_mode(wmi, if_idx);
+	lrd_ath6kl_wmi_send_radio_mode(wmi, if_idx);
 
 	ret = ath6kl_wmi_cmd_send(wmi, if_idx, skb, WMI_RECONNECT_CMDID,
 				  NO_SYNC_WMIFLAG);
@@ -2040,7 +2057,7 @@ int ath6kl_wmi_beginscan_cmd(struct wmi *wmi, u8 if_idx,
 	struct ath6kl_vif *vif = ath6kl_get_vif_by_index(ar, if_idx);
 
 	if(vif && vif->sme_state != SME_CONNECTED)
-		ath6kl_wmi_send_radio_mode(wmi, if_idx);
+		lrd_ath6kl_wmi_send_radio_mode(wmi, if_idx);
 
 	if (!test_bit(ATH6KL_FW_CAPABILITY_STA_P2PDEV_DUPLEX,
 		      ar->fw_capabilities)) {
@@ -3292,6 +3309,7 @@ int ath6kl_wmi_set_regdomain_cmd(struct wmi *wmi, const char *alpha2)
 {
 	struct sk_buff *skb;
 	struct wmi_set_regdomain_cmd *cmd;
+	int cmdId;
 
 	skb = ath6kl_wmi_get_new_buf(sizeof(*cmd));
 	if (!skb)
@@ -3300,8 +3318,10 @@ int ath6kl_wmi_set_regdomain_cmd(struct wmi *wmi, const char *alpha2)
 	cmd = (struct wmi_set_regdomain_cmd *) skb->data;
 	memcpy(cmd->iso_name, alpha2, 2);
 
-	return ath6kl_wmi_cmd_send(wmi, 0, skb,
-				   WMI_SET_REGDOMAIN_CMDID,
+	cmdId = WMI_SET_REGDOMAIN_CMDID;
+
+	return ath6kl_wmi_cmd_send(wmi, 0, skb, 
+				   cmdId,
 				   NO_SYNC_WMIFLAG);
 }
 
@@ -3948,7 +3968,7 @@ static int ath6kl_wmi_proc_events_vif(struct wmi *wmi, u16 if_idx, u16 cmd_id,
 		return ath6kl_wmi_connect_event_rx(wmi, datap, len, vif);
 	case WMI_DISCONNECT_EVENTID:
 		ath6kl_dbg(ATH6KL_DBG_WMI, "WMI_DISCONNECT_EVENTID\n");
-		ath6kl_wmi_send_radio_mode(wmi, if_idx);
+		lrd_ath6kl_wmi_send_radio_mode(wmi, if_idx);
 		return ath6kl_wmi_disconnect_event_rx(wmi, datap, len, vif);
 	case WMI_TKIP_MICERR_EVENTID:
 		ath6kl_dbg(ATH6KL_DBG_WMI, "WMI_TKIP_MICERR_EVENTID\n");
@@ -3963,7 +3983,7 @@ static int ath6kl_wmi_proc_events_vif(struct wmi *wmi, u16 if_idx, u16 cmd_id,
 	case WMI_SCAN_COMPLETE_EVENTID:
 		ath6kl_dbg(ATH6KL_DBG_WMI, "WMI_SCAN_COMPLETE_EVENTID\n");
 		if(vif->sme_state != SME_CONNECTED)
-			ath6kl_wmi_send_radio_mode(wmi, if_idx);
+			lrd_ath6kl_wmi_send_radio_mode(wmi, if_idx);
 		return ath6kl_wmi_scan_complete_rx(wmi, datap, len, vif);
 	case WMI_REPORT_STATISTICS_EVENTID:
 		ath6kl_dbg(ATH6KL_DBG_WMI, "WMI_REPORT_STATISTICS_EVENTID\n");
@@ -4065,7 +4085,7 @@ static int ath6kl_wmi_proc_events(struct wmi *wmi, struct sk_buff *skb)
 	case WMI_REGDOMAIN_EVENTID:
 		ath6kl_dbg(ATH6KL_DBG_WMI, "WMI_REGDOMAIN_EVENTID\n");
 		if(vif && vif->sme_state != SME_CONNECTED)
-			ath6kl_wmi_send_radio_mode(wmi, if_idx);
+			lrd_ath6kl_wmi_send_radio_mode(wmi, if_idx);
 		ath6kl_wmi_regdomain_event(wmi, datap, len);
 		break;
 	case WMI_PSTREAM_TIMEOUT_EVENTID:
@@ -4225,7 +4245,7 @@ int ath6kl_wmi_send_buf_cmd(struct wmi *wmi, u8 if_idx, enum wmi_cmd_id cmd_id,
 	return ret;
 }
 
-void ath6kl_wmi_send_radio_mode(struct wmi *wmi, u8 if_idx)
+void lrd_ath6kl_wmi_send_radio_mode(struct wmi *wmi, u8 if_idx)
 {
 	struct ath6kl *ar;
 
@@ -4254,7 +4274,7 @@ enum {
 #define ATHEROS_ATTR_MAX (__ATHEROS_ATTR_MAX - 1)
 
 static struct nla_policy atheros_policy[ATHEROS_ATTR_MAX + 1] = {
-	[ATHEROS_ATTR_MSG] = { .type = NLA_NUL_STRING },
+	[ATHEROS_ATTR_MSG] = { .type = NLA_UNSPEC },
 	[ATHEROS_ATTR_EVENT] = { .type = NLA_NESTED },
 	[ATHEROS_ATTR_CMDID] = { .type = NLA_U32 },
 	[ATHEROS_ATTR_DATA] = { .type = NLA_BINARY },
@@ -4325,6 +4345,10 @@ static int ath6kl_genl_wmi_passthru (struct sk_buff *skb_2, struct genl_info *in
 					else if(htcap->band == NL80211_BAND_5GHZ)
 						memcpy(&ar->laird.htcap_params_5ghz, htcap, sizeof(struct wmi_set_htcap_cmd));
 					}
+					break;
+				case 0xf0b0:
+					if (ar->target_type == TARGET_TYPE_AR6003)
+						wmi_cmd = WMI_SET_REGDOMAIN_CMDID;
 					break;
 				default:
 					break;

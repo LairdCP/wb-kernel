@@ -1037,7 +1037,7 @@ static ssize_t ath6kl_lrssi_roam_write(struct file *file,
 
 	ar->lrssi_roam_threshold = lrssi_roam_threshold;
 
-	ath6kl_wmi_set_roam_lrssi_cmd(ar->wmi, ar->lrssi_roam_threshold);
+	ath6kl_wmi_set_roam_lrssi_cmd(ar->wmi, ar->lrssi_roam_threshold, ar->lrssi_scan_period);
 
 	return count;
 }
