@@ -751,6 +751,7 @@ struct ath6kl {
 
 	struct semaphore sem;
 	u8 lrssi_roam_threshold;
+	u16 lrssi_scan_period;
 	struct ath6kl_version version;
 	u32 target_type;
 	u8 tx_pwr;
@@ -914,6 +915,14 @@ struct ath6kl {
 		struct wmi_set_htcap_cmd htcap_params_5ghz;
 		char AP_Name[17];
 		unsigned char AP_IP[4];
+
+		bool profile_initialized;
+		u16 fg_start_period;
+		u16 fg_end_period;
+		u16 pas_chdwell_time;
+		u8 scan_ctrl_flags;
+		u16 bmiss_time;
+		u8 roam_delta;
 	} laird;
 };
 

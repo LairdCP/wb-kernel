@@ -1621,7 +1621,7 @@ enum wmi_bi_ftype {
 	PROBEREQ_FTYPE,
 };
 
-#define DEF_LRSSI_SCAN_PERIOD		 5
+#define DEF_LRSSI_SCAN_PERIOD		5000
 #define DEF_LRSSI_ROAM_THRESHOLD	20
 #define DEF_LRSSI_ROAM_FLOOR		60
 #define DEF_SCAN_FOR_ROAM_INTVL		 2
@@ -1631,6 +1631,8 @@ enum wmi_roam_ctrl {
 	WMI_SET_ROAM_MODE,
 	WMI_SET_HOST_BIAS,
 	WMI_SET_LRSSI_SCAN_PARAMS,
+	WMI_SET_HOST_5G_BIAS,
+	WMI_SET_ROAM_DELTA,
 };
 
 enum wmi_roam_mode {
@@ -1662,8 +1664,9 @@ struct roam_ctrl_cmd {
 		u8 bssid[ETH_ALEN]; /* WMI_FORCE_ROAM */
 		u8 roam_mode; /* WMI_SET_ROAM_MODE */
 		struct bss_bias_info bss; /* WMI_SET_HOST_BIAS */
-		struct low_rssi_scan_params params; /* WMI_SET_LRSSI_SCAN_PARAMS
-						     */
+		struct low_rssi_scan_params params; /* WMI_SET_LRSSI_SCAN_PARAMS */
+		u8 bias5G; /* WMI_SET_HOST_5G_BIAS */
+		u8 roam_delta; /* WMI_SET_ROAM_DELTA */
 	} __packed info;
 	u8 roam_ctrl;
 } __packed;
@@ -2707,7 +2710,8 @@ int ath6kl_wmi_add_wow_pattern_cmd(struct wmi *wmi, u8 if_idx,
 int ath6kl_wmi_del_wow_pattern_cmd(struct wmi *wmi, u8 if_idx,
 				   u16 list_id, u16 filter_id);
 int ath6kl_wmi_set_rssi_filter_cmd(struct wmi *wmi, u8 if_idx, s8 rssi);
-int ath6kl_wmi_set_roam_lrssi_cmd(struct wmi *wmi, u8 lrssi);
+int ath6kl_wmi_set_roam_lrssi_cmd(struct wmi *wmi, u8 lrssi, u16 scan_period);
+int ath6kl_wmi_set_roam_delta_cmd(struct wmi *wmi, u8 delta);
 int ath6kl_wmi_ap_set_dtim_cmd(struct wmi *wmi, u8 if_idx, u32 dtim_period);
 int ath6kl_wmi_ap_set_beacon_intvl_cmd(struct wmi *wmi, u8 if_idx,
 				       u32 beacon_interval);
@@ -2724,7 +2728,7 @@ int ath6kl_wmi_channel_params_cmd(struct wmi *wmi, u8 if_idx, u8 scan_param,
 								u8 phy_mode, u8 num_channels, u16 *channel_list);
 int ath6kl_wmi_send_buf_cmd(struct wmi *wmi, u8 if_idx, enum wmi_cmd_id cmd_id,
 							u32 size, u8 *buf);
-void ath6kl_wmi_send_radio_mode(struct wmi *wmi, u8 if_idx);
+void lrd_ath6kl_wmi_send_radio_mode(struct wmi *wmi, u8 if_idx);
 
 /* AP mode uAPSD */
 int ath6kl_wmi_ap_set_apsd(struct wmi *wmi, u8 if_idx, u8 enable);
