@@ -3104,6 +3104,16 @@ static const struct alg_test_desc alg_test_descs[] = {
 			}
 		}
 	}, {
+		.alg = "gcmp(gcm(aes))",
+		.test = alg_test_aead,
+		.fips_allowed = 1,
+		.suite = {
+			.aead = {
+				.enc = __VECS(aes_gcm_enc_tv_template),
+				.dec = __VECS(aes_gcm_dec_tv_template)
+			}
+		}
+	}, {
 		.alg = "ghash",
 		.test = alg_test_hash,
 		.fips_allowed = 1,
