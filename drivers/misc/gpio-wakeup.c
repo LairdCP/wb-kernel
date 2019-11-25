@@ -191,6 +191,6 @@ static struct platform_driver gpio_wakeup_driver = {
 module_platform_driver(gpio_wakeup_driver);
 
 MODULE_LICENSE("GPL");
-MODULE_AUTHOR("Daniel Mack <zonque@gmail.com>, Boris Krasnovskiy <boris.krasnovskiy@lairdtech.com>");
+MODULE_AUTHOR("Daniel Mack <zonque@gmail.com>, Boris Krasnovskiy <boris.krasnovskiy@lairdconnect.com>");
 MODULE_DESCRIPTION("Driver to wake up systems from GPIOs");
 MODULE_ALIAS("platform:gpio-wakeup");

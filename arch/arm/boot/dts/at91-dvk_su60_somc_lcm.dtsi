@@ -3,7 +3,7 @@
  * at91-dvk_su60_somc_lcm.dtsi - Device Tree file for the LCD for the DVK SOM60 board
  *
  *  Copyright (C) 2018 Laird,
- *		  2018 Ben Whitten <ben.whitten@lairdtech.com>
+ *		  2018 Ben Whitten <ben.whitten@lairdconnect.com>
  *
  */
 
