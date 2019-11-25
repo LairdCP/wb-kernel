@@ -34,6 +34,13 @@ static inline int ieee80211_aes_gcm_decrypt(struct crypto_aead *tfm,
 static inline struct crypto_aead *
 ieee80211_aes_gcm_key_setup_encrypt(const u8 key[], size_t key_len)
 {
+	struct crypto_aead * tfm;
+
+	tfm = aead_key_setup_encrypt("gcmp(gcm(aes))", key,
+				      key_len, IEEE80211_GCMP_MIC_LEN);
+	if (!IS_ERR(tfm))
+		return tfm;
+
 	return aead_key_setup_encrypt("gcm(aes)", key,
 				      key_len, IEEE80211_GCMP_MIC_LEN);
 }
