@@ -2,8 +2,8 @@
  * at91-dvk_som60x2sd_mfg.dts - Device Tree file for the Manufacturing SOM60 board
  *
  *  Copyright (C) 2018 Laird,
- *		  2018 Ben Whitten <ben.whitten@lairdtech.com>
- *		  2018 Boris Krasnovskiy <boris.krasnovskiy@lairdtech.com>
+ *		  2018 Ben Whitten <ben.whitten@lairdconnect.com>
+ *		  2018 Boris Krasnovskiy <boris.krasnovskiy@lairdconnect.com>
  *
  * Licensed under GPLv2 or later.
  */

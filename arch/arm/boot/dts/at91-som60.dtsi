@@ -3,8 +3,8 @@
  * at91-som60.dtsi - Device Tree file for the SOM60 module
  *
  *  Copyright (C) 2018 Laird,
- *		  2018 Ben Whitten <ben.whitten@lairdtech.com>
- *		  2018 Boris Krasnovskiy <boris.krasnovskiy@lairdtech.com>
+ *		  2018 Ben Whitten <ben.whitten@lairdconnect.com>
+ *		  2018 Boris Krasnovskiy <boris.krasnovskiy@lairdconnect.com>
  *
  */
 #include "at91-som60_common.dtsi"
