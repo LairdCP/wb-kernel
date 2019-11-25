@@ -24,6 +24,7 @@ struct crypto_gcmp_ctx {
 	struct crypto_aead *child;
 	long long pn64, pn64_offset;
 	bool first;
+	bool msg_repeat;
 };
 
 struct crypto_gcmp_req_ctx {
@@ -45,6 +46,7 @@ static int crypto_gcmp_setkey(struct crypto_aead *parent, const u8 *key,
 				      CRYPTO_TFM_RES_MASK);
 
 	ctx->first = true;
+	ctx->msg_repeat = false;
 
 	return err;
 }
@@ -79,13 +81,11 @@ static int crypto_gcmp_encrypt(struct aead_request *req)
 {
 	struct crypto_aead *aead = crypto_aead_reqtfm(req);
 	struct crypto_gcmp_ctx *ctx = crypto_aead_ctx(aead);
-	u8 hdr[8];
 	u64 pn64;
+	u8 *pn = req->iv + 6;
 
-	sg_copy_to_buffer(req->src, 1, hdr, sizeof(hdr));
-
-	pn64 = (u64)hdr[0] | (u64)hdr[1] << 8 | (u64)hdr[4] << 16 |
-	       (u64)hdr[5] << 24 | (u64)hdr[6] << 32 | (u64)hdr[7] << 40;
+	pn64 = (u64)pn[0] << 40 | (u64)pn[1] << 32 | (u64)pn[2] << 24 |
+	       (u64)pn[3] << 16 | (u64)pn[4] <<  8 | (u64)pn[5];
 
 	if (ctx->first) {
 		ctx->first = false;
@@ -93,8 +93,14 @@ static int crypto_gcmp_encrypt(struct aead_request *req)
 		pn64 = 0;
 	} else {
 		pn64 = (pn64 - ctx->pn64_offset) & 0xffffffffffffULL;
-		if (pn64 <= ctx->pn64)
+		if (pn64 <= ctx->pn64) {
+			if (!ctx->msg_repeat) {
+				ctx->msg_repeat = true;
+				pr_err("gcmp iv fail pn: %llx %llx %llx\n", pn64, ctx->pn64,
+					ctx->pn64_offset);
+			}
 			return -EINVAL;
+		}
 	}
 
 	ctx->pn64 = pn64;
