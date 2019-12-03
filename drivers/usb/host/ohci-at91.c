@@ -509,6 +509,7 @@ static int ohci_hcd_at91_drv_probe(struct platform_device *pdev)
 	int			i;
 	int			ret;
 	int			err;
+	int			irq;
 	u32			ports;
 
 	/* Right now device-tree probed devices don't get dma_mask set.
@@ -565,8 +566,12 @@ static int ohci_hcd_at91_drv_probe(struct platform_device *pdev)
 			continue;
 		}
 
+		irq = gpiod_to_irq(pdata->overcurrent_pin[i]);
+		if (irq < 0)
+			return -EPROBE_DEFER;
+
 		ret = devm_request_any_context_irq(&pdev->dev,
-				       gpiod_to_irq(pdata->overcurrent_pin[i]),
+				       irq,
 				       ohci_hcd_at91_overcurrent_irq,
 				       IRQF_SHARED,
 				       "ohci_overcurrent", pdev);
