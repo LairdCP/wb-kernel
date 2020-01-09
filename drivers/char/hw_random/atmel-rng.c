@@ -158,7 +158,7 @@ static int atmel_trng_probe(struct platform_device *pdev)
 	trng->rng.quality = 921;
 	trng->rng.priv = (unsigned long)trng;
 
-	ret = hwrng_register(&trng->rng);
+	ret = devm_hwrng_register(&pdev->dev, &trng->rng);
 	if (ret)
 		goto err_register;
 

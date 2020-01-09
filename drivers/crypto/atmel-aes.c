@@ -1,14 +1,11 @@
- /*
+// SPDX-License-Identifier: GPL-2.0
+/*
  * Cryptographic API.
  *
  * Support for ATMEL AES HW acceleration.
  *
  * Copyright (c) 2012 Eukréa Electromatique - ATMEL
  * Author: Nicolas Royer <nicolas@eukrea.com>
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as published
- * by the Free Software Foundation.
  *
  * Some ideas are from omap-aes.c driver.
  */
@@ -2820,6 +2817,47 @@ static int atmel_aes_gcm_init(struct crypto_aead *tfm)
 
 	return 0;
 }
+
+static int atmel_aes_xts_encrypt(struct ablkcipher_request *req)
+{
+	return atmel_aes_crypt(req, AES_FLAGS_XTS | AES_FLAGS_ENCRYPT);
+}
+
+static int atmel_aes_xts_decrypt(struct ablkcipher_request *req)
+{
+	return atmel_aes_crypt(req, AES_FLAGS_XTS);
+}
+
+static int atmel_aes_xts_cra_init(struct crypto_tfm *tfm)
+{
+	struct atmel_aes_xts_ctx *ctx = crypto_tfm_ctx(tfm);
+
+	tfm->crt_ablkcipher.reqsize = sizeof(struct atmel_aes_reqctx);
+	ctx->base.start = atmel_aes_xts_start;
+
+	return 0;
+}
+
+static struct crypto_alg aes_xts_alg = {
+	.cra_name		= "xts(aes)",
+	.cra_driver_name	= "atmel-xts-aes",
+	.cra_priority		= ATMEL_AES_PRIORITY,
+	.cra_flags		= CRYPTO_ALG_TYPE_ABLKCIPHER | CRYPTO_ALG_ASYNC,
+	.cra_blocksize		= AES_BLOCK_SIZE,
+	.cra_ctxsize		= sizeof(struct atmel_aes_xts_ctx),
+	.cra_alignmask		= 0xf,
+	.cra_type		= &crypto_ablkcipher_type,
+	.cra_module		= THIS_MODULE,
+	.cra_init		= atmel_aes_xts_cra_init,
+	.cra_u.ablkcipher = {
+		.min_keysize	= 2 * AES_MIN_KEY_SIZE,
+		.max_keysize	= 2 * AES_MAX_KEY_SIZE,
+		.ivsize		= AES_BLOCK_SIZE,
+		.setkey		= atmel_aes_xts_setkey,
+		.encrypt	= atmel_aes_xts_encrypt,
+		.decrypt	= atmel_aes_xts_decrypt,
+	}
+};
 
 #ifdef CONFIG_CRYPTO_DEV_ATMEL_AUTHENC
 /* authenc aead functions */
