@@ -164,6 +164,7 @@ struct atmel_uart_port {
 	unsigned int		pending_status;
 	spinlock_t		lock_suspended;
 
+	bool			wakeup_on_empty;
 #ifdef CONFIG_PM
 	struct {
 		u32		cr;
@@ -758,13 +759,16 @@ static void atmel_tx_chars(struct uart_port *port)
 			break;
 	}
 
-	if (uart_circ_chars_pending(xmit) < WAKEUP_CHARS)
-		uart_write_wakeup(port);
+	if (!uart_circ_empty(xmit)) {
+		if (!atmel_port->wakeup_on_empty &&
+			uart_circ_chars_pending(xmit) < WAKEUP_CHARS)
+			uart_write_wakeup(port);
 
-	if (!uart_circ_empty(xmit))
 		/* Enable interrupts */
 		atmel_uart_writel(port, ATMEL_US_IER,
 				  atmel_port->tx_done_mask);
+	} else
+		uart_write_wakeup(port);
 }
 
 static void atmel_complete_tx_dma(void *arg)
@@ -790,7 +794,8 @@ static void atmel_complete_tx_dma(void *arg)
 	atmel_port->desc_tx = NULL;
 	spin_unlock_irq(&atmel_port->lock_tx);
 
-	if (uart_circ_chars_pending(xmit) < WAKEUP_CHARS)
+	if (!atmel_port->wakeup_on_empty &&
+		uart_circ_chars_pending(xmit) < WAKEUP_CHARS)
 		uart_write_wakeup(port);
 
 	/*
@@ -800,10 +805,18 @@ static void atmel_complete_tx_dma(void *arg)
 	 */
 	if (!uart_circ_empty(xmit))
 		atmel_tasklet_schedule(atmel_port, &atmel_port->tasklet_tx);
-	else if ((port->rs485.flags & SER_RS485_ENABLED) &&
-		 !(port->rs485.flags & SER_RS485_RX_DURING_TX)) {
-		/* DMA done, enable TXEMPTY IRQ to enable Rx in interrupt handler */
-		atmel_uart_writel(port, ATMEL_US_IER, atmel_port->tx_done_mask);
+	else {
+		if ((port->rs485.flags & SER_RS485_ENABLED) &&
+		    !(port->rs485.flags & SER_RS485_RX_DURING_TX)) {
+			/*
+		 	 * DMA done, re-enable TXEMPTY and signal that we can stop
+		 	 * TX and start RX for RS485
+		 	 */
+			atmel_uart_writel(port, ATMEL_US_IER, 
+				atmel_port->tx_done_mask);
+		} else if (atmel_port->wakeup_on_empty)
+			atmel_uart_writel(port, ATMEL_US_IER, 
+				atmel_port->tx_done_mask);
 	}
 
 	spin_unlock_irqrestore(&port->lock, flags);
@@ -907,9 +920,11 @@ static void atmel_tx_dma(struct uart_port *port)
 		desc->callback = atmel_complete_tx_dma;
 		desc->callback_param = atmel_port;
 		atmel_port->cookie_tx = dmaengine_submit(desc);
-	}
 
-	if (uart_circ_chars_pending(xmit) < WAKEUP_CHARS)
+		if (!atmel_port->wakeup_on_empty &&
+			uart_circ_chars_pending(xmit) < WAKEUP_CHARS)
+			uart_write_wakeup(port);
+	} else
 		uart_write_wakeup(port);
 }
 
@@ -1381,16 +1396,17 @@ static void atmel_tx_pdc(struct uart_port *port)
 		/* Enable interrupts */
 		atmel_uart_writel(port, ATMEL_US_IER,
 				  atmel_port->tx_done_mask);
+
+		if (uart_circ_chars_pending(xmit) < WAKEUP_CHARS)
+			uart_write_wakeup(port);
 	} else {
 		if ((port->rs485.flags & SER_RS485_ENABLED) &&
 		    !(port->rs485.flags & SER_RS485_RX_DURING_TX)) {
 			/* DMA done, stop TX, start RX for RS485 */
 			atmel_start_rx(port);
 		}
-	}
-
-	if (uart_circ_chars_pending(xmit) < WAKEUP_CHARS)
 		uart_write_wakeup(port);
+	}
 }
 
 static int atmel_prepare_tx_pdc(struct uart_port *port)
@@ -2776,6 +2792,9 @@ static int atmel_serial_probe(struct platform_device *pdev)
 		clk_disable_unprepare(atmel_port->clk);
 	}
 #endif
+
+	atmel_port->wakeup_on_empty = of_property_read_bool(np,
+		"laird,wakeup-on-empty");
 
 	device_init_wakeup(&pdev->dev, 1);
 	platform_set_drvdata(pdev, atmel_port);
