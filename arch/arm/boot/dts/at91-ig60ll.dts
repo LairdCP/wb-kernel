@@ -16,17 +16,13 @@
 	model = "Laird IG60 LL";
 	compatible = "laird,ig60ll", "laird,som60x2", "atmel,sama5d36", "atmel,sama5d3", "atmel,sama5";
 
-	chosen {
-		stdout-path = "serial2:115200n8";
-	};
-
-};
-
-&dbgu {
-	status = "disabled";
 };
 
 &power_led_green {
 	/delete-property/ linux,default-trigger;
 	default-state = "on";
+};
+
+&dbgu {
+	status = "okay";
 };
