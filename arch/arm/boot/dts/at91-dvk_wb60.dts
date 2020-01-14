@@ -16,15 +16,6 @@
 	model = "Laird WB60";
 	compatible = "laird,wb60", "laird,som60", "atmel,sama5d36", "atmel,sama5d3", "atmel,sama5";
 
-	wakeup_button {
-		pinctrl-names = "default";
-		pinctrl-0 = <&pinctrl_pb_wake>;
-
-		compatible = "gpio-wakeup";
-
-		interrupts-extended = <&pioC 31 IRQ_TYPE_EDGE_FALLING>;
-	};
-
 	ahb {
 		apb {
 			tdes@f803c000 {
@@ -41,25 +32,12 @@
 			atmel,pins =
 				<AT91_PIOC 26 AT91_PERIPH_GPIO AT91_PINCTRL_PULL_UP_DEGLITCH>;
 		};
-		pinctrl_usba_vbus: usba_vbus {
-		   atmel,pins =
-				<AT91_PIOC 14 AT91_PERIPH_GPIO AT91_PINCTRL_DEGLITCH>;
-		};
 
 		pinctrl_spi1_cs: spi1_cs {
 			atmel,pins =
 				<AT91_PIOC 25 AT91_PERIPH_A AT91_PINCTRL_NONE>;
 		};
-
-		pinctrl_pb_wake: pb_wake {
-			atmel,pins =
-				<AT91_PIOC 31 AT91_PERIPH_GPIO AT91_PINCTRL_PULL_UP_DEGLITCH>;
-		};
 	};
-};
-
-&shutdown_controller {
-	atmel,wakeup-mode = "low";
 };
 
 &mmc0 {
@@ -88,15 +66,6 @@
 	status = "okay";
 };
 
-&usart1 {
-	pinctrl-0 = <&pinctrl_usart1 &pinctrl_usart1_rts_cts>;
-
-	atmel,use-dma-rx;
-	atmel,use-dma-tx;
-
-	status = "okay";
-};
-
 &macb1 {
 	status = "okay";
 
@@ -107,15 +76,6 @@
 
 &dbgu {
 	atmel,use-dma-tx;
-
-	status = "okay";
-};
-
-&usb0 {
-	pinctrl-names = "default";
-	pinctrl-0 = <&pinctrl_usba_vbus>;
-
-	atmel,vbus-gpio = <&pioC 14 GPIO_ACTIVE_LOW>;
 
 	status = "okay";
 };
