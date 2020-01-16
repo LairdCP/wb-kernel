@@ -4286,6 +4286,7 @@ static struct genl_family atheros_fam = {
 	.name = "atheros",
 	.version = ATHEROS_EVENT_VERSION,
 	.maxattr = ATHEROS_ATTR_MAX,
+	.policy = atheros_policy,
 };
 
 enum ath_multicast_groups {
@@ -4579,25 +4580,21 @@ const struct genl_ops atheros_ops[] = {
 	{
 		.cmd = ATHEROS_CMD_GET_VALUE,
 		.flags = 0,
-		.policy = atheros_policy,
 		.doit = ath6kl_genl_get_value,
 		.dumpit = NULL,
 	}, {
 		.cmd = ATHEROS_CMD_SET_PHY_MODE,
 		.flags = 0,
-		.policy = atheros_policy,
 		.doit = ath6kl_genl_set_phy_mode,
 		.dumpit = NULL,
 	}, {
 		.cmd = ATHEROS_CMD_SEND_WMI,
 		.flags = 0,
-		.policy = atheros_policy,
 		.doit = ath6kl_genl_wmi_passthru,
 		.dumpit = NULL,
 	}, {
 		.cmd = ATHEROS_CMD_QOS,
 		.flags = 0,
-		.policy = atheros_policy,
 		.doit = ath6kl_genl_qos,
 		.dumpit = NULL,
 	},

@@ -1501,11 +1501,17 @@ static int drbg_prepare_hrng(struct drbg_state *drbg)
 
 	switch (err) {
 	case 0:
+		/*
+		 * Require frequent reseeds until the seed source is fully
+		 * initialized.
+		 */
+		drbg->reseed_threshold = 50;
 		break;
 
 	case -EALREADY:
 		err = 0;
-		/* fall through */
+		drbg->random_ready.func = NULL;
+		break;
 
 	default:
 		drbg->random_ready.func = NULL;
@@ -1513,12 +1519,6 @@ static int drbg_prepare_hrng(struct drbg_state *drbg)
 	}
 
 	drbg->jent = crypto_alloc_rng("jitterentropy_rng", 0, 0);
-
-	/*
-	 * Require frequent reseeds until the seed source is fully
-	 * initialized.
-	 */
-	drbg->reseed_threshold = 50;
 
 	return err;
 }

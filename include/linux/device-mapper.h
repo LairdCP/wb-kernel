@@ -13,6 +13,7 @@
 #include <linux/dm-ioctl.h>
 #include <linux/math64.h>
 #include <linux/ratelimit.h>
+#include <linux/dm-ioctl.h>
 
 struct dm_dev;
 struct dm_target;
@@ -433,6 +434,11 @@ union map_info *dm_get_rq_mapinfo(struct request *rq);
 int __init dm_early_create(struct dm_ioctl *dmi,
 			   struct dm_target_spec **spec_array,
 			   char **target_params_array);
+
+/*
+ * Device mapper ioctl function.
+ */
+int dm_ioctl_cmd(unsigned int command, struct dm_ioctl *param);
 
 struct queue_limits *dm_get_queue_limits(struct mapped_device *md);
 

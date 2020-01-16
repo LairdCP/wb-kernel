@@ -412,6 +412,7 @@ config LATTICE_ECP3_CONFIG
 
 config LAIRD_FS
 	bool "Laird FS Key injector"
+	select KEYS
 	help
 	  This driver is in charge of injecting the FS key for encrypted
 	  filesystems.

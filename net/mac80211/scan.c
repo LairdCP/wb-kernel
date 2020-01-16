@@ -101,51 +101,6 @@ ieee80211_update_bss_from_elems(struct ieee80211_local *local,
 				bool beacon)
 {
 	int clen, srlen;
-	struct cfg80211_inform_bss bss_meta = {
-		.boottime_ns = rx_status->boottime_ns,
-	};
-	bool signal_valid;
-	struct ieee80211_sub_if_data *scan_sdata;
-
-	if (rx_status->flag & RX_FLAG_NO_SIGNAL_VAL)
-		bss_meta.signal = 0; /* invalid signal indication */
-	else if (ieee80211_hw_check(&local->hw, SIGNAL_DBM))
-		bss_meta.signal = rx_status->signal * 100;
-	else if (ieee80211_hw_check(&local->hw, SIGNAL_UNSPEC))
-		bss_meta.signal = (rx_status->signal * 100) / local->hw.max_signal;
-
-	bss_meta.scan_width = NL80211_BSS_CHAN_WIDTH_20;
-	if (rx_status->bw == RATE_INFO_BW_5)
-		bss_meta.scan_width = NL80211_BSS_CHAN_WIDTH_5;
-	else if (rx_status->bw == RATE_INFO_BW_10)
-		bss_meta.scan_width = NL80211_BSS_CHAN_WIDTH_10;
-
-	bss_meta.chan = channel;
-
-	rcu_read_lock();
-	scan_sdata = rcu_dereference(local->scan_sdata);
-	if (scan_sdata && scan_sdata->vif.type == NL80211_IFTYPE_STATION &&
-	    scan_sdata->vif.bss_conf.assoc &&
-	    ieee80211_have_rx_timestamp(rx_status)) {
-		bss_meta.parent_tsf =
-			ieee80211_calculate_rx_timestamp(local, rx_status,
-							 len + FCS_LEN, 24);
-		ether_addr_copy(bss_meta.parent_bssid,
-				scan_sdata->vif.bss_conf.bssid);
-	}
-	rcu_read_unlock();
-
-	cbss = cfg80211_inform_bss_frame_data(local->hw.wiphy, &bss_meta,
-					      mgmt, len, GFP_ATOMIC);
-	if (!cbss)
-		return NULL;
-	/* In case the signal is invalid update the status */
-	signal_valid = abs(channel->center_freq - cbss->channel->center_freq)
-		<= local->hw.wiphy->max_adj_channel_rssi_comp;
-	if (!signal_valid)
-		rx_status->flag |= RX_FLAG_NO_SIGNAL_VAL;
-
-	bss = (void *)cbss->priv;
 
 	if (beacon)
 		bss->device_ts_beacon = rx_status->device_timestamp;

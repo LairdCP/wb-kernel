@@ -23,7 +23,7 @@
 
 #define AT91_I2C_TIMEOUT	msecs_to_jiffies(100)	/* transfer timeout */
 #define AT91_I2C_DMA_THRESHOLD	8			/* enable DMA if transfer size is bigger than this threshold */
-#define AUTOSUSPEND_TIMEOUT		2000
+#define AUTOSUSPEND_TIMEOUT		100
 #define AT91_I2C_MAX_ALT_CMD_DATA_SIZE	256
 
 /* AT91 TWI register definitions */

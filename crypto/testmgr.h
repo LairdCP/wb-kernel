@@ -56,9 +56,11 @@ struct hash_testvec {
  * @wk:		Does the test need CRYPTO_TFM_REQ_FORBID_WEAK_KEYS?
  * 		( e.g. test needs to fail due to a weak key )
  * @fips_skip:	Skip the test vector in FIPS mode
- * @generates_iv: Encryption should ignore the given IV, and output @iv.
- *		  Decryption takes @iv.  Needed for AES Keywrap ("kw(aes)").
- */
+ * @generates_iv: Encryption should ignore the given IV, and output @iv_out.
+ *		  Decryption takes @iv_out.  Needed for AES Keywrap ("kw(aes)").
+ * @setkey_error: Expected error from setkey()
+ * @crypt_error: Expected error from encrypt() and decrypt()
+*/
 struct cipher_testvec {
 	const char *key;
 	const char *iv;

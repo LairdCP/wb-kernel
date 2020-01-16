@@ -7,7 +7,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/slab.h>
-#include <linux/fs.h>
+#include <linux/fscrypt.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
 #include <linux/of_device.h>
@@ -20,7 +20,7 @@
 static struct key *builtin_fs_keys;
 
 struct mem_key {
-	u8 key[FS_MAX_KEY_SIZE];
+	u8 key[FSCRYPT_MAX_KEY_SIZE];
 };
 
 struct mem_region {

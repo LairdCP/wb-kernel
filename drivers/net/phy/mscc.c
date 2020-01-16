@@ -863,16 +863,12 @@ static int vsc85xx_default_config(struct phy_device *phydev)
 	rc = phy_modify_paged(phydev, MSCC_PHY_PAGE_EXTENDED_2,
 			      MSCC_PHY_RGMII_CNTL, RGMII_RX_CLK_DELAY_MASK,
 			      reg_val);
-
-	rc = vsc85xx_phy_page_set(phydev, MSCC_PHY_PAGE_GENERAL_PURP);
-	if (rc != 0)
+	if (rc)
 		goto out_unlock;
 
-	reg_val = phy_read(phydev, MSCC_PHY_CLKOUT_CNTL);
-	reg_val &= ~MSCC_CLKOUT_FREQ_MASK;
-	reg_val |= MSCC_CLKOUT_FREQ_125_MHZ;
-	phy_write(phydev, MSCC_PHY_CLKOUT_CNTL, reg_val);
-	rc = vsc85xx_phy_page_set(phydev, MSCC_PHY_PAGE_STANDARD);
+	rc = phy_modify_paged(phydev, MSCC_PHY_PAGE_GENERAL_PURP,
+				MSCC_PHY_CLKOUT_CNTL, MSCC_CLKOUT_FREQ_MASK,
+				MSCC_CLKOUT_FREQ_125_MHZ);
 
 out_unlock:
 	mutex_unlock(&phydev->lock);

@@ -52,10 +52,16 @@ void at91_twi_irq_restore(struct at91_twi_dev *dev)
 	at91_twi_write(dev, AT91_TWI_IER, dev->imr);
 }
 
-void at91_init_twi_bus(struct at91_twi_dev *dev)
+static void at91_reset_twi_bus(struct at91_twi_dev *dev)
 {
 	at91_disable_twi_interrupts(dev);
 	at91_twi_write(dev, AT91_TWI_CR, AT91_TWI_SWRST);
+}
+
+void at91_init_twi_bus(struct at91_twi_dev *dev)
+{
+	at91_reset_twi_bus(dev);
+
 	if (dev->slave_detected)
 		at91_init_twi_bus_slave(dev);
 	else
@@ -254,14 +260,17 @@ static int at91_twi_probe(struct platform_device *pdev)
 
 	pm_runtime_set_autosuspend_delay(dev->dev, AUTOSUSPEND_TIMEOUT);
 	pm_runtime_use_autosuspend(dev->dev);
+	pm_runtime_get_noresume(dev->dev);
 	pm_runtime_set_active(dev->dev);
 	pm_runtime_enable(dev->dev);
 
 	rc = i2c_add_numbered_adapter(&dev->adapter);
 	if (rc) {
+		pm_runtime_disable(dev->dev);
+		pm_runtime_dont_use_autosuspend(dev->dev);
+
 		clk_disable_unprepare(dev->clk);
 
-		pm_runtime_disable(dev->dev);
 		pm_runtime_set_suspended(dev->dev);
 
 		return rc;
@@ -269,6 +278,10 @@ static int at91_twi_probe(struct platform_device *pdev)
 
 	dev_info(dev->dev, "AT91 i2c bus driver (hw version: %#x).\n",
 		 at91_twi_read(dev, AT91_TWI_VER));
+
+	pm_runtime_mark_last_busy(dev->dev);
+	pm_runtime_put_autosuspend(dev->dev);
+
 	return 0;
 }
 
@@ -276,11 +289,16 @@ static int at91_twi_remove(struct platform_device *pdev)
 {
 	struct at91_twi_dev *dev = platform_get_drvdata(pdev);
 
-	i2c_del_adapter(&dev->adapter);
-	clk_disable_unprepare(dev->clk);
-
 	pm_runtime_disable(dev->dev);
-	pm_runtime_set_suspended(dev->dev);
+	pm_runtime_dont_use_autosuspend(dev->dev);
+
+	i2c_del_adapter(&dev->adapter);
+
+	if (!pm_runtime_suspended(dev->dev)) {
+		at91_reset_twi_bus(dev);
+		clk_disable_unprepare(dev->clk);
+		pm_runtime_set_suspended(dev->dev);
+	}
 
 	return 0;
 }
@@ -290,6 +308,9 @@ static int at91_twi_remove(struct platform_device *pdev)
 static int at91_twi_runtime_suspend(struct device *dev)
 {
 	struct at91_twi_dev *twi_dev = dev_get_drvdata(dev);
+
+	/* Reduces current consumption in suspend */
+	at91_reset_twi_bus(twi_dev);
 
 	clk_disable_unprepare(twi_dev->clk);
 
@@ -304,39 +325,17 @@ static int at91_twi_runtime_resume(struct device *dev)
 
 	pinctrl_pm_select_default_state(dev);
 
-	return clk_prepare_enable(twi_dev->clk);
-}
+	clk_prepare_enable(twi_dev->clk);
 
-static int at91_twi_suspend_noirq(struct device *dev)
-{
-	if (!pm_runtime_status_suspended(dev))
-		at91_twi_runtime_suspend(dev);
-
-	return 0;
-}
-
-static int at91_twi_resume_noirq(struct device *dev)
-{
-	struct at91_twi_dev *twi_dev = dev_get_drvdata(dev);
-	int ret;
-
-	if (!pm_runtime_status_suspended(dev)) {
-		ret = at91_twi_runtime_resume(dev);
-		if (ret)
-			return ret;
-	}
-
-	pm_runtime_mark_last_busy(dev);
-	pm_request_autosuspend(dev);
-
+	/* This fixes random 1st transaction failure after resume */
 	at91_init_twi_bus(twi_dev);
 
 	return 0;
 }
 
 static const struct dev_pm_ops at91_twi_pm = {
-	.suspend_noirq	= at91_twi_suspend_noirq,
-	.resume_noirq	= at91_twi_resume_noirq,
+	.suspend_noirq	= pm_runtime_force_suspend,
+	.resume_noirq	= pm_runtime_force_resume,
 	.runtime_suspend	= at91_twi_runtime_suspend,
 	.runtime_resume		= at91_twi_runtime_resume,
 };
