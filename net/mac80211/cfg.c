@@ -353,6 +353,10 @@ static int ieee80211_set_noack_map(struct wiphy *wiphy,
 	return 0;
 }
 
+#ifdef CONFIG_LRDMWL_FIPS
+void crypto_gcmp_set_if_name(struct crypto_aead *parent, char *ifname);
+#endif
+
 static int ieee80211_add_key(struct wiphy *wiphy, struct net_device *dev,
 			     u8 key_idx, bool pairwise, const u8 *mac_addr,
 			     struct key_params *params)
@@ -394,6 +398,12 @@ static int ieee80211_add_key(struct wiphy *wiphy, struct net_device *dev,
 				  cs);
 	if (IS_ERR(key))
 		return PTR_ERR(key);
+
+#ifdef CONFIG_LRDMWL_FIPS
+	if (params->cipher == WLAN_CIPHER_SUITE_GCMP ||
+		params->cipher == WLAN_CIPHER_SUITE_GCMP_256)
+		crypto_gcmp_set_if_name(key->u.gcmp.tfm, sdata->name);
+#endif
 
 	if (pairwise)
 		key->conf.flags |= IEEE80211_KEY_FLAG_PAIRWISE;
