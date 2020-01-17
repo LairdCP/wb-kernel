@@ -18,18 +18,31 @@
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
-#include <linux/slab.h>
+#include <linux/netdevice.h>
 
 struct crypto_gcmp_ctx {
 	struct crypto_aead *child;
-	long long pn64, pn64_offset;
-	u8 mac[6];
-	bool first, check_failed;
+	u64 pn64;
+	u8 iv[GCM_AES_IV_SIZE] __attribute__((aligned(4)));
+	bool check_failed, mac_set;
 };
 
 struct crypto_gcmp_req_ctx {
 	struct aead_request subreq;
 };
+
+void crypto_gcmp_set_if_name(struct crypto_aead *parent, char *ifname)
+{
+	struct crypto_gcmp_ctx *ctx = crypto_aead_ctx(parent);
+
+	 struct net_device *dev = __dev_get_by_name(&init_net, ifname);
+
+	if (!ctx->mac_set && dev) {
+		ctx->mac_set = true;
+		memcpy(ctx->iv, dev->dev_addr, ETH_ALEN);
+	}
+}
+EXPORT_SYMBOL_GPL(crypto_gcmp_set_if_name);
 
 static int crypto_gcmp_setkey(struct crypto_aead *parent, const u8 *key,
 				 unsigned int keylen)
@@ -45,8 +58,8 @@ static int crypto_gcmp_setkey(struct crypto_aead *parent, const u8 *key,
 	crypto_aead_set_flags(parent, crypto_aead_get_flags(child) &
 				      CRYPTO_TFM_RES_MASK);
 
-	ctx->first = true;
 	ctx->check_failed = false;
+	ctx->pn64 = 0;
 
 	return err;
 }
@@ -81,37 +94,26 @@ static int crypto_gcmp_encrypt(struct aead_request *req)
 {
 	struct crypto_aead *aead = crypto_aead_reqtfm(req);
 	struct crypto_gcmp_ctx *ctx = crypto_aead_ctx(aead);
-	u64 pn64;
-	u8 *pn = req->iv + 6;
+	u64 pn64 = ctx->pn64;
+	u8 *pn = ctx->iv + ETH_ALEN;
 
-	if (ctx->check_failed)
+	if (ctx->check_failed || !ctx->mac_set || pn64 >= 0xffffffffffff)
 		return -EINVAL;
 
-	pn64 = (u64)pn[0] << 40 | (u64)pn[1] << 32 | (u64)pn[2] << 24 |
-	       (u64)pn[3] << 16 | (u64)pn[4] <<  8 | (u64)pn[5];
+	ctx->pn64 = ++pn64;
 
-	if (ctx->first) {
-		ctx->first = false;
-		ctx->pn64_offset = pn64;
-		memcpy(ctx->mac, req->iv, sizeof(ctx->mac));
-		pn64 = 0;
-	} else {
-		if (memcmp(ctx->mac, req->iv, sizeof(ctx->mac))) {
-			ctx->check_failed = true;
-			pr_err("gcmp iv mac fail\n");
-			return -EINVAL;
-		}
+	pn[5] = pn64;
+	pn[4] = pn64 >> 8;
+	pn[3] = pn64 >> 16;
+	pn[2] = pn64 >> 24;
+	pn[1] = pn64 >> 32;
+	pn[0] = pn64 >> 40;
 
-		pn64 = (pn64 - ctx->pn64_offset) & 0xffffffffffffULL;
-		if (pn64 <= ctx->pn64) {
-			ctx->check_failed = true;
-			pr_err("gcmp iv pn fail: %llx %llx %llx\n", pn64,
-				ctx->pn64, ctx->pn64_offset);
-			return -EINVAL;
-		}
+	if (memcmp(ctx->iv, req->iv, GCM_AES_IV_SIZE)) {
+		ctx->check_failed = true;
+		pr_err("gcmp iv check fail\n");
+		return -EINVAL;
 	}
-
-	ctx->pn64 = pn64;
 
 	req = crypto_gcmp_crypt(req);
 
