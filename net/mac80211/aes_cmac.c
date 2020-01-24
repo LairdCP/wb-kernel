@@ -95,7 +95,7 @@ struct crypto_shash *ieee80211_aes_cmac_key_setup(const u8 key[],
 	struct crypto_ahash *tfma;
 
 	tfma = crypto_alloc_ahash("cmac(aes)", 0, CRYPTO_ALG_ASYNC);
-	if (!IS_ERR(tfma)) {
+	if (!IS_ERR(tfma))
 		crypto_ahash_setkey(tfma, key, key_len);
 
 	return (struct crypto_shash *)tfma;
