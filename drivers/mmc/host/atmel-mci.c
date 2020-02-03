@@ -393,6 +393,7 @@ struct atmel_mci_slot {
 	int			detect_pin;
 	int			wp_pin;
 	bool			detect_is_active_high;
+	bool			sdio_irq_enabled;
 
 	struct timer_list	detect_timer;
 };
@@ -1588,26 +1589,40 @@ static int atmci_get_cd(struct mmc_host *mmc)
 	return present;
 }
 
+static void _atmci_enable_sdio_irq(struct atmel_mci_slot *slot, int enable)
+{
+	if (enable && !slot->sdio_irq_enabled)
+		return;
+
+	atmci_writel(slot->host, (enable ? ATMCI_IER : ATMCI_IDR),
+		slot->sdio_irq);
+}
+
 static void atmci_enable_sdio_irq(struct mmc_host *mmc, int enable)
 {
 	struct atmel_mci_slot  *slot = mmc_priv(mmc);
 	struct atmel_mci       *host = slot->host;
-	int iflags;
+	struct device          *dev  = &host->pdev->dev;
 
-	iflags = atmci_readl(host, ATMCI_IMR);
-	if (((iflags & slot->sdio_irq) != 0) == enable) {
+	if (slot->sdio_irq_enabled == enable)
 		return;
-	}
+
+	slot->sdio_irq_enabled = enable;
+
+	_atmci_enable_sdio_irq(slot, enable);
 
 	/* Avoid runtime suspending the device when SDIO IRQ is enabled */
-	if (enable) {
-		pm_runtime_get_noresume(&host->pdev->dev);
-		atmci_writel(host, ATMCI_IER, slot->sdio_irq);
-	}
-	else {
-		atmci_writel(host, ATMCI_IDR, slot->sdio_irq);
-		pm_runtime_put_noidle(&host->pdev->dev);
-	}
+	if (enable)
+		pm_runtime_get_noresume(dev);
+	else
+		pm_runtime_put_noidle(dev);
+}
+
+static void atmci_ack_sdio_irq(struct mmc_host *mmc)
+{
+	struct atmel_mci_slot  *slot = mmc_priv(mmc);
+
+	_atmci_enable_sdio_irq(slot, 1);
 }
 
 static const struct mmc_host_ops atmci_ops = {
@@ -1616,6 +1631,7 @@ static const struct mmc_host_ops atmci_ops = {
 	.get_ro		= atmci_get_ro,
 	.get_cd		= atmci_get_cd,
 	.enable_sdio_irq = atmci_enable_sdio_irq,
+	.ack_sdio_irq	= atmci_ack_sdio_irq,
 };
 
 /* Called with host->lock held */
@@ -2133,7 +2149,8 @@ static void atmci_sdio_interrupt(struct atmel_mci *host, u32 status)
 	for (i = 0; i < ATMCI_MAX_NR_SLOTS; i++) {
 		struct atmel_mci_slot *slot = host->slot[i];
 		if (slot && (status & slot->sdio_irq)) {
-			mmc_signal_sdio_irq(slot->mmc);
+			_atmci_enable_sdio_irq(slot, 0);
+			sdio_signal_irq(slot->mmc);
 		}
 	}
 }
@@ -2313,8 +2330,10 @@ static int atmci_init_slot(struct atmel_mci *host,
 	mmc->f_min = DIV_ROUND_UP(host->bus_hz, 512);
 	mmc->f_max = host->bus_hz / 2;
 	mmc->ocr_avail	= MMC_VDD_32_33 | MMC_VDD_33_34;
-	if (sdio_irq)
+	if (sdio_irq) {
 		mmc->caps |= MMC_CAP_SDIO_IRQ;
+		mmc->caps2 |= MMC_CAP2_SDIO_IRQ_NOTHREAD;
+	}
 	if (host->caps.has_highspeed)
 		mmc->caps |= MMC_CAP_SD_HIGHSPEED;
 	/*
