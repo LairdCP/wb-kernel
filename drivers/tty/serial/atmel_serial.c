@@ -168,6 +168,7 @@ struct atmel_uart_port {
 	spinlock_t		lock_suspended;
 
 	bool			hd_start_rx;	/* can start RX during half-duplex operation */
+	bool			wakeup_on_empty;
 
 	/* ISO7816 */
 	unsigned int		fidi_min;
