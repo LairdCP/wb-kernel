@@ -13,7 +13,6 @@
 #include <linux/dm-ioctl.h>
 #include <linux/math64.h>
 #include <linux/ratelimit.h>
-#include <linux/dm-ioctl.h>
 
 struct dm_dev;
 struct dm_target;

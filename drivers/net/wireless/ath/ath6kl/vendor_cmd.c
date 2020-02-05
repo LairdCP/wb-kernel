@@ -156,9 +156,7 @@ void lrd_update_pm_params(struct ath6kl *ar, u8 if_idx)
 	ath6kl_wmi_pmparams_cmd(ar->wmi, if_idx, LRD_PM_PARMS_IDLE_PERIOD_DEFAULT,
 				LRD_PM_PARMS_PSPOLL_NUMBER, 0, LRD_PM_PARMS_TX_WAKEUP_POLICY,
 				LRD_PM_PARMS_NUM_TX_WAKEUP, 0);
-	return;
 }
-
 
 static const struct wiphy_vendor_command lrd_vendor_commands[] = {
 	{
@@ -168,6 +166,7 @@ static const struct wiphy_vendor_command lrd_vendor_commands[] = {
 		},
 		.flags = 0,
 		.doit  = lrd_vendor_cmd_profile_set_parms,
+		.policy = lrd_vendor_attr_policy,
 	},
 };
 
