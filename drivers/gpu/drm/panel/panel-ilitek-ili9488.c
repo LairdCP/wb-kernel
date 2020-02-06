@@ -294,9 +294,6 @@ static int ili9488_get_modes(struct drm_panel *panel)
 	drm_display_info_set_bus_formats(&connector->display_info,
 					 &bus_format, 1);
 
-	strncpy(connector->display_info.name, "Densitron DMT035QWNXNT\0",
-		DRM_DISPLAY_INFO_LEN);
-
 	drm_mode_probed_add(connector, mode);
 
 	return 1; /* Number of modes */

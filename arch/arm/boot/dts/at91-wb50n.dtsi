@@ -49,7 +49,7 @@
 	clock-frequency = <12000000>;
 };
 
-&slow_osc {
+&clk32k {
 	atmel,osc-bypass;
 };
 

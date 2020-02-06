@@ -109,7 +109,7 @@ static int gpio_wakeup_probe(struct platform_device *pdev)
 			"interrupt-names", i, &name);
 
 		if (!ret) {
-			priv->wkup[i].wks = wakeup_source_register(name);
+			priv->wkup[i].wks = wakeup_source_register(dev, name);
 			if (priv->wkup[i].wks->name)
 				priv->wkup[i].name = priv->wkup[i].wks->name;
 		}
