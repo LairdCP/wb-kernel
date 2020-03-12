@@ -179,6 +179,10 @@
 #define ATMCI_DATA_ERROR_FLAGS	(ATMCI_DCRCE | ATMCI_DTOE | ATMCI_OVRE | ATMCI_UNRE)
 #define ATMCI_DMA_THRESHOLD	16
 
+/* Errata claims that transfers of 12 bytes and above should work,
+   but testing on the actual hardware shows it's 16 bytes and above */
+#define ATMCI_PDC_ERRATA_SIZE	16
+
 enum {
 	EVENT_CMD_RDY = 0,
 	EVENT_XFER_COMPLETE,
@@ -336,6 +340,7 @@ struct atmel_mci {
 	enum atmel_mci_state	state;
 	struct list_head	queue;
 
+	bool			use_buffer;
 	bool			need_clock_update;
 	bool			need_reset;
 	struct timer_list	timer;
@@ -911,7 +916,7 @@ static void atmci_pdc_set_single_buf(struct atmel_mci *host,
 		counter_reg += ATMEL_PDC_SCND_BUF_OFF;
 	}
 
-	if (!host->caps.has_rwproof) {
+	if (host->use_buffer) {
 		buf_size = host->buf_size;
 		atmci_writel(host, pointer_reg, host->buf_phys_addr);
 	} else {
@@ -919,11 +924,10 @@ static void atmci_pdc_set_single_buf(struct atmel_mci *host,
 		atmci_writel(host, pointer_reg, sg_dma_address(host->sg));
 	}
 
-	if (host->data_size <= buf_size) {
-		if (host->data_size & 0x3) {
+	if (host->data_size <= buf_size || host->use_buffer) {
+		if (host->data->blksz & 0x3) {
 			/* If size is different from modulo 4, transfer bytes */
 			atmci_writel(host, counter_reg, host->data_size);
-			atmci_writel(host, ATMCI_MR, host->mode_reg | ATMCI_MR_PDCFBYTE);
 		} else {
 			/* Else transfer 32-bits words */
 			atmci_writel(host, counter_reg, host->data_size / 4);
@@ -970,13 +974,16 @@ static void atmci_pdc_cleanup(struct atmel_mci *host)
  */
 static void atmci_pdc_complete(struct atmel_mci *host)
 {
-	int transfer_size = host->data->blocks * host->data->blksz;
+	int transfer_size;
 	int i;
 
 	atmci_writel(host, ATMEL_PDC_PTCR, ATMEL_PDC_RXTDIS | ATMEL_PDC_TXTDIS);
 
-	if ((!host->caps.has_rwproof)
-	    && (host->data->flags & MMC_DATA_READ)) {
+	if (host->use_buffer && (host->data->flags & MMC_DATA_READ)) {
+		transfer_size = host->data->blocks * host->data->blksz;
+		if (transfer_size > host->buf_size)
+			transfer_size = host->buf_size;
+
 		if (host->caps.has_bad_data_ordering)
 			for (i = 0; i < transfer_size; i++)
 				host->buffer[i] = swab32(host->buffer[i]);
@@ -1068,17 +1075,6 @@ static u32 atmci_prepare_data(struct atmel_mci *host, struct mmc_data *data)
 
 	iflags = ATMCI_DATA_ERROR_FLAGS;
 
-	/*
-	 * Errata: MMC data write operation with less than 12
-	 * bytes is impossible.
-	 *
-	 * Errata: MCI Transmit Data Register (TDR) FIFO
-	 * corruption when length is not multiple of 4.
-	 */
-	if (data->blocks * data->blksz < 12
-			|| (data->blocks * data->blksz) & 3)
-		host->need_reset = true;
-
 	host->pio_offset = 0;
 	if (data->flags & MMC_DATA_READ)
 		iflags |= ATMCI_RXRDY;
@@ -1097,8 +1093,9 @@ static u32 atmci_prepare_data(struct atmel_mci *host, struct mmc_data *data)
 static u32
 atmci_prepare_data_pdc(struct atmel_mci *host, struct mmc_data *data)
 {
-	u32 iflags, tmp;
+	u32 iflags;
 	int i;
+	bool write_errata;
 
 	data->error = -EINPROGRESS;
 
@@ -1106,29 +1103,39 @@ atmci_prepare_data_pdc(struct atmel_mci *host, struct mmc_data *data)
 	host->sg = data->sg;
 	iflags = ATMCI_DATA_ERROR_FLAGS;
 
-	/* Enable pdc mode */
-	atmci_writel(host, ATMCI_MR, host->mode_reg | ATMCI_MR_PDCMODE);
+	/* Setup PDC mode */
+	atmci_writel(host, ATMCI_MR, host->mode_reg
+		| ATMCI_MR_PDCMODE
+		| ATMCI_BLKLEN(data->blksz)
+		| ((data->blksz & 0x3) ? ATMCI_MR_PDCFBYTE : 0));
 
 	if (data->flags & MMC_DATA_READ)
 		iflags |= ATMCI_ENDRX | ATMCI_RXBUFF;
 	else
 		iflags |= ATMCI_ENDTX | ATMCI_TXBUFE | ATMCI_BLKE;
 
-	/* Set BLKLEN */
-	tmp = atmci_readl(host, ATMCI_MR);
-	tmp &= 0x0000ffff;
-	tmp |= ATMCI_BLKLEN(data->blksz);
-	atmci_writel(host, ATMCI_MR, tmp);
-
 	/* Configure PDC */
 	host->data_size = data->blocks * data->blksz;
-	dma_map_sg(&host->pdev->dev, data->sg, data->sg_len,
-		   mmc_get_dma_dir(data));
 
-	if ((!host->caps.has_rwproof)
-	    && (host->data->flags & MMC_DATA_WRITE)) {
+	write_errata = (data->flags & MMC_DATA_WRITE) &&
+		host->data_size < ATMCI_PDC_ERRATA_SIZE;
+
+	host->use_buffer = !host->caps.has_rwproof || write_errata;
+	
+	if (host->use_buffer && host->data_size > host->buf_size)
+		host->data_size = host->buf_size;
+
+	if (!host->use_buffer)
+		dma_map_sg(&host->pdev->dev, data->sg, data->sg_len,
+			mmc_get_dma_dir(data));
+	else if (data->flags & MMC_DATA_WRITE) {
+		if (write_errata) {
+			host->data_size = ATMCI_PDC_ERRATA_SIZE;
+			/* Add padding as defined in MR */
+			memset(host->buffer, 0, ATMCI_PDC_ERRATA_SIZE);
+		}
 		sg_copy_to_buffer(host->data->sg, host->data->sg_len,
-		                  host->buffer, host->data_size);
+				  host->buffer, host->data_size);
 		if (host->caps.has_bad_data_ordering)
 			for (i = 0; i < host->data_size; i++)
 				host->buffer[i] = swab32(host->buffer[i]);
@@ -1273,10 +1280,7 @@ static void atmci_stop_transfer_dma(struct atmel_mci *host)
 		atmci_dma_cleanup(host);
 	} else {
 		/* Data transfer was stopped by the interrupt handler */
-		dev_dbg(&host->pdev->dev,
-		        "(%s) set pending xfer complete\n", __func__);
-		atmci_set_pending(host, EVENT_XFER_COMPLETE);
-		atmci_writel(host, ATMCI_IER, ATMCI_NOTBUSY);
+		atmci_stop_transfer(host);
 	}
 }
 
@@ -2247,9 +2251,12 @@ static irqreturn_t atmci_interrupt(int irq, void *dev_id)
 			dev_dbg(&host->pdev->dev, "IRQ: blke\n");
 			atmci_writel(host, ATMCI_IDR, ATMCI_BLKE);
 			smp_wmb();
-			dev_dbg(&host->pdev->dev, "set pending notbusy\n");
-			atmci_set_pending(host, EVENT_NOTBUSY);
-			tasklet_schedule(&host->tasklet);
+			if (host->data->blocks > 1) {
+				dev_dbg(&host->pdev->dev,
+					"set pending notbusy\n");
+				atmci_set_pending(host, EVENT_NOTBUSY);
+				tasklet_schedule(&host->tasklet);
+			}
 		}
 
 		if (pending & ATMCI_NOTBUSY) {
@@ -2344,7 +2351,7 @@ static int atmci_init_slot(struct atmel_mci *host,
 	if ((slot_data->bus_width >= 4) && host->caps.has_rwproof)
 		mmc->caps |= MMC_CAP_4_BIT_DATA;
 
-	if (atmci_get_version(host) < 0x200) {
+	if (!host->caps.has_rwproof) {
 		mmc->max_segs = 256;
 		mmc->max_blk_size = 4095;
 		mmc->max_blk_count = 256;
@@ -2534,6 +2541,7 @@ static int atmci_probe(struct platform_device *pdev)
 	struct atmel_mci		*host;
 	struct resource			*regs;
 	unsigned int			nr_slots;
+	unsigned int			buf_size;
 	int				irq;
 	int				ret, i;
 
@@ -2644,8 +2652,10 @@ static int atmci_probe(struct platform_device *pdev)
 		goto err_init_slot;
 	}
 
-	if (!host->caps.has_rwproof) {
-		host->buffer = dma_alloc_coherent(&pdev->dev, host->buf_size,
+	if (host->caps.has_pdc) {
+		buf_size = host->caps.has_rwproof ?
+			ATMCI_PDC_ERRATA_SIZE : host->buf_size;
+		host->buffer = dma_alloc_coherent(&pdev->dev, buf_size,
 		                                  &host->buf_phys_addr,
 						  GFP_KERNEL);
 		if (!host->buffer) {
