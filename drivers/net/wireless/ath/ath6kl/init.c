@@ -1008,11 +1008,9 @@ static int ath6kl_fetch_fw_apin(struct ath6kl *ar, const char *name)
 
 	snprintf(filename, sizeof(filename), "%s/%s", ar->hw.fw.dir, name);
 
-	ret = request_firmware(&fw, filename, ar->dev);
-	if (ret) {
-		ath6kl_err("Failed request firmware, rv: %d\n", ret);
+	ret = firmware_request_nowarn(&fw, filename, ar->dev);
+	if (ret)
 		return ret;
-	}
 
 	data = fw->data;
 	len = fw->size;
