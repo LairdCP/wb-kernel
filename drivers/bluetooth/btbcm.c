@@ -339,6 +339,7 @@ static const struct bcm_subver_table bcm_uart_subver_table[] = {
 	{ 0x220e, "BCM20702A1"  },	/* 001.002.014 */
 	{ 0x4217, "BCM4329B1"   },	/* 002.002.023 */
 	{ 0x6106, "BCM4359C0"	},	/* 003.001.006 */
+	{ 0x2119, "BCM4373A0"   },	/* 001.001.025 */
 	{ }
 };
 
@@ -353,6 +354,7 @@ static const struct bcm_subver_table bcm_usb_subver_table[] = {
 	{ 0x410e, "BCM20702B0"	},	/* 002.001.014 */
 	{ 0x6109, "BCM4335C0"	},	/* 003.001.009 */
 	{ 0x610c, "BCM4354"	},	/* 003.001.012 */
+	{ 0x2119, "BCM4373A0"   },	/* 001.001.025 */
 	{ }
 };
 
