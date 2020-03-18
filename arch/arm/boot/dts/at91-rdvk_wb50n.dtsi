@@ -1,0 +1,21 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * at91-rdvk_wb50n.dtsi - Device Tree include file for WB50N SYSD RDVK Board
+ *
+ *  Copyright (C) 2018-2020 Laird Connectivity
+ *
+ */
+
+#include "at91-dvk_wb50n.dtsi"
+
+&mmc0 {
+	keep-power-in-suspend;
+};
+
+&i2c0 {
+	status = "disabled";
+};
+
+&spi1 {
+	status = "disabled";
+};

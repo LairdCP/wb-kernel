@@ -240,6 +240,10 @@
 	};
 };
 
+&shutdown_controller {
+	atmel,wakeup-mode = "low";
+};
+
 &watchdog {
 	atmel,idle-halt;
 
