@@ -1,19 +1,18 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * at91-wb45n.dtsi - Device Tree file for WB45NBT board
+ * at91-wb45n.dtsi - Device Tree include file for WB45NBT CPU module
  *
- *  Copyright (C) 2018 Laird
+ *  Copyright (C) 2018-2020 Laird Connectivity
  *
  */
 
 #include "at91sam9g25.dtsi"
 
 / {
-	model = "Laird Workgroup Bridge 45N - Atmel AT91SAM (dt)";
-	compatible = "laird,wb45n", "laird,wbxx", "atmel,at91sam9x5", "atmel,at91sam9";
+	model = "Laird Workgroup Bridge 45N - Atmel AT91SAM9G25";
+	compatible = "laird,wb45n", "atmel,at91sam9g25", "atmel,at91sam9x5";
 
 	chosen {
-		bootargs = "ubi.mtd=6 root=ubi0:rootfs rootfstype=ubifs rw";
 		stdout-path = "serial0:115200n8";
 	};
 
@@ -21,18 +20,44 @@
 		reg = <0x20000000 0x4000000>;
 	};
 
-	atheros {
-		compatible = "atheros,ath6kl";
-		atheros,board-id = "SD32";
+	wifi_pwrseq: wifi_pwrseq {
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_wifi_pmu_en>;
+
+		compatible = "mmc-pwrseq-simple";
+		reset-gpios = <&pioA 25 GPIO_ACTIVE_LOW>;
+		post-power-on-delay-ms = <1>;
 	};
 };
 
-&reset_controller {
-	compatible = "atmel,sama5d3-rstc";
+&pinctrl {
+	board {
+		pinctrl_usba_vbus: usba_vbus {
+			atmel,pins =
+				<AT91_PIOB 11 AT91_PERIPH_GPIO AT91_PINCTRL_DEGLITCH>;		/* PB11 gpio vbus sense, deglitch */
+		};
+
+		pinctrl_usb_vbus: usb_vbus {
+			atmel,pins =
+				<AT91_PIOB 12 AT91_PERIPH_GPIO AT91_PINCTRL_NONE>,
+				<AT91_PIOA 31 AT91_PERIPH_GPIO AT91_PINCTRL_NONE>,
+				<AT91_PIOB 13 AT91_PERIPH_GPIO AT91_PINCTRL_DEGLITCH>;
+		};
+
+		pinctrl_wifi_pmu_en: wifi_pmu_en {
+			atmel,pins =
+				<AT91_PIOA 25 AT91_PERIPH_GPIO AT91_PINCTRL_PULL_UP>;
+		};
+	};
 };
 
 &shutdown_controller {
 	atmel,wakeup-mode = "low";
+};
+
+&watchdog {
+	atmel,idle-halt;
+	status = "okay";
 };
 
 &slow_xtal {
@@ -43,94 +68,23 @@
 	clock-frequency = <12000000>;
 };
 
-&ebi {
+&mmc0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_mmc0_slot0_clk_cmd_dat0 &pinctrl_mmc0_slot0_dat1_3>;
 	status = "okay";
-	nand_controller: nand-controller {
-		pinctrl-0 = <&pinctrl_nand_cs &pinctrl_nand_rb &pinctrl_nand_oe_we>;
-		pinctrl-names = "default";
-		status = "okay";
 
-		nand@3 {
-			reg = <0x3 0x0 0x800000>;
-			rb-gpios = <&pioD 5 GPIO_ACTIVE_HIGH>;
-			cs-gpios = <&pioD 4 GPIO_ACTIVE_HIGH>;
-			nand-bus-width = <8>;
-			nand-ecc-mode = "hw";
-			nand-ecc-strength = <4>;
-			nand-ecc-step-size = <512>;
-			nand-on-flash-bbt;
-			label = "atmel_nand";
+	mmc-pwrseq = <&wifi_pwrseq>;
 
-			partitions {
-				compatible = "fixed-partitions";
-				#address-cells = <1>;
-				#size-cells = <1>;
-
-				at91bootstrap@0 {
-					label = "at91bs";
-					reg = <0x0 0x20000>;
-				};
-
-				uboot@20000 {
-					label = "u-boot";
-					reg = <0x20000 0x80000>;
-				};
-
-				ubootenv@a0000 {
-					label = "u-boot-env";
-					reg = <0xa0000 0x20000>;
-				};
-
-				ubootenv@c0000 {
-					label = "redund-env";
-					reg = <0xc0000 0x20000>;
-				};
-
-				kernel-a@e0000 {
-					label = "kernel-a";
-					reg = <0xe0000 0x280000>;
-				};
-
-				kernel-b@360000 {
-					label = "kernel-b";
-					reg = <0x360000 0x280000>;
-				};
-
-				rootfs-a@5e0000 {
-					label = "rootfs-a";
-					reg = <0x5e0000 0x2600000>;
-				};
-
-				rootfs-b@2be0000 {
-					label = "rootfs-b";
-					reg = <0x2be0000 0x2600000>;
-				};
-
-				user@51e0000 {
-					label = "user";
-					reg = <0x51e0000 0x2dc0000>;
-				};
-
-				logs@7fa0000 {
-					label = "logs";
-					reg = <0x7fa0000 0x60000>;
-				};
-
-			};
-		};
+	slot@0 {
+		reg = <0>;
+		bus-width = <4>;
 	};
 };
 
-&usb0 {
-	num-ports = <2>;
-	atmel,vbus-gpio = <
-		&pioB 12 GPIO_ACTIVE_HIGH
-		&pioA 31 GPIO_ACTIVE_HIGH
-		>;
-	atmel,oc-gpio = <&pioB 13 GPIO_ACTIVE_LOW>;
-};
-
 &macb0 {
+	#address-cells = <1>;
+	#size-cells = <0>;
+
 	phy-mode = "rmii";
 };
 
@@ -138,28 +92,111 @@
 	cs-gpios = <&pioA 14 0>, <&pioA 7 0>, <0>, <0>;
 };
 
-&usb2 {
-	pinctrl-names = "default";
-	pinctrl-0 = <&pinctrl_board_usb2>;
-	atmel,vbus-gpio = <&pioB 11 GPIO_ACTIVE_HIGH>;
+&ebi {
+	status = "okay";
 };
 
-&mmc0 {
-	pinctrl-0 = <
-		&pinctrl_mmc0_slot0_clk_cmd_dat0
-		&pinctrl_mmc0_slot0_dat1_3>;
-	slot@0 {
-		reg = <0>;
-		bus-width = <4>;
-	};
-};
+&nand_controller {
+	status = "okay";
 
-&pinctrl {
-	usb2 {
-		pinctrl_board_usb2: usb2-board {
-			atmel,pins =
-				<AT91_PIOB 11 AT91_PERIPH_GPIO AT91_PINCTRL_DEGLITCH>;		/* PB11 gpio vbus sense, deglitch */
+	nand: nand@3 {
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_nand_cs &pinctrl_nand_rb &pinctrl_nand_oe_we>;
+
+		reg = <0x3 0x0 0x800000>;
+		rb-gpios = <&pioD 5 GPIO_ACTIVE_HIGH>;
+		cs-gpios = <&pioD 4 GPIO_ACTIVE_HIGH>;
+		nand-bus-width = <8>;
+		nand-ecc-mode = "hw";
+		nand-ecc-strength = <4>;
+		nand-ecc-step-size = <512>;
+		nand-on-flash-bbt;
+		label = "atmel_nand";
+
+		partitions {
+			compatible = "fixed-partitions";
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			at91bootstrap@0 {
+				label = "at91bs";
+				reg = <0x0 0x20000>;
+			};
+
+			uboot@20000 {
+				label = "u-boot";
+				reg = <0x20000 0x80000>;
+			};
+
+			ubootenv@a0000 {
+				label = "u-boot-env-a";
+				reg = <0xa0000 0x20000>;
+			};
+
+			ubootenv@c0000 {
+				label = "u-boot-env-b";
+				reg = <0xc0000 0x20000>;
+			};
+
+			kernel-a@e0000 {
+				label = "kernel-a";
+				reg = <0xe0000 0x280000>;
+			};
+
+			kernel-b@360000 {
+				label = "kernel-b";
+				reg = <0x360000 0x280000>;
+			};
+
+			rootfs-a@5e0000 {
+				label = "rootfs-a";
+				reg = <0x5e0000 0x2600000>;
+			};
+
+			rootfs-b@2be0000 {
+				label = "rootfs-b";
+				reg = <0x2be0000 0x2600000>;
+			};
+
+			user@51e0000 {
+				label = "user";
+				reg = <0x51e0000 0x2dc0000>;
+			};
+
+			logs@7fa0000 {
+				label = "logs";
+				reg = <0x7fa0000 0x60000>;
+			};
+
 		};
 	};
 };
 
+&usb0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_usb_vbus>;
+
+	num-ports = <2>;
+
+	atmel,vbus-gpio = <&pioB 12 GPIO_ACTIVE_HIGH>, <&pioA 31 GPIO_ACTIVE_HIGH>;
+	atmel,oc-gpio = <&pioB 13 GPIO_ACTIVE_LOW>, <0>;
+};
+
+&usb2 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_usba_vbus>;
+
+	atmel,vbus-gpio = <&pioB 11 GPIO_ACTIVE_HIGH>;
+};
+
+&tcb0 {
+	timer0: timer@0 {
+		compatible = "atmel,tcb-timer";
+		reg = <0>;
+	};
+
+	timer1: timer@1 {
+		compatible = "atmel,tcb-timer";
+		reg = <1>;
+	};
+};

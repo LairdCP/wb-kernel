@@ -86,10 +86,6 @@
 	};
 };
 
-&shutdown_controller {
-	atmel,wakeup-mode = "low";
-};
-
 &usart1 {
 	pinctrl-0 = <&pinctrl_usart1 &pinctrl_usart1_rts_cts>;
 
