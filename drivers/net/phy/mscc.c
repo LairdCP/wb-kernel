@@ -86,6 +86,8 @@ enum rgmii_rx_clock_delay {
 #define MSCC_PHY_RGMII_CNTL		  20
 #define RGMII_RX_CLK_DELAY_MASK		  0x0070
 #define RGMII_RX_CLK_DELAY_POS		  4
+#define RGMII_TX_CLK_DELAY_MASK		  0x0007
+#define RGMII_TX_CLK_DELAY_POS		  0
 
 #define MSCC_PHY_WOL_LOWER_MAC_ADDR	  21
 #define MSCC_PHY_WOL_MID_MAC_ADDR	  22
@@ -512,6 +514,9 @@ static int vsc85xx_default_config(struct phy_device *phydev)
 	int rc;
 	u16 reg_val;
 
+	if (!phy_interface_mode_is_rgmii(phydev->interface))
+		return 0;
+
 	phydev->mdix_ctrl = ETH_TP_MDI_AUTO;
 	mutex_lock(&phydev->lock);
 	rc = vsc85xx_phy_page_set(phydev, MSCC_PHY_PAGE_EXTENDED_2);
@@ -519,8 +524,13 @@ static int vsc85xx_default_config(struct phy_device *phydev)
 		goto out_unlock;
 
 	reg_val = phy_read(phydev, MSCC_PHY_RGMII_CNTL);
-	reg_val &= ~(RGMII_RX_CLK_DELAY_MASK);
-	reg_val |= (RGMII_RX_CLK_DELAY_1_1_NS << RGMII_RX_CLK_DELAY_POS);
+	reg_val &= ~(RGMII_RX_CLK_DELAY_MASK | RGMII_TX_CLK_DELAY_MASK);
+	if (phydev->interface == PHY_INTERFACE_MODE_RGMII_RXID ||
+	    phydev->interface == PHY_INTERFACE_MODE_RGMII_ID)
+		reg_val |= RGMII_RX_CLK_DELAY_2_0_NS << RGMII_RX_CLK_DELAY_POS;
+	if (phydev->interface == PHY_INTERFACE_MODE_RGMII_TXID ||
+	    phydev->interface == PHY_INTERFACE_MODE_RGMII_ID)
+		reg_val |= RGMII_RX_CLK_DELAY_2_0_NS << RGMII_TX_CLK_DELAY_POS;
 	phy_write(phydev, MSCC_PHY_RGMII_CNTL, reg_val);
 	rc = vsc85xx_phy_page_set(phydev, MSCC_PHY_PAGE_STANDARD);
 
