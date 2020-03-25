@@ -1,8 +1,10 @@
 /*
- * at91-wb40n.dts - Device Tree file for Laird Connectivity WB40N
+ * at91-wb40n.dts - Device Tree file for WB40N CPU module
  *
+ *  Copyright (C) 2020 Laird Connectivity
  *
  * Licensed under GPLv2.
+ *
  */
 
 /dts-v1/;

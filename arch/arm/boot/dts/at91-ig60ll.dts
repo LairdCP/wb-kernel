@@ -1,7 +1,7 @@
 /*
  * at91-ig60ll.dts - Device Tree file for Laird IG60 LL, based on SOM60x2 module
  *
- *  Copyright (C) 2019 Laird,
+ *  Copyright (C) 2019 Laird Connectivity,
  *		  2019 Vishal Verma <vishal.verma@lairdconnect.com>
  *
  * Licensed under GPLv2 or later.
