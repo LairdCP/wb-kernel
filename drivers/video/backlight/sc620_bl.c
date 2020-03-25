@@ -1,5 +1,7 @@
 /*
  * Semtech SC620 Backlight Driver
+ * 
+ *  Copyright (C) 2018-2020 Laird Connectivity
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as

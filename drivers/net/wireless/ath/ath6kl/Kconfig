@@ -66,7 +66,7 @@ config ATH6KL_REGDOMAIN
 	  If unsure, say N.
 
 config ATH6KL_LAIRD_FIPS
-	bool "Atheros ath6kl Laird based FIPS support"
+	bool "Atheros ath6kl based Laird Connectivity FIPS support"
 	depends on ATH6KL
 	select CRYPTO
 	select CRYPTO_AES

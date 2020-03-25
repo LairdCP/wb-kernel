@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017, Laird, PLC.
+ * Copyright (C) 2017-2020, Laird Connectivity
  *
  * This software file (the "File") is distributed by Laird, PLC.
  * under the terms of the GNU General Public License Version 2, June 1991

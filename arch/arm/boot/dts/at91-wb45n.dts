@@ -2,7 +2,7 @@
 /*
  * at91-wb45n.dts - Device Tree file for WB45NBT board
  *
- *  Copyright (C) 2018 Laird
+ *  Copyright (C) 2018 Laird Connectivity
  *
  */
 /dts-v1/;
