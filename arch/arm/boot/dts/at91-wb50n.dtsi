@@ -8,7 +8,7 @@
 
 #include "at91-wb50n_common.dtsi"
 
-&partitions {
+&nand_partitions {
 	ubootspl@0 {
 		label = "u-boot-spl";
 		reg = <0x0 0x20000>;

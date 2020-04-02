@@ -52,6 +52,25 @@
 
 &pinctrl {
 	board {
+		pinctrl_mmc0_cd: mmc0_cd {
+			atmel,pins = <AT91_PIOC 26 AT91_PERIPH_GPIO AT91_PINCTRL_PULL_UP_DEGLITCH>; /* PC26 GPIO with pullup deglitch */
+		};
+
+		pinctrl_usba_vbus: usba_vbus {
+			atmel,pins = <AT91_PIOB 13 AT91_PERIPH_GPIO AT91_PINCTRL_DEGLITCH>; /* PB13 GPIO with deglitch */
+		};
+
+		pinctrl_usb_vbus: usb_vbus {
+			atmel,pins =
+				<AT91_PIOA 2 AT91_PERIPH_GPIO AT91_PINCTRL_NONE>,
+				<AT91_PIOA 4 AT91_PERIPH_GPIO AT91_PINCTRL_DEGLITCH>;
+		};
+
+		pinctrl_spi0_cs: spi0_cs {
+			atmel,pins =
+				<AT91_PIOC 25 AT91_PERIPH_GPIO AT91_PINCTRL_NONE>;
+		};
+
 		pinctrl_wake: wake {
 			atmel,pins =
 				<AT91_PIOA 10 AT91_PERIPH_GPIO AT91_PINCTRL_PULL_UP_DEGLITCH>,
@@ -61,7 +80,14 @@
 };
 
 &mmc0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_mmc0_clk_cmd_dat0 &pinctrl_mmc0_dat1_3 &pinctrl_mmc0_cd>;
+
 	status = "okay";
+
+	slot@0 {
+		cd-gpios = <&pioC 26 GPIO_ACTIVE_LOW>;
+	};
 };
 
 &macb1 {
@@ -80,11 +106,32 @@
 
 /* On BB40 this port is labeled UART1 */
 &usart0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_usart0 &pinctrl_usart0_rts_cts>;
+
+	atmel,use-dma-rx;
+	atmel,use-dma-tx;
+
 	status = "okay";
+};
+
+&usart1_clk {
+	atmel,clk-output-range = <0 132000000>;
 };
 
 /* On BB40 this port is labeled UART0 */
 &usart1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_usart1 &pinctrl_usart1_rts_cts>;
+
+	atmel,use-dma-rx;
+	atmel,use-dma-tx;
+
+	dtr-gpios = <&pioD 13 GPIO_ACTIVE_LOW>;
+	dsr-gpios = <&pioD 11 GPIO_ACTIVE_LOW>;
+	dcd-gpios = <&pioD 7 GPIO_ACTIVE_LOW>;
+	rng-gpios = <&pioD 8 GPIO_ACTIVE_LOW>;
+
 	status = "okay";
 };
 
@@ -93,6 +140,11 @@
 };
 
 &spi1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_spi0 &pinctrl_spi0_cs>;
+
+	cs-gpios = <&pioC 25 0>, <0>, <0>, <0>;
+
 	status = "okay";
 
 	spidev@0 {
@@ -103,14 +155,25 @@
 };
 
 &usb0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_usba_vbus>;
+
+	atmel,vbus-gpio = <&pioB 13 GPIO_ACTIVE_LOW>;
+
 	status = "okay";
 };
 
 &usb1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_usb_vbus>;
+
+	num-ports = <3>;
+	atmel,vbus-gpio = <&pioA 2 GPIO_ACTIVE_LOW>;
+	atmel,oc-gpio = <&pioA 4 GPIO_ACTIVE_LOW>;
+
 	status = "okay";
 };
 
 &usb2 {
 	status = "okay";
 };
-
