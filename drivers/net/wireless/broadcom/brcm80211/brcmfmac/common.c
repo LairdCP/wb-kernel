@@ -33,8 +33,6 @@ MODULE_LICENSE("Dual BSD/GPL");
 
 #define BRCMF_DEFAULT_TXGLOM_SIZE	32  /* max tx frames in glom chain */
 
-#define CLM_LOAD_RETRIES 1 /* # of retries to load clm_blob file */
-
 static int brcmf_sdiod_txglomsz = BRCMF_DEFAULT_TXGLOM_SIZE;
 module_param_named(txglomsz, brcmf_sdiod_txglomsz, int, 0);
 MODULE_PARM_DESC(txglomsz, "Maximum tx packet chain size [SDIO]");
