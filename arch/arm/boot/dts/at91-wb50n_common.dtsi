@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * at91-wb50n_common.dtsi - Device Tree include file for WB50N CPU module
+ * at91-wb50n_common.dtsi - Device Tree include common file for the WB50N module
  *
  *  Copyright (C) 2018-2020 Laird Connectivity
  *
@@ -56,14 +56,6 @@
 				<AT91_PIOE 14 AT91_PERIPH_GPIO AT91_PINCTRL_NONE>;
 		};
 
-		pinctrl_mmc0_cd: mmc0_cd {
-			atmel,pins = <AT91_PIOC 26 AT91_PERIPH_GPIO AT91_PINCTRL_PULL_UP_DEGLITCH>; /* PC26 GPIO with pullup deglitch */
-		};
-
-		pinctrl_usba_vbus: usba_vbus {
-			atmel,pins = <AT91_PIOB 13 AT91_PERIPH_GPIO AT91_PINCTRL_DEGLITCH>; /* PB13 GPIO with deglitch */
-		};
-
 		pinctrl_wifi_pmu_en: wifi_pmu_en {
 			atmel,pins =
 				<AT91_PIOE 3 AT91_PERIPH_GPIO AT91_PINCTRL_PULL_UP>;
@@ -87,6 +79,7 @@
 
 &watchdog {
 	atmel,idle-halt;
+
 	status = "okay";
 };
 
@@ -102,18 +95,22 @@
 	atmel,osc-bypass;
 };
 
-&usart1_clk {
-	atmel,clk-output-range = <0 132000000>;
+&tcb0 {
+	timer0: timer@0 {
+		compatible = "atmel,tcb-timer";
+		reg = <0>;
+	};
+
+	timer1: timer@1 {
+		compatible = "atmel,tcb-timer";
+		reg = <1>;
+	};
 };
 
 &mmc0 {
-	pinctrl-names = "default";
-	pinctrl-0 = <&pinctrl_mmc0_clk_cmd_dat0 &pinctrl_mmc0_dat1_3 &pinctrl_mmc0_cd>;
-
 	slot@0 {
 		reg = <0>;
 		bus-width = <4>;
-		cd-gpios = <&pioC 26 GPIO_ACTIVE_LOW>;
 	};
 };
 
@@ -138,29 +135,6 @@
 	phy-mode = "rmii";
 };
 
-/* On BB40 this port is labeled UART1 */
-&usart0 {
-	pinctrl-names = "default";
-	pinctrl-0 = <&pinctrl_usart0 &pinctrl_usart0_rts_cts>;
-
-	atmel,use-dma-rx;
-	atmel,use-dma-tx;
-};
-
-/* On BB40 this port is labeled UART0 */
-&usart1 {
-	pinctrl-names = "default";
-	pinctrl-0 = <&pinctrl_usart1 &pinctrl_usart1_rts_cts>;
-
-	atmel,use-dma-rx;
-	atmel,use-dma-tx;
-
-	dtr-gpios = <&pioD 13 GPIO_ACTIVE_LOW>;
-	dsr-gpios = <&pioD 11 GPIO_ACTIVE_LOW>;
-	dcd-gpios = <&pioD 7 GPIO_ACTIVE_LOW>;
-	rng-gpios = <&pioD 8 GPIO_ACTIVE_LOW>;
-};
-
 /* USART3 is direct-connect to the Bluetooth UART on the radio SIP */
 &usart3 {
 	pinctrl-names = "default";
@@ -170,10 +144,6 @@
 	atmel,use-dma-tx;
 
 	status = "okay";
-};
-
-&spi1 {
-	cs-gpios = <&pioC 25 0>, <0>, <0>, <0>;
 };
 
 &ebi {
@@ -193,39 +163,21 @@
 		nand-ecc-mode = "hw";
 		nand-ecc-strength = <8>;
 		nand-ecc-step-size = <512>;
+
+		/*
+		 * Note - nand-on-flash-bbt requires the last 4 blocks on
+		 * flash to be reserved for bad block table.  These blocks
+		 * can be used in partitions only if bbt is not stored on flash.
+		 */
 		nand-on-flash-bbt;
 		label = "atmel_nand";
 
 		wp-gpios = <&pioE 14 GPIO_ACTIVE_HIGH>;
 
-		partitions: partitions {
+		nand_partitions: partitions {
 			compatible = "fixed-partitions";
 			#address-cells = <1>;
 			#size-cells = <1>;
 		};
-	};
-};
-
-&usb0 {
-	atmel,vbus-gpio = <&pioB 13 GPIO_ACTIVE_LOW>;
-	pinctrl-names = "default";
-	pinctrl-0 = <&pinctrl_usba_vbus>;
-};
-
-&usb1 {
-	num-ports = <3>;
-	atmel,vbus-gpio = <&pioA 2 GPIO_ACTIVE_LOW>;
-	atmel,oc-gpio = <&pioA 4 GPIO_ACTIVE_LOW>;
-};
-
-&tcb0 {
-	timer0: timer@0 {
-		compatible = "atmel,tcb-timer";
-		reg = <0>;
-	};
-
-	timer1: timer@1 {
-		compatible = "atmel,tcb-timer";
-		reg = <1>;
 	};
 };

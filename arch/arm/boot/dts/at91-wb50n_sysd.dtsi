@@ -25,7 +25,7 @@
 	};
 };
 
-&partitions {
+&nand_partitions {
 	ubootspl@0 {
 		label = "u-boot-spl";
 		reg = <0x0 0x20000>;
