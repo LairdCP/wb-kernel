@@ -313,9 +313,6 @@ struct rte_console {
 #define MAX_KSO_ATTEMPTS (PMU_MAX_TRANSITION_DLY/KSO_WAIT_US)
 #define BRCMF_SDIO_MAX_ACCESS_ERRORS	5
 
-static struct brcmf_fw_request *
-brcmf_sdio_prepare_fw_request(struct brcmf_sdio *bus);
-
 /*
  * Conversion of 802.1D priority to precedence level
  */

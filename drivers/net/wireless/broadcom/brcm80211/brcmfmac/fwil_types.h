@@ -890,13 +890,13 @@ struct brcmf_pno_macaddr_le {
 };
 
 /**
-* struct brcmf_dload_data_le - data passing to firmware for downloading
-* @flag: flags related to download data.
-* @dload_type: type of download data.
-* @len: length in bytes of download data.
-* @crc: crc of download data.
-* @data: download data.
-*/
+ * struct brcmf_dload_data_le - data passing to firmware for downloading
+ * @flag: flags related to download data.
+ * @dload_type: type of download data.
+ * @len: length in bytes of download data.
+ * @crc: crc of download data.
+ * @data: download data.
+ */
 struct brcmf_dload_data_le {
 	__le16 flag;
 	__le16 dload_type;
