@@ -2324,7 +2324,6 @@ static uint brcmf_sdio_sendfromq(struct brcmf_sdio *bus, uint maxframes)
 					      &prec_out);
 			if (pkt == NULL)
 				break;
-			skb_orphan(pkt);
 			__skb_queue_tail(&pktq, pkt);
 		}
 		spin_unlock_bh(&bus->txq_lock);
