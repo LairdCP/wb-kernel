@@ -860,7 +860,7 @@ static int usba_ep_dequeue(struct usb_ep *_ep, struct usb_request *_req)
 	u32 status;
 
 	DBG(DBG_GADGET | DBG_QUEUE, "ep_dequeue: %s, req %p\n",
-			ep->ep.name, req);
+			ep->ep.name, _req);
 
 	spin_lock_irqsave(&udc->lock, flags);
 
@@ -1058,7 +1058,7 @@ found_ep:
 			break;
 
 		case USB_ENDPOINT_XFER_BULK:
-			ep->fifo_size = 512;
+			ep->fifo_size = gadget->max_speed == USB_SPEED_HIGH ? 512 : 64;
 			ep->nr_banks = 1;
 			break;
 
@@ -1862,13 +1862,14 @@ static int usba_start(struct usba_udc *udc)
 	if (ret)
 		return ret;
 
-	if (usb_get_maximum_speed(&udc->pdev->dev) == USB_SPEED_FULL)
-		usba_writel(udc, TST, USBA_BF(SPEED_CFG,
-			USBA_SPEED_CFG_FORCE_FULL));
-
 	spin_lock_irqsave(&udc->lock, flags);
 	toggle_bias(udc, 1);
 	usba_writel(udc, CTRL, USBA_ENABLE_MASK);
+
+	if (udc->gadget.max_speed == USB_SPEED_FULL)
+		usba_writel(udc, TST, USBA_BF(SPEED_CFG,
+			USBA_SPEED_CFG_FORCE_FULL));
+
 	usba_int_enb_set(udc, USBA_END_OF_RESET);
 	spin_unlock_irqrestore(&udc->lock, flags);
 
@@ -2173,6 +2174,10 @@ static int usba_udc_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	udc->gadget = usba_gadget_template;
+
+	if (usb_get_maximum_speed(&pdev->dev) == USB_SPEED_FULL)
+		udc->gadget.max_speed = USB_SPEED_FULL;
+
 	INIT_LIST_HEAD(&udc->gadget.ep_list);
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, CTRL_IOMEM_ID);
