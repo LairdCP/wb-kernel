@@ -1899,6 +1899,10 @@ static int usba_start(struct usba_udc *udc)
 	if (udc->suspended)
 		return 0;
 
+	if (usb_get_maximum_speed(&udc->pdev->dev) == USB_SPEED_FULL)
+		usba_writel(udc, TST, USBA_BF(SPEED_CFG,
+			USBA_SPEED_CFG_FORCE_FULL));
+
 	spin_lock_irqsave(&udc->lock, flags);
 	toggle_bias(udc, 1);
 	usba_writel(udc, CTRL, USBA_ENABLE_MASK);
