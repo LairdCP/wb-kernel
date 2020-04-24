@@ -896,8 +896,6 @@ static void brcmf_sdiod_host_fixup(struct mmc_host *host)
 {
 	/* runtime-pm powers off the device */
 	pm_runtime_forbid(host->parent);
-	/* avoid removal detection upon resume */
-	host->caps |= MMC_CAP_NONREMOVABLE;
 }
 
 static int brcmf_sdiod_probe(struct brcmf_sdio_dev *sdiodev)

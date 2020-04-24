@@ -16,6 +16,7 @@
 #include <linux/mmc/sdio_ids.h>
 #include <linux/mmc/sdio_func.h>
 #include <linux/mmc/card.h>
+#include <linux/mmc/host.h>
 #include <linux/semaphore.h>
 #include <linux/firmware.h>
 #include <linux/module.h>
@@ -3964,11 +3965,14 @@ brcmf_sdio_probe_attach(struct brcmf_sdio *bus)
 
 #ifdef CONFIG_PM_SLEEP
 	/* wowl can be supported when KEEP_POWER is true and (WAKE_SDIO_IRQ
-	 * is true or when platform data OOB irq is true).
+	 * is true or when platform data OOB irq is true).  Card must be
+	 * non-removable to prevent potential bus access failure at resume
+	 * during card removal detection.
 	 */
 	if ((sdio_get_host_pm_caps(sdiodev->func1) & MMC_PM_KEEP_POWER) &&
 	    ((sdio_get_host_pm_caps(sdiodev->func1) & MMC_PM_WAKE_SDIO_IRQ) ||
-	     (sdiodev->settings->bus.sdio.oob_irq_supported)))
+	     (sdiodev->settings->bus.sdio.oob_irq_supported)) &&
+	    (!mmc_card_is_removable(sdiodev->func1->card->host)))
 		sdiodev->bus_if->wowl_supported = true;
 #endif
 
