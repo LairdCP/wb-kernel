@@ -2014,8 +2014,14 @@ static int ath6kl_wmi_startscan_cmd(struct wmi *wmi, u8 if_idx,
 	struct wmi_start_scan_cmd *sc;
 	s8 size;
 	int ret;
+	int i;
+
+	if (num_chan > WMI_MAX_CHANNELS)
+		num_chan = 0;
 
 	size = sizeof(struct wmi_start_scan_cmd);
+	if (num_chan)
+		size += num_chan * sizeof(sc->ch_list[0]) - sizeof(sc->ch_list);
 
 	if ((scan_type != WMI_LONG_SCAN) && (scan_type != WMI_SHORT_SCAN))
 		return -EINVAL;
@@ -2030,7 +2036,13 @@ static int ath6kl_wmi_startscan_cmd(struct wmi *wmi, u8 if_idx,
 	sc->is_legacy = cpu_to_le32(is_legacy);
 	sc->home_dwell_time = cpu_to_le32(home_dwell_time);
 	sc->force_scan_intvl = cpu_to_le32(force_scan_interval);
-	sc->num_ch = 0;
+	sc->num_ch = num_chan;
+	{
+		int i;
+		for (i=0; i<num_chan; i++) {
+			sc->ch_list[i] = cpu_to_le16(ch_list[i]);
+		}
+	}
 
 	ret = ath6kl_wmi_cmd_send(wmi, if_idx, skb, WMI_START_SCAN_CMDID,
 				  NO_SYNC_WMIFLAG);
