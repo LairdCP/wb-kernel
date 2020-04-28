@@ -626,6 +626,7 @@ usba_ep_enable(struct usb_ep *_ep, const struct usb_endpoint_descriptor *desc)
 
 		break;
 	case USB_ENDPOINT_XFER_BULK:
+		ep->ept_cfg = USBA_BFINS(EPT_SIZE, fls(maxpacket - 1) - 3, ep->ept_cfg);
 		ep->ept_cfg |= USBA_BF(EPT_TYPE, USBA_EPT_TYPE_BULK);
 		break;
 	case USB_ENDPOINT_XFER_INT:
