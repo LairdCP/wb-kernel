@@ -1,37 +1,39 @@
 /** @file bt_main.c
-  *
-  * @brief This file contains the major functions in BlueTooth
-  * driver. It includes init, exit, open, close and main
-  * thread etc..
-  *
-  * Copyright (C) 2007-2018, Marvell International Ltd.
-  *
-  * This software file (the "File") is distributed by Marvell International
-  * Ltd. under the terms of the GNU General Public License Version 2, June 1991
-  * (the "License").  You may use, redistribute and/or modify this File in
-  * accordance with the terms and conditions of the License, a copy of which
-  * is available along with the File in the gpl.txt file or by writing to
-  * the Free Software Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
-  * 02111-1307 or on the worldwide web at http://www.gnu.org/licenses/gpl.txt.
-  *
-  * THE FILE IS DISTRIBUTED AS-IS, WITHOUT WARRANTY OF ANY KIND, AND THE
-  * IMPLIED WARRANTIES OF MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE
-  * ARE EXPRESSLY DISCLAIMED.  The License provides additional details about
-  * this warranty disclaimer.
-  *
-  */
+ *
+ *  @brief This file contains the major functions in BlueTooth
+ *  driver. It includes init, exit, open, close and main
+ *  thread etc..
+ *
+ *
+ *  Copyright 2014-2020 NXP
+ *
+ *  This software file (the File) is distributed by NXP
+ *  under the terms of the GNU General Public License Version 2, June 1991
+ *  (the License).  You may use, redistribute and/or modify the File in
+ *  accordance with the terms and conditions of the License, a copy of which
+ *  is available by writing to the Free Software Foundation, Inc.,
+ *  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA or on the
+ *  worldwide web at http://www.gnu.org/licenses/old-licenses/gpl-2.0.txt.
+ *
+ *  THE FILE IS DISTRIBUTED AS-IS, WITHOUT WARRANTY OF ANY KIND, AND THE
+ *  IMPLIED WARRANTIES OF MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE
+ *  ARE EXPRESSLY DISCLAIMED.  The License provides additional details about
+ *  this warranty disclaimer.
+ *
+ */
 /**
   * @mainpage M-BT Linux Driver
   *
   * @section overview_sec Overview
   *
-  * The M-BT is a Linux reference driver for Marvell Bluetooth chipset.
+  * The M-BT is a Linux reference driver for NXP Bluetooth chipset.
   *
   * @section copyright_sec Copyright
   *
-  * Copyright (C) 2007-2018, Marvell International Ltd.
+  * Copyright 2014-2020 NXP
   *
   */
+
 #include <linux/module.h>
 
 #ifdef CONFIG_OF
@@ -44,7 +46,7 @@
 #include "bt_usb.h"
 
 /** Version */
-#define VERSION "C4X14113"
+#define VERSION "C4X14114"
 
 /** Driver version */
 static char mbt_driver_version[] = "USB8997-%s-" VERSION "-(" "FP" FPNUM ")"
@@ -147,8 +149,8 @@ bt_recv_frame(bt_private *priv, struct sk_buff *skb)
 			dev_pointer;
 	if (mbt_dev) {
 		skb->dev = (void *)mdev_bt;
-		mdev_recv_frame(skb);
 		mdev_bt->stat.byte_rx += skb->len;
+		mdev_recv_frame(skb);
 	}
 	return;
 }
@@ -302,9 +304,7 @@ check_evtpkt(bt_private *priv, struct sk_buff *skb)
 		case BT_CMD_AUTO_SLEEP_MODE:
 		case BT_CMD_HOST_SLEEP_CONFIG:
 		case BT_CMD_SET_EVT_FILTER:
-		case BT_CMD_ENABLE_WRITE_SCAN:
 			// case BT_CMD_ENABLE_DEVICE_TESTMODE:
-		case BT_CMD_RESET:
 		case BT_CMD_PMIC_CONFIGURE:
 		case BT_CMD_INDEPENDENT_RESET:
 			priv->bt_dev.sendcmdflag = FALSE;
@@ -325,6 +325,28 @@ check_evtpkt(bt_private *priv, struct sk_buff *skb)
 						      cmd_wait_q);
 				break;
 			}
+#ifdef BLE_WAKEUP
+		case BT_CMD_GET_WHITELIST:
+			{
+				u8 *pos = (skb->data + HCI_EVENT_HDR_SIZE +
+					   sizeof(struct hci_ev_cmd_complete) +
+					   1);
+
+				if ((hdr->plen -
+				     sizeof(struct hci_ev_cmd_complete) - 1) <=
+				    sizeof(priv->white_list))
+					memcpy(priv->white_list, pos,
+					       hdr->plen -
+					       sizeof(struct
+						      hci_ev_cmd_complete) - 1);
+
+				priv->bt_dev.sendcmdflag = FALSE;
+				priv->adapter->cmd_complete = TRUE;
+				wake_up_interruptible(&priv->adapter->
+						      cmd_wait_q);
+				break;
+			}
+#endif
 		case BT_CMD_HISTOGRAM:
 			{
 				u8 *status =
@@ -354,6 +376,26 @@ check_evtpkt(bt_private *priv, struct sk_buff *skb)
 						      cmd_wait_q);
 				break;
 			}
+		case BT_CMD_RESET:
+		case BT_CMD_ENABLE_WRITE_SCAN:
+#ifdef BLE_WAKEUP
+		case HCI_BT_SET_EVENTMASK_OCF:
+		case HCI_BLE_ADD_DEV_TO_WHITELIST_OCF:
+		case HCI_BLE_SET_SCAN_PARAMETERS_OCF:
+		case HCI_BLE_SET_SCAN_ENABLE_OCF:
+#endif
+			{
+				priv->bt_dev.sendcmdflag = FALSE;
+				priv->adapter->cmd_complete = TRUE;
+				if (priv->adapter->wait_event_timeout == TRUE) {
+					wake_up(&priv->adapter->cmd_wait_q);
+					priv->adapter->wait_event_timeout =
+						FALSE;
+				} else
+					wake_up_interruptible(&priv->adapter->
+							      cmd_wait_q);
+			}
+			break;
 		case BT_CMD_HOST_SLEEP_ENABLE:
 			priv->bt_dev.sendcmdflag = FALSE;
 			break;
@@ -369,7 +411,8 @@ check_evtpkt(bt_private *priv, struct sk_buff *skb)
 			}
 			break;
 		}
-	}
+	} else
+		ret = BT_STATUS_FAILURE;
 exit:
 	if (ret == BT_STATUS_SUCCESS)
 		kfree_skb(skb);
@@ -416,7 +459,7 @@ bt_store_firmware_dump(bt_private *priv, u8 *buf, u32 len)
 		} else
 			memset(priv->adapter->fwdump_fname, 0, 64);
 
-		do_gettimeofday(&t);
+		get_monotonic_time(&t);
 		sec = (u32)t.tv_sec;
 		sprintf(priv->adapter->fwdump_fname, "%s%u",
 			"/var/log/bt_fwdump_", sec);
@@ -475,7 +518,7 @@ bt_process_event(bt_private *priv, struct sk_buff *skb)
 	}
 	pevent = (BT_EVENT *)skb->data;
 	if (pevent->EC != 0xff) {
-		PRINTM(CMD, "BT: Not Marvell Event=0x%x\n", pevent->EC);
+		PRINTM(CMD, "BT: Not NXP Event=0x%x\n", pevent->EC);
 		ret = BT_STATUS_FAILURE;
 		goto exit;
 	}
@@ -509,8 +552,14 @@ bt_process_event(bt_private *priv, struct sk_buff *skb)
 		if (pevent->data[1] == BT_STATUS_SUCCESS) {
 			priv->adapter->hs_state = HS_ACTIVATED;
 			if (priv->adapter->suspend_fail == FALSE) {
-				wake_up_interruptible(&priv->adapter->
-						      cmd_wait_q);
+				if (priv->adapter->wait_event_timeout) {
+					wake_up(&priv->adapter->cmd_wait_q);
+					priv->adapter->wait_event_timeout =
+						FALSE;
+				} else
+					wake_up_interruptible(&priv->adapter->
+							      cmd_wait_q);
+
 			}
 			if (priv->adapter->psmode)
 				priv->adapter->ps_state = PS_SLEEP;
@@ -992,10 +1041,11 @@ exit:
  *  @brief This function enables host sleep
  *
  *  @param priv    A pointer to bt_private structure
+ *  @param is_shutdown  indicate shutdown mode
  *  @return    BT_STATUS_SUCCESS or BT_STATUS_FAILURE
  */
 int
-bt_enable_hs(bt_private *priv)
+bt_enable_hs(bt_private *priv, bool is_shutdown)
 {
 	struct sk_buff *skb = NULL;
 	int ret = BT_STATUS_SUCCESS;
@@ -1017,15 +1067,26 @@ bt_enable_hs(bt_private *priv)
 	skb->dev = (void *)(&(priv->bt_dev.m_dev[BT_SEQ]));
 	skb_queue_head(&priv->adapter->tx_queue, skb);
 	priv->bt_dev.sendcmdflag = TRUE;
+	priv->adapter->wait_event_timeout = is_shutdown;
 	priv->bt_dev.send_cmd_opcode = __le16_to_cpu(pcmd->ocf_ogf);
 	PRINTM(CMD, "Queue hs enable Command(0x%x)\n",
 	       __le16_to_cpu(pcmd->ocf_ogf));
 	wake_up_interruptible(&priv->MainThread.waitQ);
-	if (!os_wait_interruptible_timeout
-	    (priv->adapter->cmd_wait_q, priv->adapter->hs_state,
-	     WAIT_UNTIL_HS_STATE_CHANGED)) {
-		PRINTM(MSG, "BT: Enable host sleep timeout:\n");
-		bt_cmd_timeout_func(priv, BT_CMD_HOST_SLEEP_ENABLE);
+	if (is_shutdown) {
+		if (!os_wait_timeout
+		    (priv->adapter->cmd_wait_q, priv->adapter->hs_state,
+		     WAIT_UNTIL_HS_STATE_CHANGED)) {
+			PRINTM(MSG, "BT: Enable host sleep timeout:\n");
+			priv->adapter->wait_event_timeout = FALSE;
+			bt_cmd_timeout_func(priv, BT_CMD_HOST_SLEEP_ENABLE);
+		}
+	} else {
+		if (!os_wait_interruptible_timeout
+		    (priv->adapter->cmd_wait_q, priv->adapter->hs_state,
+		     WAIT_UNTIL_HS_STATE_CHANGED)) {
+			PRINTM(MSG, "BT: Enable host sleep timeout:\n");
+			bt_cmd_timeout_func(priv, BT_CMD_HOST_SLEEP_ENABLE);
+		}
 	}
 	OS_INT_DISABLE;
 	if ((priv->adapter->hs_state == HS_ACTIVATED) ||
@@ -1667,7 +1728,7 @@ bt_prepare_command(bt_private *priv)
 	if (priv->bt_dev.hscmd) {
 		priv->bt_dev.hscmd = 0;
 		if (priv->bt_dev.hsmode)
-			ret = bt_enable_hs(priv);
+			ret = bt_enable_hs(priv, FALSE);
 		else {
 			ret = sbi_wakeup_firmware(priv);
 			priv->adapter->hs_state = HS_DEACTIVATED;
@@ -1794,6 +1855,127 @@ bt_init_from_dev_tree(void)
 	}
 	LEAVE();
 	return;
+}
+#endif
+
+#ifdef BLE_WAKEUP
+/**
+ *  @brief This function send getting whitelist cmd to FW
+ *
+ *  @param priv    A pointer to bt_private structure
+ *  @return    BT_STATUS_SUCCESS or BT_STATUS_FAILURE
+ */
+static int
+bt_get_whitelist_cmd(bt_private *priv)
+{
+	struct sk_buff *skb = NULL;
+	int ret = BT_STATUS_SUCCESS;
+	BT_CMD *pcmd;
+	ENTER();
+	skb = bt_skb_alloc(sizeof(BT_CMD), GFP_ATOMIC);
+	if (skb == NULL) {
+		PRINTM(WARN, "No free skb\n");
+		ret = BT_STATUS_FAILURE;
+		goto exit;
+	}
+	pcmd = (BT_CMD *)skb->data;
+	pcmd->ocf_ogf =
+		__cpu_to_le16((VENDOR_OGF << 10) | BT_CMD_GET_WHITELIST);
+	pcmd->length = 0;
+	bt_cb(skb)->pkt_type = MRVL_VENDOR_PKT;
+	skb_put(skb, BT_CMD_HEADER_SIZE + pcmd->length);
+	skb->dev = (void *)(&(priv->bt_dev.m_dev[BT_SEQ]));
+	skb_queue_head(&priv->adapter->tx_queue, skb);
+	PRINTM(MSG, "Queue get whitelist Command(0x%x):%d\n",
+	       __le16_to_cpu(pcmd->ocf_ogf), pcmd->data[0]);
+
+	priv->bt_dev.sendcmdflag = TRUE;
+	priv->bt_dev.send_cmd_opcode = __le16_to_cpu(pcmd->ocf_ogf);
+	priv->adapter->cmd_complete = FALSE;
+	wake_up_interruptible(&priv->MainThread.waitQ);
+	if (!os_wait_interruptible_timeout(priv->adapter->cmd_wait_q,
+					   priv->adapter->cmd_complete,
+					   WAIT_UNTIL_CMD_RESP)) {
+		ret = BT_STATUS_FAILURE;
+		PRINTM(ERROR, "BT: Get BLE_GET_WHITELIST: timeout:\n");
+		bt_cmd_timeout_func(priv, BT_CMD_GET_WHITELIST);
+	}
+exit:
+	LEAVE();
+	return ret;
+}
+
+/**
+ *  @brief This function send  whitelist cmd to FW
+ *
+ *  @param priv    A pointer to bt_private structure
+ *  @param is_shutdown  indicate shutdown mode
+ *  @return    BT_STATUS_SUCCESS or BT_STATUS_FAILURE
+ */
+static int
+bt_send_whitelist_cmd(bt_private *priv, bool is_shutdown)
+{
+	struct sk_buff *skb = NULL;
+	int ret = BT_STATUS_SUCCESS;
+	u8 count = 0, i = 0;
+	BT_CMD *pcmd;
+	ENTER();
+
+	count = priv->white_list[0];
+	for (i = 0; (i < count) && (i < 10); i++) {
+		skb = bt_skb_alloc(sizeof(BT_CMD), GFP_ATOMIC);
+		if (skb == NULL) {
+			PRINTM(WARN, "No free skb\n");
+			ret = BT_STATUS_FAILURE;
+			goto exit;
+		}
+		pcmd = (BT_CMD *)skb->data;
+		pcmd->ocf_ogf =
+			__cpu_to_le16((HCI_BLE_GRP_BLE_CMDS << 10) |
+				      HCI_BLE_ADD_DEV_TO_WHITELIST_OCF);
+		pcmd->length = 7;
+		bt_cb(skb)->pkt_type = HCI_COMMAND_PKT;
+		pcmd->data[0] = 0;
+		memcpy(&pcmd->data[1], &priv->white_list[1 + i * 6], 6);
+		skb_put(skb, BT_CMD_HEADER_SIZE + pcmd->length);
+		skb->dev = (void *)(&(priv->bt_dev.m_dev[BT_SEQ]));
+		skb_queue_head(&priv->adapter->tx_queue, skb);
+		PRINTM(MSG, "Queue send whitelist Command(0x%x):%d\n",
+		       __le16_to_cpu(pcmd->ocf_ogf), pcmd->data[0]);
+
+		priv->bt_dev.sendcmdflag = TRUE;
+		priv->bt_dev.send_cmd_opcode = __le16_to_cpu(pcmd->ocf_ogf);
+		priv->adapter->cmd_complete = FALSE;
+		priv->adapter->wait_event_timeout = is_shutdown;
+		wake_up_interruptible(&priv->MainThread.waitQ);
+		if (is_shutdown) {
+			if (!os_wait_timeout
+			    (priv->adapter->cmd_wait_q,
+			     priv->adapter->cmd_complete,
+			     WAIT_UNTIL_CMD_RESP)) {
+				ret = BT_STATUS_FAILURE;
+				priv->adapter->wait_event_timeout = FALSE;
+				PRINTM(ERROR,
+				       "BT: Get BLE_GET_WHITELIST: timeout:\n");
+				bt_cmd_timeout_func(priv,
+						    HCI_BLE_ADD_DEV_TO_WHITELIST_OCF);
+			}
+		} else {
+			if (!os_wait_interruptible_timeout
+			    (priv->adapter->cmd_wait_q,
+			     priv->adapter->cmd_complete,
+			     WAIT_UNTIL_CMD_RESP)) {
+				ret = BT_STATUS_FAILURE;
+				PRINTM(ERROR,
+				       "BT: Get BLE_GET_WHITELIST: timeout:\n");
+				bt_cmd_timeout_func(priv,
+						    HCI_BLE_ADD_DEV_TO_WHITELIST_OCF);
+			}
+		}
+	}
+exit:
+	LEAVE();
+	return ret;
 }
 #endif
 
@@ -1972,7 +2154,14 @@ mdev_ioctl(struct m_dev *m_dev, unsigned int cmd, void *arg)
 		DBG_HEXDUMP(DAT_D, "BLE_WAKEUP_PARAM:", priv->ble_wakeup_buf,
 			    len + sizeof(u16));
 		break;
+	case MBTCHAR_IOCTL_BLE_GET_WHITELIST:
+		bt_get_whitelist_cmd(priv);
+		DBG_HEXDUMP(DAT_D, "white_list:", priv->white_list,
+			    sizeof(priv->white_list));
+		break;
 #endif
+	case MBTCHAR_IOCTL_BT_FW_DUMP:
+		break;
 	default:
 		break;
 	}
@@ -2525,7 +2714,6 @@ sbi_register_conf_dpc(bt_private *priv)
 		priv->bt_dev.m_dev[BT_SEQ].spec_type = IANYWHERE_SPEC;
 		priv->bt_dev.m_dev[BT_SEQ].dev_pointer = (void *)mbt_dev;
 		priv->bt_dev.m_dev[BT_SEQ].driver_data = priv;
-		priv->bt_dev.m_dev[BT_SEQ].read_continue_flag = 0;
 	}
 
 	dev_type = HCI_USB;
@@ -2850,14 +3038,15 @@ bt_send_hw_remove_event(bt_private *priv)
  *  @brief This function used to config BLE wakeup pattern
  *
  *  @param priv    A pointer to bt_private structure
+ *  @param is_shutdown  indicate shutdown mode
  *  @return        N/A
  */
 int
-bt_config_ble_wakeup(bt_private *priv)
+bt_config_ble_wakeup(bt_private *priv, bool is_shutdown)
 {
 	int ret = BT_STATUS_SUCCESS;
 	struct sk_buff *skb = NULL;
-	u16 ocf, left_len;
+	u16 ocf = 0, left_len;
 	u8 len, more_cmd;
 	u8 *pos;
 
@@ -2885,6 +3074,8 @@ bt_config_ble_wakeup(bt_private *priv)
 			ret = BT_STATUS_FAILURE;
 			goto done;
 		}
+		if (ocf == BT_CMD_ENABLE_WRITE_SCAN)
+			bt_send_whitelist_cmd(priv, is_shutdown);
 		skb = bt_skb_alloc(len, GFP_ATOMIC);
 		if (!skb) {
 			PRINTM(ERROR, "BT BLE WAKEUP: fail to alloc skb\n");
@@ -2901,17 +3092,34 @@ bt_config_ble_wakeup(bt_private *priv)
 		priv->bt_dev.send_cmd_opcode = *(u16 *) skb->data;
 		ocf = hci_opcode_ocf(priv->bt_dev.send_cmd_opcode);
 		priv->adapter->cmd_complete = FALSE;
+		priv->adapter->wait_event_timeout = is_shutdown;
 
 		wake_up_interruptible(&priv->MainThread.waitQ);
-		if (!os_wait_interruptible_timeout
-		    (priv->adapter->cmd_wait_q, priv->adapter->cmd_complete,
-		     WAIT_UNTIL_CMD_RESP)) {
-			ret = BT_STATUS_FAILURE;
-			PRINTM(ERROR,
-			       "BT: Set  Set ble wakeup cmd 0x%x timeout:\n",
-			       priv->bt_dev.send_cmd_opcode);
-			bt_cmd_timeout_func(priv, ocf);
-			goto done;
+		if (is_shutdown) {
+			if (!os_wait_timeout
+			    (priv->adapter->cmd_wait_q,
+			     priv->adapter->cmd_complete,
+			     WAIT_UNTIL_CMD_RESP)) {
+				ret = BT_STATUS_FAILURE;
+				priv->adapter->wait_event_timeout = FALSE;
+				PRINTM(ERROR,
+				       "BT: Set  Set ble wakeup cmd 0x%x timeout:\n",
+				       priv->bt_dev.send_cmd_opcode);
+				bt_cmd_timeout_func(priv, ocf);
+				goto done;
+			}
+		} else {
+			if (!os_wait_interruptible_timeout
+			    (priv->adapter->cmd_wait_q,
+			     priv->adapter->cmd_complete,
+			     WAIT_UNTIL_CMD_RESP)) {
+				ret = BT_STATUS_FAILURE;
+				PRINTM(ERROR,
+				       "BT: Set  Set ble wakeup cmd 0x%x timeout:\n",
+				       priv->bt_dev.send_cmd_opcode);
+				bt_cmd_timeout_func(priv, ocf);
+				goto done;
+			}
 		}
 
 		pos += len + 2;
@@ -3119,8 +3327,8 @@ bt_exit_module(void)
 module_init(bt_init_module);
 module_exit(bt_exit_module);
 
-MODULE_AUTHOR("Marvell International Ltd.");
-MODULE_DESCRIPTION("Marvell Bluetooth Driver Ver. " VERSION);
+MODULE_AUTHOR("NXP");
+MODULE_DESCRIPTION("NXP Bluetooth Driver Ver. " VERSION);
 MODULE_VERSION(VERSION);
 MODULE_LICENSE("GPL");
 module_param(fw, int, 0);

@@ -1,15 +1,16 @@
 /** @file hci_wrapper.h
  *  @brief This file contains HCI related definitions
  *
- *  Copyright (C) 2011-2018, Marvell International Ltd.
  *
- *  This software file (the "File") is distributed by Marvell International
- *  Ltd. under the terms of the GNU General Public License Version 2, June 1991
- *  (the "License").  You may use, redistribute and/or modify this File in
+ *  Copyright 2014-2020 NXP
+ *
+ *  This software file (the File) is distributed by NXP
+ *  under the terms of the GNU General Public License Version 2, June 1991
+ *  (the License).  You may use, redistribute and/or modify the File in
  *  accordance with the terms and conditions of the License, a copy of which
- *  is available along with the File in the gpl.txt file or by writing to
- *  the Free Software Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
- *  02111-1307 or on the worldwide web at http://www.gnu.org/licenses/gpl.txt.
+ *  is available by writing to the Free Software Foundation, Inc.,
+ *  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA or on the
+ *  worldwide web at http://www.gnu.org/licenses/old-licenses/gpl-2.0.txt.
  *
  *  THE FILE IS DISTRIBUTED AS-IS, WITHOUT WARRANTY OF ANY KIND, AND THE
  *  IMPLIED WARRANTIES OF MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE
@@ -61,7 +62,6 @@ struct m_dev {
 	int dev_type;
 	int spec_type;
 	void *driver_data;
-	int read_continue_flag;
 	int wait_rx_complete;
 	int rx_complete_flag;
 	wait_queue_head_t rx_wait_q;
@@ -134,6 +134,9 @@ mdev_recv_frame(struct sk_buff *skb)
 
 	/* Time stamp */
 	__net_timestamp(skb);
+
+	/* Put type byte before the data */
+	memcpy(skb_push(skb, 1), &bt_cb(skb)->pkt_type, 1);
 
 	/* Queue frame for rx task */
 	skb_queue_tail(&m_dev->rx_q, skb);

@@ -1,20 +1,21 @@
 /** @file bt_usb.c
  *  @brief This file contains USB (interface) related functions.
  *
- * Copyright (C) 2007-2018, Marvell International Ltd.
  *
- * This software file (the "File") is distributed by Marvell International
- * Ltd. under the terms of the GNU General Public License Version 2, June 1991
- * (the "License").  You may use, redistribute and/or modify this File in
- * accordance with the terms and conditions of the License, a copy of which
- * is available along with the File in the gpl.txt file or by writing to
- * the Free Software Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
- * 02111-1307 or on the worldwide web at http://www.gnu.org/licenses/gpl.txt.
+ *  Copyright 2014-2020 NXP
  *
- * THE FILE IS DISTRIBUTED AS-IS, WITHOUT WARRANTY OF ANY KIND, AND THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE
- * ARE EXPRESSLY DISCLAIMED.  The License provides additional details about
- * this warranty disclaimer.
+ *  This software file (the File) is distributed by NXP
+ *  under the terms of the GNU General Public License Version 2, June 1991
+ *  (the License).  You may use, redistribute and/or modify the File in
+ *  accordance with the terms and conditions of the License, a copy of which
+ *  is available by writing to the Free Software Foundation, Inc.,
+ *  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA or on the
+ *  worldwide web at http://www.gnu.org/licenses/old-licenses/gpl-2.0.txt.
+ *
+ *  THE FILE IS DISTRIBUTED AS-IS, WITHOUT WARRANTY OF ANY KIND, AND THE
+ *  IMPLIED WARRANTIES OF MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE
+ *  ARE EXPRESSLY DISCLAIMED.  The License provides additional details about
+ *  this warranty disclaimer.
  *
  */
 
@@ -29,15 +30,16 @@ extern bt_private *m_priv[];
 		Local Variables
 ********************************************************/
 
+#define expect(skb) bt_cb(skb)->expect
 extern int bt_fw_serial;
 extern int bt_fw_reload;
-/** Marvell USB device */
-#define MARVELL_USB_DEVICE(vid, pid, name) \
+/** NXP USB device */
+#define NXP_USB_DEVICE(vid, pid, name) \
 	USB_DEVICE(vid, pid),\
 	.driver_info = (t_ptr)name
 
-/** Marvell USB device and interface */
-#define MARVELL_USB_DEVICE_AND_IFACE(vid, pid, cl, sc, pr, name) \
+/** NXP USB device and interface */
+#define NXP_USB_DEVICE_AND_IFACE(vid, pid, cl, sc, pr, name) \
 	USB_DEVICE_AND_INTERFACE_INFO(vid, pid, cl, sc, pr),\
 	.driver_info = (t_ptr)name
 
@@ -48,13 +50,13 @@ static const char usbdriver_name[] = "bt-usb8xxx";
 struct usb_device_id bt_usb_table[] = {
 
 	/* Enter the device signature inside */
-	{MARVELL_USB_DEVICE(USB8997_VID_1, USB8997_PID_1,
-			    "Marvell BT USB Adapter")},
-	{MARVELL_USB_DEVICE(USB8997_VID_1, USB8997V2_PID_1,
-			    "Marvell BT USB Adapter")},
-	{MARVELL_USB_DEVICE_AND_IFACE(USB8997_VID_1, USB8997_PID_2,
-				      USB_CLASS_WIRELESS_CONTROLLER, 1, 1,
-				      "Marvell BT USB Adapter")},
+	{NXP_USB_DEVICE(USB8997_VID_1, USB8997_PID_1,
+			"NXP BT USB Adapter")},
+	{NXP_USB_DEVICE(USB8997_VID_1, USB8997V2_PID_1,
+			"NXP BT USB Adapter")},
+	{NXP_USB_DEVICE_AND_IFACE(USB8997_VID_1, USB8997_PID_2,
+				  USB_CLASS_WIRELESS_CONTROLLER, 1, 1,
+				  "NXP BT USB Adapter")},
 	/* Terminating entry */
 	{},
 };
@@ -92,11 +94,11 @@ static struct usb_driver REFDATA bt_usb_driver = {
 
 MODULE_DEVICE_TABLE(usb, bt_usb_table);
 
-#define DEFAULT_FW_NAME "mrvl/usbusb8997_combo.bin"
-#define USB8997_Z_FW_NAME "mrvl/usbusb8997_combo.bin"
-#define USB8997_V2_FW_NAME "mrvl/usbusb8997_combo_v2.bin"
-#define USB8997_BT_Z_FW_NAME "mrvl/usb8997_bt.bin"
-#define USB8997_BT_V2_FW_NAME "mrvl/usb8997_bt_v2.bin"
+#define DEFAULT_FW_NAME "nxp/usbusb8997_combo.bin"
+#define USB8997_Z_FW_NAME "nxp/usbusb8997_combo.bin"
+#define USB8997_V2_FW_NAME "nxp/usbusb8997_combo_v2.bin"
+#define USB8997_BT_Z_FW_NAME "nxp/usb8997_bt.bin"
+#define USB8997_BT_V2_FW_NAME "nxp/usb8997_bt_v2.bin"
 
 #ifndef DEFAULT_FW_NAME
 #define DEFAULT_FW_NAME ""
@@ -495,6 +497,12 @@ btusb_recv_intr(bt_private *priv, void *buffer, int count)
 	struct m_dev *mbt_dev = &priv->bt_dev.m_dev[BT_SEQ];
 	int err = 0;
 
+	if (!mbt_dev->dev_pointer) {
+		PRINTM(ERROR, "Drop intr pkt before device ready\n");
+		DBG_HEXDUMP(DAT_D, "Intr Rx: ", buffer, count);
+		return err;
+	}
+
 	spin_lock(&mbt_dev->rxlock);
 	skb = mbt_dev->evt_skb;
 
@@ -509,21 +517,21 @@ btusb_recv_intr(bt_private *priv, void *buffer, int count)
 			}
 
 			bt_cb(skb)->pkt_type = HCI_EVENT_PKT;
-			bt_cb(skb)->expect = HCI_EVENT_HDR_SIZE;
+			expect(skb) = HCI_EVENT_HDR_SIZE;
 		}
 
-		len = min_t(uint, bt_cb(skb)->expect, count);
+		len = min_t(uint, expect(skb), count);
 		memcpy(skb_put(skb, len), buffer, len);
 
 		count -= len;
 		buffer += len;
-		bt_cb(skb)->expect -= len;
+		expect(skb) -= len;
 
 		if (skb->len == HCI_EVENT_HDR_SIZE) {
 			/* Complete event header */
-			bt_cb(skb)->expect = hci_event_hdr (skb)->plen;
+			expect(skb) = hci_event_hdr (skb)->plen;
 
-			if (skb_tailroom(skb) < bt_cb(skb)->expect) {
+			if (skb_tailroom(skb) < expect(skb)) {
 				PRINTM(ERROR,
 				       "Event data exceeded skb tail room\n");
 				kfree_skb(skb);
@@ -533,7 +541,7 @@ btusb_recv_intr(bt_private *priv, void *buffer, int count)
 			}
 		}
 
-		if (bt_cb(skb)->expect == 0) {
+		if (expect(skb) == 0) {
 			/* Complete frame */
 			usb_card_to_host(priv, HCI_EVENT_PKT, skb->data,
 					 skb->len);
@@ -564,6 +572,12 @@ btusb_recv_bulk(bt_private *priv, void *buffer, int count)
 	struct m_dev *mbt_dev = &priv->bt_dev.m_dev[BT_SEQ];
 	int err = 0;
 
+	if (!mbt_dev->dev_pointer) {
+		PRINTM(ERROR, "Drop bulk pkt before device ready\n");
+		DBG_HEXDUMP(DAT_D, "bulk rx:", buffer, count);
+		return err;
+	}
+
 	spin_lock(&mbt_dev->rxlock);
 	skb = mbt_dev->acl_skb;
 
@@ -578,23 +592,23 @@ btusb_recv_bulk(bt_private *priv, void *buffer, int count)
 			}
 
 			bt_cb(skb)->pkt_type = HCI_ACLDATA_PKT;
-			bt_cb(skb)->expect = HCI_ACL_HDR_SIZE;
+			expect(skb) = HCI_ACL_HDR_SIZE;
 		}
 
-		len = min_t(uint, bt_cb(skb)->expect, count);
+		len = min_t(uint, expect(skb), count);
 		memcpy(skb_put(skb, len), buffer, len);
 
 		count -= len;
 		buffer += len;
-		bt_cb(skb)->expect -= len;
+		expect(skb) -= len;
 
 		if (skb->len == HCI_ACL_HDR_SIZE) {
 			__le16 dlen = hci_acl_hdr(skb)->dlen;
 
 			/* Complete ACL header */
-			bt_cb(skb)->expect = __le16_to_cpu(dlen);
+			expect(skb) = __le16_to_cpu(dlen);
 
-			if (skb_tailroom(skb) < bt_cb(skb)->expect) {
+			if (skb_tailroom(skb) < expect(skb)) {
 				PRINTM(ERROR,
 				       "ACL data exceeded skb tail room\n");
 				kfree_skb(skb);
@@ -604,7 +618,7 @@ btusb_recv_bulk(bt_private *priv, void *buffer, int count)
 			}
 		}
 
-		if (bt_cb(skb)->expect == 0) {
+		if (expect(skb) == 0) {
 			/* Complete frame */
 			usb_card_to_host(priv, HCI_ACLDATA_PKT, skb->data,
 					 skb->len);
@@ -635,6 +649,12 @@ btusb_recv_isoc(bt_private *priv, void *buffer, int count)
 	struct m_dev *mbt_dev = &priv->bt_dev.m_dev[BT_SEQ];
 	int err = 0;
 
+	if (!mbt_dev->dev_pointer) {
+		PRINTM(ERROR, "Drop isoc pkt before device ready\n");
+		DBG_HEXDUMP(DAT_D, "isoc rx:", buffer, count);
+		return err;
+	}
+
 	spin_lock(&mbt_dev->rxlock);
 	skb = mbt_dev->sco_skb;
 	while (count) {
@@ -647,20 +667,20 @@ btusb_recv_isoc(bt_private *priv, void *buffer, int count)
 				break;
 			}
 			bt_cb(skb)->pkt_type = HCI_SCODATA_PKT;
-			bt_cb(skb)->expect = HCI_SCO_HDR_SIZE;
+			expect(skb) = HCI_SCO_HDR_SIZE;
 		}
 
-		len = min_t(uint, bt_cb(skb)->expect, count);
+		len = min_t(uint, expect(skb), count);
 		memcpy(skb_put(skb, len), buffer, len);
 
 		count -= len;
 		buffer += len;
-		bt_cb(skb)->expect -= len;
+		expect(skb) -= len;
 
 		if (skb->len == HCI_SCO_HDR_SIZE) {
 			/* Complete SCO header */
-			bt_cb(skb)->expect = hci_sco_hdr(skb)->dlen;
-			if (skb_tailroom(skb) < bt_cb(skb)->expect) {
+			expect(skb) = hci_sco_hdr(skb)->dlen;
+			if (skb_tailroom(skb) < expect(skb)) {
 				PRINTM(ERROR,
 				       "sco data exceeded skb tail room\n");
 				kfree_skb(skb);
@@ -670,7 +690,7 @@ btusb_recv_isoc(bt_private *priv, void *buffer, int count)
 			}
 		}
 
-		if (bt_cb(skb)->expect == 0) {
+		if (expect(skb) == 0) {
 			/* Complete frame */
 			usb_card_to_host(priv, HCI_SCODATA_PKT, skb->data,
 					 skb->len);
@@ -1125,7 +1145,7 @@ usb_request_fw_dpc(const struct firmware *fw_firmware, void *context)
 	card = (struct usb_card_rec *)priv->bt_dev.card;
 
 	if (!fw_firmware) {
-		do_gettimeofday(&tstamp);
+		get_monotonic_time(&tstamp);
 		if (tstamp.tv_sec >
 		    (priv->req_fw_time.tv_sec + REQUEST_FW_TIMEOUT)) {
 			PRINTM(ERROR, "BT: No FW image found. Skipping d/w\n");
@@ -1250,6 +1270,7 @@ usb_download_firmware_w_helper(bt_private *priv)
 			cur_fw_name = DEFAULT_FW_NAME;
 			break;
 		}
+
 	}
 
 	if (cur_fw_name == NULL) {
@@ -1365,8 +1386,8 @@ usb_isoc_rx_complete(struct urb *urb)
 	bt_private *priv = (bt_private *)urb->context;
 	struct usb_card_rec *card = (struct usb_card_rec *)priv->bt_dev.card;
 
-	//PRINTM(INFO, "Isoc Rx complete: urb %p status %d count %d\n",
-	//       urb, urb->status, urb->actual_length);
+	PRINTM(INFO, "Isoc Rx complete: urb %p status %d count %d\n",
+	       urb, urb->status, urb->actual_length);
 
 	if (urb->status == 0 && urb->actual_length > 0) {
 		for (i = 0; i < urb->number_of_packets; i++) {
@@ -1882,13 +1903,13 @@ bt_usb_suspend(struct usb_interface *intf, pm_message_t message)
 	if (priv->adapter->hs_state != HS_ACTIVATED) {
 #ifdef BLE_WAKEUP
 		/** Set BLE Wake up pattern */
-		if (BT_STATUS_SUCCESS != bt_config_ble_wakeup(priv))
+		if (BT_STATUS_SUCCESS != bt_config_ble_wakeup(priv, FALSE))
 			PRINTM(ERROR, "BT: Set ble wakeup pattern fail!\n");
 #endif
 
-		if (BT_STATUS_SUCCESS != bt_enable_hs(priv)) {
+		if (BT_STATUS_SUCCESS != bt_enable_hs(priv, FALSE)) {
 			PRINTM(CMD, "BT: HS not actived, suspend fail!\n");
-			if (BT_STATUS_SUCCESS != bt_enable_hs(priv)) {
+			if (BT_STATUS_SUCCESS != bt_enable_hs(priv, FALSE)) {
 				PRINTM(CMD,
 				       "BT: HS not actived the second time, force to suspend!\n");
 			}
@@ -2077,10 +2098,10 @@ sbi_register(void)
 	int *ret;
 	ENTER();
 
-	PRINTM(MSG, "Marvell Bluetooth USB driver\n");
+	PRINTM(MSG, "NXP Bluetooth USB driver\n");
 
 	/*
-	 * API registers the Marvell USB driver
+	 * API registers the NXP USB driver
 	 * to the USB system
 	 */
 	if (usb_register(&bt_usb_driver)) {
@@ -2310,7 +2331,7 @@ sbi_host_to_card(bt_private *priv, struct sk_buff *skb)
 			urb->iso_frame_desc[i].length = len;
 			i++;
 		}
-
+		urb->number_of_packets = i;
 		goto skip_waking;
 
 	default:
@@ -2380,7 +2401,7 @@ sbi_download_fw(bt_private *priv)
 
 	if (TRUE && (card->boot_state != USB_FW_READY)) {
 		PRINTM(MSG, "FW is not Active, Needs to be downloaded\n");
-		do_gettimeofday(&priv->req_fw_time);
+		get_monotonic_time(&priv->req_fw_time);
 		/* Download the main firmware */
 		if (usb_download_firmware_w_helper(priv)) {
 			PRINTM(INFO, "BT: FW download failed!\n");

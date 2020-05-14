@@ -1,23 +1,23 @@
 /** @file mbt_char.c
-  *
-  * @brief This file contains the char device function calls
-  *
-  * Copyright (C) 2010-2018, Marvell International Ltd.
-  *
-  * This software file (the "File") is distributed by Marvell International
-  * Ltd. under the terms of the GNU General Public License Version 2, June 1991
-  * (the "License").  You may use, redistribute and/or modify this File in
-  * accordance with the terms and conditions of the License, a copy of which
-  * is available by writing to the Free Software Foundation, Inc.,
-  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA or on the
-  * worldwide web at http://www.gnu.org/licenses/old-licenses/gpl-2.0.txt.
-  *
-  * THE FILE IS DISTRIBUTED AS-IS, WITHOUT WARRANTY OF ANY KIND, AND THE
-  * IMPLIED WARRANTIES OF MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE
-  * ARE EXPRESSLY DISCLAIMED.  The License provides additional details about
-  * this warranty disclaimer.
-  *
-  */
+ *
+ *  @brief This file contains the char device function calls
+ *
+ *  Copyright 2014-2020 NXP
+ *
+ *  This software file (the File) is distributed by NXP
+ *  under the terms of the GNU General Public License Version 2, June 1991
+ *  (the License).  You may use, redistribute and/or modify the File in
+ *  accordance with the terms and conditions of the License, a copy of which
+ *  is available by writing to the Free Software Foundation, Inc.,
+ *  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA or on the
+ *  worldwide web at http://www.gnu.org/licenses/old-licenses/gpl-2.0.txt.
+ *
+ *  THE FILE IS DISTRIBUTED AS-IS, WITHOUT WARRANTY OF ANY KIND, AND THE
+ *  IMPLIED WARRANTIES OF MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE
+ *  ARE EXPRESSLY DISCLAIMED.  The License provides additional details about
+ *  this warranty disclaimer.
+ *
+ */
 
 #include <linux/path.h>
 #include <linux/namei.h>
@@ -26,6 +26,11 @@
 #include "bt_drv.h"
 #include <linux/sched/signal.h>
 #include "mbt_char.h"
+
+#ifndef MIN
+/** Find minimum value */
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
+#endif /* MIN */
 
 static LIST_HEAD(char_dev_list);
 
@@ -103,10 +108,10 @@ mbtchar_chmod(char *name, mode_t mode)
 	} while (ret);
 	inode = path.dentry->d_inode;
 
-	inode_lock(inode);
 	ret = mnt_want_write(path.mnt);
 	if (ret)
 		goto out_unlock;
+	inode_lock(inode);
 	newattrs.ia_mode = (mode & S_IALLUGO) | (inode->i_mode & ~S_IALLUGO);
 	newattrs.ia_valid = ATTR_MODE | ATTR_CTIME;
 	if (inode->i_op->setattr)
@@ -121,7 +126,6 @@ mbtchar_chmod(char *name, mode_t mode)
 	LEAVE();
 	return ret;
 out_unlock:
-	inode_unlock(inode);
 	mnt_drop_write(path.mnt);
 	path_put(&path);
 	return ret;
@@ -156,10 +160,10 @@ mbtchar_chown(char *name, uid_t user, gid_t group)
 		}
 	} while (ret);
 	inode = path.dentry->d_inode;
-	inode_lock(inode);
 	ret = mnt_want_write(path.mnt);
 	if (ret)
 		goto out_unlock;
+	inode_lock(inode);
 	newattrs.ia_valid = ATTR_CTIME;
 	if (user != (uid_t) (-1)) {
 		newattrs.ia_valid |= ATTR_UID;
@@ -184,7 +188,6 @@ mbtchar_chown(char *name, uid_t user, gid_t group)
 	LEAVE();
 	return ret;
 out_unlock:
-	inode_unlock(inode);
 	mnt_drop_write(path.mnt);
 	path_put(&path);
 	return ret;
@@ -305,13 +308,10 @@ chardev_read(struct file * filp, char *buf, size_t count, loff_t * f_pos)
 	if (!skb)
 		goto out;
 
-	if (m_dev->read_continue_flag == 0) {
-		/* Put type byte before the data */
-		memcpy(skb_push(skb, 1), &bt_cb(skb)->pkt_type, 1);
-		PRINTM(DATA, "Read: pkt_type: 0x%x, len=%d @%lu\n",
-		       bt_cb(skb)->pkt_type, skb->len, jiffies);
-	}
-	DBG_HEXDUMP(DAT_D, "chardev_read", skb->data, skb->len);
+	PRINTM(DATA, "BT: chardev_read count=%d pkt_type: 0x%x, len=%d %p\n",
+	       (int)count, bt_cb(skb)->pkt_type, skb->len, skb);
+	DBG_HEXDUMP(DAT_D, "chardev_read", skb->data,
+		    MIN((int)count, skb->len));
 	if (skb->len > count) {
 		/* user data length is smaller than the skb length */
 		if (copy_to_user(buf, skb->data, count)) {
@@ -320,7 +320,6 @@ chardev_read(struct file * filp, char *buf, size_t count, loff_t * f_pos)
 		}
 		skb_pull(skb, count);
 		skb_queue_head(&m_dev->rx_q, skb);
-		m_dev->read_continue_flag = 1;
 		wake_up_interruptible(&m_dev->req_wait_q);
 		ret = count;
 		goto out;
@@ -329,8 +328,8 @@ chardev_read(struct file * filp, char *buf, size_t count, loff_t * f_pos)
 			ret = -EFAULT;
 			goto outf;
 		}
-		m_dev->read_continue_flag = 0;
 		ret = skb->len;
+		PRINTM(DATA, "BT: chardev_read complete %p\n", skb);
 	}
 outf:
 	kfree_skb(skb);

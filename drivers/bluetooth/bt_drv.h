@@ -2,15 +2,16 @@
  *  @brief This header file contains global constant/enum definitions,
  *  global variable declaration.
  *
- *  Copyright (C) 2007-2018, Marvell International Ltd.
  *
- *  This software file (the "File") is distributed by Marvell International
- *  Ltd. under the terms of the GNU General Public License Version 2, June 1991
- *  (the "License").  You may use, redistribute and/or modify this File in
+ *  Copyright 2014-2020 NXP
+ *
+ *  This software file (the File) is distributed by NXP
+ *  under the terms of the GNU General Public License Version 2, June 1991
+ *  (the License).  You may use, redistribute and/or modify the File in
  *  accordance with the terms and conditions of the License, a copy of which
- *  is available along with the File in the gpl.txt file or by writing to
- *  the Free Software Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
- *  02111-1307 or on the worldwide web at http://www.gnu.org/licenses/gpl.txt.
+ *  is available by writing to the Free Software Foundation, Inc.,
+ *  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA or on the
+ *  worldwide web at http://www.gnu.org/licenses/old-licenses/gpl-2.0.txt.
  *
  *  THE FILE IS DISTRIBUTED AS-IS, WITHOUT WARRANTY OF ANY KIND, AND THE
  *  IMPLIED WARRANTIES OF MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE
@@ -263,6 +264,9 @@ hexdump(char *prompt, u8 *buf, int len)
 #define os_wait_interruptible_timeout(waitq, cond, timeout) \
 	wait_event_interruptible_timeout(waitq, cond, ((timeout) * HZ / 1000))
 
+#define os_wait_timeout(waitq, cond, timeout) \
+         wait_event_timeout(waitq, cond, ((timeout) * HZ / 1000))
+
 /** bt thread structure */
 typedef struct {
 	/** Task */
@@ -405,7 +409,7 @@ typedef struct _bt_hist_proc_data {
 	struct _bt_private *pbt;
 } bt_hist_proc_data;
 
-/** Data structure for the Marvell Bluetooth device */
+/** Data structure for the NXP Bluetooth device */
 typedef struct _bt_dev {
 	/** device name */
 	char name[DEV_NAME_LEN];
@@ -448,7 +452,7 @@ typedef struct _bt_dev {
 	u8 test_mode;
 } bt_dev_t, *pbt_dev_t;
 
-/** Marvell bt adapter structure */
+/** NXP bt adapter structure */
 typedef struct _bt_adapter {
 	/** Chip revision ID */
 	u8 chip_rev;
@@ -485,6 +489,8 @@ typedef struct _bt_adapter {
 	wait_queue_head_t cmd_wait_q __ATTRIB_ALIGN__;
 	/** Host Cmd complet state */
 	u8 cmd_complete;
+	/** indicate using wait event timeout */
+	u8 wait_event_timeout;
 	/** tx pending */
 	u32 skb_pending;
 /** Version string buffer length */
@@ -583,6 +589,8 @@ typedef struct _bt_private {
 #ifdef BLE_WAKEUP
 	u8 ble_wakeup_buf_size;
 	u8 *ble_wakeup_buf;
+    /** white list address: address count + count* address*/
+	u8 white_list[61];
 #endif
     /** fw dump state */
 	u8 fw_dump;
@@ -607,7 +615,7 @@ int bt_get_histogram(bt_private *priv);
 /** Device type of AMP */
 #define DEV_TYPE_AMP		0x01
 
-/** Marvell vendor packet */
+/** NXP vendor packet */
 #define MRVL_VENDOR_PKT			0xFE
 
 /** Bluetooth command : Get FW Version */
@@ -620,7 +628,17 @@ int bt_get_histogram(bt_private *priv);
 #define BT_CMD_HOST_SLEEP_ENABLE	0x5A
 /** Bluetooth command : Module Configuration request */
 #define BT_CMD_MODULE_CFG_REQ		0x5B
+#ifdef BLE_WAKEUP
+/** Bluetooth command : Get whitelist */
+#define BT_CMD_GET_WHITELIST        0x9C
 
+#define HCI_BLE_GRP_BLE_CMDS                 0x08
+#define HCI_BT_SET_EVENTMASK_OCF           0x0001
+#define HCI_BLE_ADD_DEV_TO_WHITELIST_OCF     0x0011
+#define HCI_BLE_SET_SCAN_PARAMETERS_OCF      0x000B
+#define HCI_BLE_SET_SCAN_ENABLE_OCF          0x000C
+
+#endif
 /** Bluetooth command : PMIC Configure */
 #define BT_CMD_PMIC_CONFIGURE           0x7D
 
@@ -679,10 +697,10 @@ int bt_get_histogram(bt_private *priv);
 /** This is for firmware specific length */
 #define EXTRA_LEN	36
 
-/** Command buffer size for Marvell driver */
+/** Command buffer size for NXP driver */
 #define MRVDRV_SIZE_OF_CMD_BUFFER       (2 * 1024)
 
-/** Bluetooth Rx packet buffer size for Marvell driver */
+/** Bluetooth Rx packet buffer size for NXP driver */
 #define MRVDRV_BT_RX_PACKET_BUFFER_SIZE \
 	(HCI_MAX_FRAME_SIZE + EXTRA_LEN)
 
@@ -744,8 +762,9 @@ typedef struct _BT_EVENT {
 /** system resume */
 #define HCI_SYSTEM_RESUME         0x01
 /** This function enables ble wake up pattern */
-int bt_config_ble_wakeup(bt_private *priv);
+int bt_config_ble_wakeup(bt_private *priv, bool is_shutdown);
 int bt_send_system_event(bt_private *priv, u8 flag);
+void bt_send_hw_remove_event(bt_private *priv);
 #endif
 
 /** This function verify the received event pkt */
@@ -775,7 +794,7 @@ void bt_proc_remove(bt_private *priv);
 /** This function process the received event */
 int bt_process_event(bt_private *priv, struct sk_buff *skb);
 /** This function enables host sleep */
-int bt_enable_hs(bt_private *priv);
+int bt_enable_hs(bt_private *priv, bool is_shutdown);
 /** This function used to send command to firmware */
 int bt_prepare_command(bt_private *priv);
 /** This function frees the structure of adapter */
@@ -894,5 +913,17 @@ typedef struct _BT_HCI_CMD {
 	/** Data */
 	u8 data[6];
 } __ATTRIB_PACK__ BT_HCI_CMD;
+
+static inline void
+get_monotonic_time(struct timeval *tv)
+{
+	struct timespec ts;
+
+	getrawmonotonic(&ts);
+	if (tv) {
+		tv->tv_sec = ts.tv_sec;
+		tv->tv_usec = ts.tv_nsec / 1000;
+	}
+}
 
 #endif /* _BT_DRV_H_ */
