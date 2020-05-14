@@ -49,3 +49,10 @@ hci_uart-$(CONFIG_BT_HCIUART_QCA)	+= hci_qca.o
 hci_uart-$(CONFIG_BT_HCIUART_AG6XX)	+= hci_ag6xx.o
 hci_uart-$(CONFIG_BT_HCIUART_MRVL)	+= hci_mrvl.o
 hci_uart-objs				:= $(hci_uart-y)
+
+obj-$(CONFIG_BT_88W8997_MCHAR_USB) += bt8997usb.o
+bt8997usb-y			+= bt_main.o
+bt8997usb-y			+= bt_usb.o
+bt8997usb-y			+= bt_proc.o
+bt8997usb-y			+= mbt_char.o
+bt8997usb-y			+= bt_init.o

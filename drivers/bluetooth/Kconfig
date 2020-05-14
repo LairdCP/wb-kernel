@@ -461,4 +461,16 @@ config BT_HCIRSI
 	  Say Y here to compile support for HCI over Redpine into the
 	  kernel or say M to compile as a module.
 
+config BT_88W8997_MCHAR_USB
+	tristate "NXP 88W8897 USB BT driver for emulating UART interface (Android)"
+	default m
+	---help---
+		Select to build the driver supporting the:
+
+		NXP (Marvell) 88W8997 module's BT USB
+
+		This driver creates a psudo character device, /dev/mbtcharX, which will
+		be used to communicate between Android's Bluetooth_manager and the USB
+		transport layer.
+
 endmenu
