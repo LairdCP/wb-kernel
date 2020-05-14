@@ -611,24 +611,10 @@ bt_cal_config(bt_private *priv, char *cal_file, char *mac)
 
 	ENTER();
 	if (bt_req_fw_nowait) {
-#if LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 32)
 		ret = request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
 					      cal_file, priv->hotplug_device,
 					      GFP_KERNEL, priv,
 					      bt_request_init_user_conf_callback);
-#else
-#if LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 13)
-		ret = request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
-					      cal_file, priv->hotplug_device,
-					      priv,
-					      bt_request_init_user_conf_callback);
-#else
-		ret = request_firmware_nowait(THIS_MODULE,
-					      cal_file, priv->hotplug_device,
-					      priv,
-					      bt_request_init_user_conf_callback);
-#endif
-#endif
 		if (ret < 0) {
 			PRINTM(FATAL,
 			       "BT: bt_cal_config() failed, error code = %#x cal_file=%s\n",
@@ -676,24 +662,10 @@ bt_cal_config_ext(bt_private *priv, char *cal_file)
 
 	ENTER();
 	if (bt_req_fw_nowait) {
-#if LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 32)
 		ret = request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
 					      cal_file, priv->hotplug_device,
 					      GFP_KERNEL, priv,
 					      bt_request_init_user_conf_callback);
-#else
-#if LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 13)
-		ret = request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
-					      cal_file, priv->hotplug_device,
-					      priv,
-					      bt_request_init_user_conf_callback);
-#else
-		ret = request_firmware_nowait(THIS_MODULE,
-					      cal_file, priv->hotplug_device,
-					      priv,
-					      bt_request_init_user_conf_callback);
-#endif
-#endif
 		if (ret < 0) {
 			PRINTM(FATAL,
 			       "BT: bt_cal_config_ext() failed, error code = %#x cal_file=%s\n",

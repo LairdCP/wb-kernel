@@ -23,11 +23,7 @@
 
 #include <linux/usb.h>
 
-#if LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 24)
 #define REFDATA __refdata
-#else
-#define REFDATA
-#endif
 
 /** USB 8997 VID 1 */
 #define USB8997_VID_1   0x1286

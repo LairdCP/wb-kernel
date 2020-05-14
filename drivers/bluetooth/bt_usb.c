@@ -86,10 +86,8 @@ static struct usb_driver REFDATA bt_usb_driver = {
 	/* Resume function name */
 	.resume = bt_usb_resume,
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 19)
 	/* Driver supports autosuspend */
 	.supports_autosuspend = 1,
-#endif
 };
 
 MODULE_DEVICE_TABLE(usb, bt_usb_table);
@@ -1154,9 +1152,6 @@ usb_request_fw_dpc(const struct firmware *fw_firmware, void *context)
 	}
 
 	if (fw_firmware) {
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 32)
-		if (!bt_req_fw_nowait)
-#endif
 			release_firmware(fw_firmware);
 	}
 	LEAVE();
@@ -1165,9 +1160,6 @@ usb_request_fw_dpc(const struct firmware *fw_firmware, void *context)
 done:
 	/* Failure Return, Free all stuff here! */
 	if (fw_firmware) {
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 32)
-		if (!bt_req_fw_nowait)
-#endif
 			release_firmware(fw_firmware);
 	}
 
@@ -1268,22 +1260,10 @@ usb_download_firmware_w_helper(bt_private *priv)
 	PRINTM(MSG, "fw_name=%s\n", cur_fw_name);
 
 	if (bt_req_fw_nowait) {
-#if LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 32)
 		ret = request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
 					      cur_fw_name, priv->hotplug_device,
 					      GFP_KERNEL, priv,
 					      usb_request_fw_callback);
-#else
-#if LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 13)
-		ret = request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
-					      cur_fw_name, priv->hotplug_device,
-					      priv, usb_request_fw_callback);
-#else
-		ret = request_firmware_nowait(THIS_MODULE,
-					      cur_fw_name, priv->hotplug_device,
-					      priv, usb_request_fw_callback);
-#endif
-#endif
 		if (ret < 0)
 			PRINTM(FATAL,
 			       "BT: request_firmware_nowait() failed, "

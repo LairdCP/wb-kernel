@@ -24,9 +24,7 @@
 #include <linux/mount.h>
 
 #include "bt_drv.h"
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
 #include <linux/sched/signal.h>
-#endif
 #include "mbt_char.h"
 
 static LIST_HEAD(char_dev_list);
@@ -105,11 +103,7 @@ mbtchar_chmod(char *name, mode_t mode)
 	} while (ret);
 	inode = path.dentry->d_inode;
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4,7,0)
-	mutex_lock(&inode->i_mutex);
-#else
 	inode_lock(inode);
-#endif
 	ret = mnt_want_write(path.mnt);
 	if (ret)
 		goto out_unlock;
@@ -118,28 +112,16 @@ mbtchar_chmod(char *name, mode_t mode)
 	if (inode->i_op->setattr)
 		ret = inode->i_op->setattr(path.dentry, &newattrs);
 	else
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 35)
 		ret = simple_setattr(path.dentry, &newattrs);
-#else
-		ret = inode_setattr(inode, &newattrs);
-#endif
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4,7,0)
-	mutex_unlock(&inode->i_mutex);
-#else
 	inode_unlock(inode);
-#endif
 	mnt_drop_write(path.mnt);
 
 	path_put(&path);
 	LEAVE();
 	return ret;
 out_unlock:
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4,7,0)
-	mutex_unlock(&inode->i_mutex);
-#else
 	inode_unlock(inode);
-#endif
 	mnt_drop_write(path.mnt);
 	path_put(&path);
 	return ret;
@@ -174,30 +156,18 @@ mbtchar_chown(char *name, uid_t user, gid_t group)
 		}
 	} while (ret);
 	inode = path.dentry->d_inode;
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4,7,0)
-	mutex_lock(&inode->i_mutex);
-#else
 	inode_lock(inode);
-#endif
 	ret = mnt_want_write(path.mnt);
 	if (ret)
 		goto out_unlock;
 	newattrs.ia_valid = ATTR_CTIME;
 	if (user != (uid_t) (-1)) {
 		newattrs.ia_valid |= ATTR_UID;
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 5, 0)
-		newattrs.ia_uid = user;
-#else
 		newattrs.ia_uid = KUIDT_INIT(user);
-#endif
 	}
 	if (group != (gid_t) (-1)) {
 		newattrs.ia_valid |= ATTR_GID;
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 5, 0)
-		newattrs.ia_gid = group;
-#else
 		newattrs.ia_gid = KGIDT_INIT(group);
-#endif
 	}
 	if (!S_ISDIR(inode->i_mode))
 		newattrs.ia_valid |=
@@ -205,28 +175,16 @@ mbtchar_chown(char *name, uid_t user, gid_t group)
 	if (inode->i_op->setattr)
 		ret = inode->i_op->setattr(path.dentry, &newattrs);
 	else
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 35)
 		ret = simple_setattr(path.dentry, &newattrs);
-#else
-		ret = inode_setattr(inode, &newattrs);
-#endif
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4,7,0)
-	mutex_unlock(&inode->i_mutex);
-#else
 	inode_unlock(inode);
-#endif
 	mnt_drop_write(path.mnt);
 
 	path_put(&path);
 	LEAVE();
 	return ret;
 out_unlock:
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4,7,0)
-	mutex_unlock(&inode->i_mutex);
-#else
 	inode_unlock(inode);
-#endif
 	mnt_drop_write(path.mnt);
 	path_put(&path);
 	return ret;
@@ -385,19 +343,6 @@ out:
 	return ret;
 }
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 36)
-/**
- *	@brief ioctl common handler for char dev
- *
- *	@param inode	pointer to structure inode
- *	@param filp	pointer to structure file
- *	@param cmd		contains the IOCTL
- *	@param arg		contains the arguement
- *	@return			0--success otherwise failure
- */
-int
-char_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, void *arg)
-#else
 /**
  *	@brief ioctl common handler for char dev
  *
@@ -408,7 +353,6 @@ char_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, void *arg)
  */
 long
 char_ioctl(struct file *filp, unsigned int cmd, void *arg)
-#endif
 {
 	struct char_dev *dev = (struct char_dev *)filp->private_data;
 	struct m_dev *m_dev = NULL;
@@ -435,20 +379,6 @@ char_ioctl(struct file *filp, unsigned int cmd, void *arg)
 	return 0;
 }
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 36)
-/**
- *	@brief ioctl handler for char dev
- *
- *	@param inode	pointer to structure inode
- *	@param filp	pointer to structure file
- *	@param cmd		contains the IOCTL
- *	@param arg		contains the arguement
- *	@return			0--success otherwise failure
- */
-int
-chardev_ioctl(struct inode *inode, struct file *filp,
-	      unsigned int cmd, unsigned long arg)
-#else
 /**
  *	@brief ioctl handler for char dev
  *
@@ -459,30 +389,11 @@ chardev_ioctl(struct inode *inode, struct file *filp,
  */
 long
 chardev_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
-#endif
 {
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 36)
-	return char_ioctl(inode, filp, cmd, (void *)arg);
-#else
 	return char_ioctl(filp, cmd, (void *)arg);
-#endif
 }
 
 #ifdef CONFIG_COMPAT
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 36)
-/**
- *	@brief compat ioctl handler for char dev
- *
- *	@param inode	pointer to structure inode
- *	@param filp	pointer to structure file
- *	@param cmd		contains the IOCTL
- *	@param arg		contains the arguement
- *	@return			0--success otherwise failure
- */
-int
-chardev_ioctl_compat(struct inode *inode, struct file *filp,
-		     unsigned int cmd, unsigned long arg)
-#else
 /**
  *	@brief compat ioctl handler for char dev
  *
@@ -493,13 +404,8 @@ chardev_ioctl_compat(struct inode *inode, struct file *filp,
  */
 long
 chardev_ioctl_compat(struct file *filp, unsigned int cmd, unsigned long arg)
-#endif
 {
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 36)
-	return char_ioctl(inode, filp, cmd, compat_ptr(arg));
-#else
 	return char_ioctl(filp, cmd, compat_ptr(arg));
-#endif
 }
 #endif /* CONFIG_COMPAT */
 
@@ -540,12 +446,10 @@ chardev_open(struct inode *inode, struct file *filp)
 	filp->private_data = dev;	/* for other methods */
 	m_dev = dev->m_dev;
 	mdev_req_lock(m_dev);
-#if LINUX_VERSION_CODE > KERNEL_VERSION(3, 7, 0)
 	if (test_bit(HCI_UP, &m_dev->flags)) {
 		atomic_inc(&m_dev->extra_cnt);
 		goto done;
 	}
-#endif
 	if (m_dev->open(m_dev)) {
 		ret = -EIO;
 		goto done;
@@ -584,12 +488,10 @@ chardev_release(struct inode *inode, struct file *filp)
 		return -ENXIO;
 	}
 	m_dev = dev->m_dev;
-#if LINUX_VERSION_CODE > KERNEL_VERSION(3, 7, 0)
 	if (m_dev && (atomic_dec_if_positive(&m_dev->extra_cnt) >= 0)) {
 		LEAVE();
 		return ret;
 	}
-#endif
 	/* disable sco when close BT char device */
 	if (m_dev != NULL && m_dev->dev_type == BT_TYPE) {
 		PRINTM(CMD,
@@ -640,11 +542,7 @@ const struct file_operations chardev_fops = {
 	.owner = THIS_MODULE,
 	.read = chardev_read,
 	.write = chardev_write,
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 36)
-	.ioctl = chardev_ioctl,
-#else
 	.unlocked_ioctl = chardev_ioctl,
-#endif
 #ifdef CONFIG_COMPAT
 	.compat_ioctl = chardev_ioctl_compat,
 #endif
@@ -698,7 +596,6 @@ register_char_dev(struct char_dev *dev, struct class *char_class,
 		ret = -EFAULT;
 		goto free_cdev_region;
 	}
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 26)
 	if ((dev->dev_type == BT_TYPE) || (dev->dev_type == BT_AMP_TYPE)) {
 		device_create(char_class, NULL,
 			      MKDEV(mbtchar_major, dev->minor), NULL, dev_name);
@@ -707,16 +604,6 @@ register_char_dev(struct char_dev *dev, struct class *char_class,
 		device_create(char_class, NULL,
 			      MKDEV(mbtchar_major, dev->minor), NULL, dev_name);
 	}
-#else
-	if ((dev->dev_type == BT_TYPE) || (dev->dev_type == BT_AMP_TYPE)) {
-		device_create(char_class, NULL,
-			      MKDEV(mbtchar_major, dev->minor), dev_name);
-	}
-	if (dev->dev_type == DEBUG_TYPE) {
-		device_create(char_class, NULL,
-			      MKDEV(mbtchar_major, dev->minor), dev_name);
-	}
-#endif
 	PRINTM(INFO, "register char dev=%s\n", dev_name);
 
 	/** modify later */

@@ -24,13 +24,7 @@
 #include "bt_drv.h"
 
 /** proc diretory root */
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 26)
 #define PROC_DIR NULL
-#elif LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 24)
-#define PROC_DIR (&proc_root)
-#else
-#define PROC_DIR proc_net
-#endif
 
 /** Proc mbt directory entry */
 static struct proc_dir_entry *proc_mbt;
@@ -268,11 +262,7 @@ proc_write(struct file *file,
 static void
 proc_on_close(struct inode *inode, struct file *file)
 {
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
 	struct proc_private_data *priv = PDE_DATA(inode);
-#else
-	struct proc_private_data *priv = PDE(inode)->data;
-#endif
 	struct proc_data *pdata = file->private_data;
 	char *line;
 	int i;
@@ -321,11 +311,7 @@ proc_on_close(struct inode *inode, struct file *file)
 static int
 proc_open(struct inode *inode, struct file *file)
 {
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
 	struct proc_private_data *priv = PDE_DATA(inode);
-#else
-	struct proc_private_data *priv = PDE(inode)->data;
-#endif
 	struct proc_data *pdata;
 	int i;
 	char *p;
@@ -520,11 +506,7 @@ bt_histogram_read(struct seq_file *sfp, void *data)
 static int
 bt_histogram_proc_open(struct inode *inode, struct file *file)
 {
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
 	return single_open(file, bt_histogram_read, PDE_DATA(inode));
-#else
-	return single_open(file, bt_histogram_read, PDE(inode)->data);
-#endif
 }
 
 /** Histogram proc fops */
@@ -574,21 +556,11 @@ bt_proc_init(bt_private *priv, struct m_dev *m_dev, int seq)
 			priv->hist_proc[i].antenna = i;
 			priv->hist_proc[i].pbt = priv;
 			snprintf(hist_entry, sizeof(hist_entry), "bt-ant%d", i);
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 26)
 			entry = proc_create_data(hist_entry, 0644,
 						 priv->dev_proc[seq].hist_entry,
 						 &histogram_proc_fops,
 						 &priv->hist_proc[i]);
 			if (entry == NULL)
-#else
-			entry = create_proc_entry(hist_entry, 0644,
-						  priv->dev_proc[seq].
-						  hist_entry);
-			if (entry) {
-				entry->data = &priv->hist_proc[i];
-				entry->proc_fops = &histogram_proc_fops;
-			} else
-#endif
 			{
 				PRINTM(MSG,
 				       "Fail to create histogram proc %s\n",
@@ -644,7 +616,6 @@ bt_proc_init(bt_private *priv, struct m_dev *m_dev, int seq)
 						(t_ptr)priv->adapter;
 			}
 			priv->dev_proc[seq].pfiles[j].pbt = priv;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 26)
 			entry = proc_create_data(proc_files[j].name,
 						 S_IFREG | proc_files[j].
 						 fileflag,
@@ -653,20 +624,6 @@ bt_proc_init(bt_private *priv, struct m_dev *m_dev, int seq)
 						 &priv->dev_proc[seq].
 						 pfiles[j]);
 			if (entry == NULL)
-#else
-			entry = create_proc_entry(proc_files[j].name,
-						  S_IFREG | proc_files[j].
-						  fileflag,
-						  priv->dev_proc[seq].
-						  proc_entry);
-			if (entry) {
-				entry->data = &priv->dev_proc[seq].pfiles[j];
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 30)
-				entry->owner = THIS_MODULE;
-#endif
-				entry->proc_fops = proc_files[j].fops;
-			} else
-#endif
 				PRINTM(MSG, "BT: Fail to create proc %s\n",
 				       proc_files[j].name);
 		}

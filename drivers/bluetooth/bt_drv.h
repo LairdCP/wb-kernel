@@ -260,13 +260,8 @@ hexdump(char *prompt, u8 *buf, int len)
 #define WAIT_UNTIL_CMD_RESP	    5000
 
 /** Sleep until a condition gets true or a timeout elapses */
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 5, 0)
-#define os_wait_interruptible_timeout(waitq, cond, timeout) \
-	interruptible_sleep_on_timeout(&waitq, ((timeout) * HZ / 1000))
-#else
 #define os_wait_interruptible_timeout(waitq, cond, timeout) \
 	wait_event_interruptible_timeout(waitq, cond, ((timeout) * HZ / 1000))
-#endif
 
 /** bt thread structure */
 typedef struct {

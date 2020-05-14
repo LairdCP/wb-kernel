@@ -438,11 +438,7 @@ bt_store_firmware_dump(bt_private *priv, u8 *buf, u32 len)
 		LEAVE();
 		return;
 	}
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 14, 0)
-	vfs_write(pfile_fwdump, buf, len, &pos);
-#else
 	kernel_write(pfile_fwdump, buf, len, &pos);
-#endif
 	filp_close(pfile_fwdump, NULL);
 	LEAVE();
 	return;
@@ -607,9 +603,6 @@ bt_save_dump_info_to_file(char *dir_name, char *file_name, u8 *buf, u32 buf_len)
 	struct file *pfile = NULL;
 	u8 name[64];
 	loff_t pos;
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 14, 0)
-	mm_segment_t fs;
-#endif
 
 	ENTER();
 
@@ -640,14 +633,7 @@ bt_save_dump_info_to_file(char *dir_name, char *file_name, u8 *buf, u32 buf_len)
 	PRINTM(MSG, "Dump data %s saved in %s\n", file_name, name);
 
 	pos = 0;
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 14, 0)
-	fs = get_fs();
-	set_fs(KERNEL_DS);
-	vfs_write(pfile, (const char __user *)buf, buf_len, &pos);
-	set_fs(fs);
-#else
 	kernel_write(pfile, (const char __user *)buf, buf_len, &pos);
-#endif
 	filp_close(pfile, NULL);
 
 	PRINTM(MSG, "Dump data %s saved in %s successfully\n", file_name, name);
@@ -2222,11 +2208,7 @@ init_m_dev(struct m_dev *m_dev)
 	skb_queue_head_init(&m_dev->rx_q);
 	init_waitqueue_head(&m_dev->req_wait_q);
 	init_waitqueue_head(&m_dev->rx_wait_q);
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 37)
-	init_MUTEX(&m_dev->req_lock);
-#else
 	sema_init(&m_dev->req_lock, 1);
-#endif
 	spin_lock_init(&m_dev->rxlock);
 	memset(&m_dev->stat, 0, sizeof(struct hci_dev_stats));
 	m_dev->open = mdev_open;
@@ -2255,11 +2237,7 @@ bt_service_main_thread(void *data)
 	bt_thread *thread = data;
 	bt_private *priv = thread->priv;
 	bt_adapter *adapter = priv->adapter;
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 13, 0)
-	wait_queue_t wait;
-#else
 	wait_queue_entry_t wait;
-#endif
 	struct sk_buff *skb;
 	ENTER();
 	bt_activate_thread(thread);
