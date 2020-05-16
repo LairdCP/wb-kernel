@@ -62,6 +62,7 @@ struct m_dev {
 	int dev_type;
 	int spec_type;
 	void *driver_data;
+	int read_continue_flag;
 	int wait_rx_complete;
 	int rx_complete_flag;
 	wait_queue_head_t rx_wait_q;
@@ -134,9 +135,6 @@ mdev_recv_frame(struct sk_buff *skb)
 
 	/* Time stamp */
 	__net_timestamp(skb);
-
-	/* Put type byte before the data */
-	memcpy(skb_push(skb, 1), &bt_cb(skb)->pkt_type, 1);
 
 	/* Queue frame for rx task */
 	skb_queue_tail(&m_dev->rx_q, skb);

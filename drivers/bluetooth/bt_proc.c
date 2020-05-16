@@ -23,12 +23,20 @@
 #include <linux/proc_fs.h>
 
 #include "bt_drv.h"
+#ifdef __SDIO__
+#include "bt_sdio.h"
+#endif // __SDIO__
 
 /** proc diretory root */
 #define PROC_DIR NULL
 
 /** Proc mbt directory entry */
 static struct proc_dir_entry *proc_mbt;
+
+#ifdef __SDIO__
+#define     CMD52_STR_LEN   50
+static char cmd52_string[CMD52_STR_LEN];
+#endif // __SDIO__
 
 /** proc data structure */
 struct proc_data {
@@ -97,6 +105,14 @@ static struct item_data config_items[] = {
 	{"hscfgcmd", item_dev_size(hscfgcmd), 0, item_dev_addr(hscfgcmd),
 	 OFFSET_BT_DEV | SHOW_INT}
 	,
+#ifdef __SDIO__
+	{"sdio_pull_cfg", item_dev_size(sdio_pull_cfg), 0,
+	 item_dev_addr(sdio_pull_cfg), OFFSET_BT_DEV | SHOW_HEX}
+	,
+	{"sdio_pull_ctrl", item_dev_size(sdio_pull_ctrl), 0,
+	 item_dev_addr(sdio_pull_ctrl), OFFSET_BT_DEV | SHOW_INT}
+	,
+#endif // __SDIO__
 	{"test_mode", item_dev_size(test_mode), 0, item_dev_addr(test_mode),
 	 OFFSET_BT_DEV | SHOW_INT}
 	,
@@ -121,9 +137,23 @@ static struct item_data status_items[] = {
 	 OFFSET_BT_ADAPTER | SHOW_INT},
 	{"WakeupTries", item_adapter_size(WakeupTries), 0,
 	 item_adapter_addr(WakeupTries), OFFSET_BT_ADAPTER | SHOW_INT},
+#ifdef __SDIO__
+	{"irq_recv", item_adapter_size(irq_recv), 0,
+	 item_adapter_addr(irq_recv),
+	 OFFSET_BT_ADAPTER | SHOW_INT},
+	{"irq_done", item_adapter_size(irq_done), 0,
+	 item_adapter_addr(irq_done),
+	 OFFSET_BT_ADAPTER | SHOW_INT},
+#endif // __SDIO__
 	{"skb_pending", item_adapter_size(skb_pending), 0,
 	 item_adapter_addr(skb_pending), OFFSET_BT_ADAPTER | SHOW_INT},
 };
+
+#ifdef __SDIO__
+static struct item_data debug_items[] = {
+	{"sdcmd52rw", 0, (t_ptr)cmd52_string, 0, SHOW_STRING},
+};
+#endif // __SDIO__
 
 /**
  *  @brief convert string to number
@@ -161,6 +191,81 @@ string_to_number(char *s)
 
 	return r * pn;
 }
+
+#ifdef __SDIO__
+/**
+ *  @brief Create cmd52 string
+ *
+ *  @param priv	A pointer to bt_private structure
+ *  @return	BT_STATUS_SUCCESS
+ */
+static int
+form_cmd52_string(bt_private *priv)
+{
+	ENTER();
+
+	memset(cmd52_string, 0, CMD52_STR_LEN);
+	snprintf(cmd52_string, CMD52_STR_LEN - 1, "BT: %d 0x%0x 0x%02X",
+		 priv->bt_dev.cmd52_func, priv->bt_dev.cmd52_reg,
+		 priv->bt_dev.cmd52_val);
+
+	LEAVE();
+	return BT_STATUS_SUCCESS;
+}
+
+/*
+ *  @brief Parse cmd52 string
+ *
+ *  @param buffer  A pointer user buffer
+ *  @param len     Length of user buffer
+ *  @param func    Parsed func number
+ *  @param reg     Parsed reg value
+ *  @param val     Parsed value to set
+ *  @return	BT_STATUS_SUCCESS
+ */
+static int
+parse_cmd52_string(const char __user * buffer, size_t len,
+		   int *func, int *reg, int *val)
+{
+	int ret = BT_STATUS_SUCCESS;
+	char *string = NULL;
+	char *pos = NULL;
+
+	ENTER();
+
+	string = kzalloc(CMD52_STR_LEN, GFP_KERNEL);
+	if (!string) {
+		PRINTM(ERROR, "BT: Can not alloc mem for cmd52 string\n");
+		LEAVE();
+		return -ENOMEM;
+	}
+	memcpy(string, buffer + strlen("sdcmd52rw="),
+	       len - strlen("sdcmd52rw="));
+	string = strstrip(string);
+
+	*func = -1;
+	*reg = -1;
+	*val = -1;
+
+	/* Get func */
+	pos = strsep(&string, " \t");
+	if (pos)
+		*func = string_to_number(pos);
+
+	/* Get reg */
+	pos = strsep(&string, " \t");
+	if (pos)
+		*reg = string_to_number(pos);
+
+	/* Get val (optional) */
+	pos = strsep(&string, " \t");
+	if (pos)
+		*val = string_to_number(pos);
+	kfree(string);
+	LEAVE();
+	return ret;
+}
+#endif // __SDIO__
 
 /**
  *  @brief This function handle generic proc file close
@@ -226,6 +331,9 @@ proc_write(struct file *file,
 {
 	loff_t pos = *offset;
 	struct proc_data *pdata = (struct proc_data *)file->private_data;
+#ifdef __SDIO__
+	int func = 0, reg = 0, val = 0;
+#endif // __SDIO__
 	int config_data = 0;
 	char *line = NULL;
 
@@ -244,9 +352,23 @@ proc_write(struct file *file,
 			line += strlen("fw_reload") + 1;
 			config_data = string_to_number(line);
 		}
+#ifdef __SDIO__ 
+		else
+			config_data = FW_RELOAD_SDIO_INBAND_RESET;
+#endif // __SDIO__
 		PRINTM(MSG, "Request fw_reload=%d\n", config_data);
 		bt_request_fw_reload(pdata->pbt, config_data);
 	}
+#ifdef __SDIO__
+	if (!strncmp(pdata->wrbuf + pos, "sdcmd52rw=", strlen("sdcmd52rw="))) {
+		parse_cmd52_string(pdata->wrbuf + pos, len, &func, &reg, &val);
+		sd_write_cmd52_val(pdata->pbt, func, reg, val);
+	}
+	if (!strncmp(pdata->wrbuf + pos, "debug_dump", strlen("debug_dump"))) {
+		bt_dump_sdio_regs(pdata->pbt);
+		bt_dump_firmware_info_v2(pdata->pbt);
+	}
+#endif // __SDIO__
 	if (pos + len > pdata->wrlen)
 		pdata->wrlen = len + file->f_pos;
 	*offset = pos + len;
@@ -294,6 +416,9 @@ proc_on_close(struct inode *inode, struct file *file)
 			line++;
 	}
 	if (priv->pbt->bt_dev.hscmd || priv->pbt->bt_dev.pscmd
+#ifdef __SDIO__
+	    || priv->pbt->bt_dev.sdio_pull_ctrl
+#endif // __SDIO
 	    || priv->pbt->bt_dev.test_mode || priv->pbt->bt_dev.hscfgcmd) {
 		bt_prepare_command(priv->pbt);
 		wake_up_interruptible(&priv->pbt->MainThread.waitQ);
@@ -359,6 +484,14 @@ proc_open(struct inode *inode, struct file *file)
 		else if (priv->pdata[i].flag & SHOW_HEX)
 			p += sprintf(p, "%s=0x%x\n", priv->pdata[i].name, val);
 		else if (priv->pdata[i].flag & SHOW_STRING) {
+#ifdef __SDIO__
+			if (!strncmp
+			    (priv->pdata[i].name, "sdcmd52rw",
+			     strlen("sdcmd52rw"))) {
+				sd_read_cmd52_val(priv->pbt);
+				form_cmd52_string(priv->pbt);
+			}
+#endif // __SDIO__
 			p += sprintf(p, "%s=%s\n", priv->pdata[i].name,
 				     (char *)priv->pdata[i].addr);
 		}
@@ -392,6 +525,12 @@ static struct proc_private_data proc_files[] = {
 	 sizeof(config_items) / sizeof(config_items[0]), &config_items[0], NULL,
 	 &proc_rw_ops}
 	,
+#ifdef __SDIO__
+	{"debug", DEFAULT_FILE_PERM, 512,
+	 sizeof(debug_items) / sizeof(debug_items[0]), &debug_items[0], NULL,
+	 &proc_rw_ops}
+	,
+#endif // __SDIO__
 };
 
 /**
@@ -538,6 +677,9 @@ bt_proc_init(bt_private *priv, struct m_dev *m_dev, int seq)
 
 	ENTER();
 
+#ifdef __SDIO__
+	memset(cmd52_string, 0, CMD52_STR_LEN);
+#endif // __SDIO__
 	if (proc_mbt) {
 		priv->dev_proc[seq].proc_entry =
 			proc_mkdir(m_dev->name, proc_mbt);

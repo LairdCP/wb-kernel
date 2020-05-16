@@ -40,16 +40,27 @@
 #include <linux/of.h>
 #endif
 
+#ifdef __SDIO__
+#include <linux/mmc/sdio_func.h>
+#endif //__SDIO__
+
 #include "bt_drv.h"
 #include "mbt_char.h"
-
+#ifdef __SDIO__
+#include "bt_sdio.h"
+#else // __SDIO__
 #include "bt_usb.h"
+#endif // __SDIO__
 
 /** Version */
 #define VERSION "C4X14114"
 
 /** Driver version */
+#ifdef __SDIO__
+static char mbt_driver_version[] = "SD8997-%s-" VERSION "-(" "FP" FPNUM ")"
+#else //__SDIO__
 static char mbt_driver_version[] = "USB8997-%s-" VERSION "-(" "FP" FPNUM ")"
+#endif // __SDIO__
 #ifdef DEBUG_LEVEL2
 	"-dbg"
 #endif
@@ -122,6 +133,11 @@ u32 mbt_drvdbg = DEFAULT_DEBUG_MASK;
 
 #ifdef CONFIG_OF
 static int dts_enable = 1;
+#endif
+
+#ifdef SDIO_SUSPEND_RESUME
+/** PM keep power */
+int mbt_pm_keep_power = 1;
 #endif
 
 static int debug_intf = 1;
@@ -303,6 +319,9 @@ check_evtpkt(bt_private *priv, struct sk_buff *skb)
 		case BT_CMD_LOAD_CONFIG_DATA_EXT:
 		case BT_CMD_AUTO_SLEEP_MODE:
 		case BT_CMD_HOST_SLEEP_CONFIG:
+#ifdef __SDIO__
+		case BT_CMD_SDIO_PULL_CFG_REQ:
+#endif // __SDIO__
 		case BT_CMD_SET_EVT_FILTER:
 			// case BT_CMD_ENABLE_DEVICE_TESTMODE:
 		case BT_CMD_PMIC_CONFIGURE:
@@ -552,6 +571,13 @@ bt_process_event(bt_private *priv, struct sk_buff *skb)
 		if (pevent->data[1] == BT_STATUS_SUCCESS) {
 			priv->adapter->hs_state = HS_ACTIVATED;
 			if (priv->adapter->suspend_fail == FALSE) {
+#ifdef SDIO_SUSPEND_RESUME
+#ifdef MMC_PM_KEEP_POWER
+#ifdef MMC_PM_FUNC_SUSPENDED
+				bt_is_suspended(priv);
+#endif
+#endif
+#endif
 				if (priv->adapter->wait_event_timeout) {
 					wake_up(&priv->adapter->cmd_wait_q);
 					priv->adapter->wait_event_timeout =
@@ -622,6 +648,19 @@ bt_process_event(bt_private *priv, struct sk_buff *skb)
 		       (priv->adapter->ps_state) ? "PS_SLEEP" : "PS_AWAKE");
 
 		break;
+#ifdef __SDIO__
+	case BT_CMD_SDIO_PULL_CFG_REQ:
+		if (pevent->data[pevent->length - 1] == BT_STATUS_SUCCESS)
+			PRINTM(CMD, "BT: %s: SDIO pull configuration success\n",
+			       m_dev->name);
+
+		else {
+			PRINTM(CMD, "BT: %s: SDIO pull configuration fail\n",
+			       m_dev->name);
+
+		}
+		break;
+#endif // __SDIO__
 	default:
 		PRINTM(CMD, "BT: Unknown Event=%d %s\n", pevent->data[0],
 		       m_dev->name);
@@ -692,6 +731,280 @@ done:
 	return ret;
 }
 
+#ifdef __SDIO__
+#define DEBUG_HOST_READY		0xEE
+#define DEBUG_FW_DONE			0xFF
+#define DUMP_MAX_POLL_TRIES			200
+
+#define DEBUG_DUMP_CTRL_REG               0xF0
+#define DEBUG_DUMP_START_REG              0xF1
+#define DEBUG_DUMP_END_REG                0xF8
+
+typedef enum {
+	DUMP_TYPE_ITCM = 0,
+	DUMP_TYPE_DTCM = 1,
+	DUMP_TYPE_SQRAM = 2,
+	DUMP_TYPE_APU_REGS = 3,
+	DUMP_TYPE_CIU_REGS = 4,
+	DUMP_TYPE_ICU_REGS = 5,
+	DUMP_TYPE_MAC_REGS = 6,
+	DUMP_TYPE_EXTEND_7 = 7,
+	DUMP_TYPE_EXTEND_8 = 8,
+	DUMP_TYPE_EXTEND_9 = 9,
+	DUMP_TYPE_EXTEND_10 = 10,
+	DUMP_TYPE_EXTEND_11 = 11,
+	DUMP_TYPE_EXTEND_12 = 12,
+	DUMP_TYPE_EXTEND_13 = 13,
+	DUMP_TYPE_EXTEND_LAST = 14
+} dumped_mem_type;
+
+#define MAX_NAME_LEN               8
+#define MAX_FULL_NAME_LEN               32
+
+/** Memory type mapping structure */
+typedef struct {
+	/** memory name */
+	u8 mem_name[MAX_NAME_LEN];
+	/** memory pointer */
+	u8 *mem_Ptr;
+	/** file structure */
+	struct file *pfile_mem;
+	/** donbe flag */
+	u8 done_flag;
+	/** dump type */
+	u8 type;
+} memory_type_mapping;
+
+memory_type_mapping bt_mem_type_mapping_tbl[] = {
+	{"ITCM", NULL, NULL, 0xF0, FW_DUMP_TYPE_MEM_ITCM},
+	{"DTCM", NULL, NULL, 0xF1, FW_DUMP_TYPE_MEM_DTCM},
+	{"SQRAM", NULL, NULL, 0xF2, FW_DUMP_TYPE_MEM_SQRAM},
+	{"APU", NULL, NULL, 0xF3, FW_DUMP_TYPE_REG_APU},
+	{"CIU", NULL, NULL, 0xF4, FW_DUMP_TYPE_REG_CIU},
+	{"ICU", NULL, NULL, 0xF5, FW_DUMP_TYPE_REG_ICU},
+	{"MAC", NULL, NULL, 0xF6, FW_DUMP_TYPE_REG_MAC},
+	{"EXT7", NULL, NULL, 0xF7},
+	{"EXT8", NULL, NULL, 0xF8},
+	{"EXT9", NULL, NULL, 0xF9},
+	{"EXT10", NULL, NULL, 0xFA},
+	{"EXT11", NULL, NULL, 0xFB},
+	{"EXT12", NULL, NULL, 0xFC},
+	{"EXT13", NULL, NULL, 0xFD},
+	{"EXTLAST", NULL, NULL, 0xFE},
+};
+
+typedef enum {
+	RDWR_STATUS_SUCCESS = 0,
+	RDWR_STATUS_FAILURE = 1,
+	RDWR_STATUS_DONE = 2
+} rdwr_status;
+
+/**
+ *  @brief This function read/write firmware via cmd52
+ *
+ *  @param phandle   A pointer to moal_handle
+ *
+ *  @return         MLAN_STATUS_SUCCESS
+ */
+rdwr_status
+bt_cmd52_rdwr_firmware(bt_private *priv, u8 doneflag)
+{
+	int ret = 0;
+	int tries = 0;
+	u8 ctrl_data = 0;
+	u8 dbg_dump_ctrl_reg = 0;
+
+	dbg_dump_ctrl_reg = DEBUG_DUMP_CTRL_REG;
+
+	ret = sd_write_reg(priv, dbg_dump_ctrl_reg, DEBUG_HOST_READY);
+	if (ret) {
+		PRINTM(ERROR, "SDIO Write ERR\n");
+		return RDWR_STATUS_FAILURE;
+	}
+	for (tries = 0; tries < DUMP_MAX_POLL_TRIES; tries++) {
+		ret = sd_read_reg(priv, dbg_dump_ctrl_reg, &ctrl_data);
+		if (ret) {
+			PRINTM(ERROR, "SDIO READ ERR\n");
+			return RDWR_STATUS_FAILURE;
+		}
+		if (ctrl_data == DEBUG_FW_DONE)
+			break;
+		if (doneflag && ctrl_data == doneflag)
+			return RDWR_STATUS_DONE;
+		if (ctrl_data != DEBUG_HOST_READY) {
+			PRINTM(INFO,
+			       "The ctrl reg was changed, re-try again!\n");
+			ret = sd_write_reg(priv, dbg_dump_ctrl_reg,
+					   DEBUG_HOST_READY);
+			if (ret) {
+				PRINTM(ERROR, "SDIO Write ERR\n");
+				return RDWR_STATUS_FAILURE;
+			}
+		}
+		udelay(100);
+	}
+	if (ctrl_data == DEBUG_HOST_READY) {
+		PRINTM(ERROR, "Fail to pull ctrl_data\n");
+		return RDWR_STATUS_FAILURE;
+	}
+
+	return RDWR_STATUS_SUCCESS;
+}
+
+/**
+ *  @brief This function dump firmware memory to file
+ *
+ *  @param phandle   A pointer to moal_handle
+ *
+ *  @return         N/A
+ */
+void
+bt_dump_firmware_info_v2(bt_private *priv)
+{
+	int ret = 0;
+	unsigned int reg, reg_start, reg_end;
+	u8 *dbg_ptr = NULL;
+	u8 dump_num = 0;
+	u8 idx = 0;
+	u8 doneflag = 0;
+	rdwr_status stat;
+	u8 i = 0;
+	u8 read_reg = 0;
+	u32 memory_size = 0;
+	u8 path_name[64], file_name[32];
+	u8 *end_ptr = NULL;
+	u8 dbg_dump_start_reg = 0;
+	u8 dbg_dump_end_reg = 0;
+
+	if (!priv) {
+		PRINTM(ERROR, "Could not dump firmwware info\n");
+		return;
+	}
+
+	memset(path_name, 0, sizeof(path_name));
+	strcpy((char *)path_name, "/data");
+	PRINTM(MSG, "Create DUMP directory success:dir_name=%s\n", path_name);
+
+	dbg_dump_start_reg = DEBUG_DUMP_START_REG;
+	dbg_dump_end_reg = DEBUG_DUMP_END_REG;
+
+	sbi_wakeup_firmware(priv);
+	priv->fw_dump = TRUE;
+	/* start dump fw memory */
+	PRINTM(MSG, "==== DEBUG MODE OUTPUT START ====\n");
+	/* read the number of the memories which will dump */
+	if (RDWR_STATUS_FAILURE == bt_cmd52_rdwr_firmware(priv, doneflag))
+		goto done;
+	reg = dbg_dump_start_reg;
+	ret = sd_read_reg(priv, reg, &dump_num);
+	if (ret) {
+		PRINTM(MSG, "SDIO READ MEM NUM ERR\n");
+		goto done;
+	}
+	if (dump_num >
+	    (sizeof(bt_mem_type_mapping_tbl) / sizeof(memory_type_mapping))) {
+		PRINTM(MSG, "Invalid dump_num=%d\n", dump_num);
+		return;
+	}
+
+	/* read the length of every memory which will dump */
+	for (idx = 0; idx < dump_num; idx++) {
+		if (RDWR_STATUS_FAILURE ==
+		    bt_cmd52_rdwr_firmware(priv, doneflag))
+			goto done;
+		memory_size = 0;
+		reg = dbg_dump_start_reg;
+		for (i = 0; i < 4; i++) {
+			ret = sd_read_reg(priv, reg, &read_reg);
+			if (ret) {
+				PRINTM(MSG, "SDIO READ ERR\n");
+				goto done;
+			}
+			memory_size |= (read_reg << i * 8);
+			reg++;
+		}
+		if (memory_size == 0) {
+			PRINTM(MSG, "Firmware Dump Finished!\n");
+			break;
+		} else {
+			PRINTM(MSG, "%s_SIZE=0x%x\n",
+			       bt_mem_type_mapping_tbl[idx].mem_name,
+			       memory_size);
+			bt_mem_type_mapping_tbl[idx].mem_Ptr =
+				vmalloc(memory_size + 1);
+			if ((ret != BT_STATUS_SUCCESS) ||
+			    !bt_mem_type_mapping_tbl[idx].mem_Ptr) {
+				PRINTM(ERROR,
+				       "Error: vmalloc %s buffer failed!!!\n",
+				       bt_mem_type_mapping_tbl[idx].mem_name);
+				goto done;
+			}
+			dbg_ptr = bt_mem_type_mapping_tbl[idx].mem_Ptr;
+			end_ptr = dbg_ptr + memory_size;
+		}
+		doneflag = bt_mem_type_mapping_tbl[idx].done_flag;
+		PRINTM(MSG, "Start %s output, please wait...\n",
+		       bt_mem_type_mapping_tbl[idx].mem_name);
+		do {
+			stat = bt_cmd52_rdwr_firmware(priv, doneflag);
+			if (RDWR_STATUS_FAILURE == stat)
+				goto done;
+
+			reg_start = dbg_dump_start_reg;
+			reg_end = dbg_dump_end_reg;
+			for (reg = reg_start; reg <= reg_end; reg++) {
+				ret = sd_read_reg(priv, reg, dbg_ptr);
+				if (ret) {
+					PRINTM(MSG, "SDIO READ ERR\n");
+					goto done;
+				}
+				if (dbg_ptr < end_ptr)
+					dbg_ptr++;
+				else
+					PRINTM(MSG,
+					       "pre-allocced buf is not enough\n");
+			}
+			if (RDWR_STATUS_DONE == stat) {
+				PRINTM(MSG, "%s done:"
+				       "size = 0x%x\n",
+				       bt_mem_type_mapping_tbl[idx].mem_name,
+				       (unsigned int)(dbg_ptr -
+						      bt_mem_type_mapping_tbl
+						      [idx].mem_Ptr));
+				memset(file_name, 0, sizeof(file_name));
+				snprintf((char *)file_name, sizeof(file_name),
+					 "%s%s", "file_bt_",
+					 bt_mem_type_mapping_tbl[idx].mem_name);
+				if (BT_STATUS_SUCCESS !=
+				    bt_save_dump_info_to_file((char *)path_name,
+							      (char *)file_name,
+							      bt_mem_type_mapping_tbl
+							      [idx].mem_Ptr,
+							      memory_size))
+					PRINTM(MSG,
+					       "Can't save dump file %s in %s\n",
+					       file_name, path_name);
+				vfree(bt_mem_type_mapping_tbl[idx].mem_Ptr);
+				bt_mem_type_mapping_tbl[idx].mem_Ptr = NULL;
+				break;
+			}
+		} while (1);
+	}
+	PRINTM(MSG, "==== DEBUG MODE OUTPUT END ====\n");
+	/* end dump fw memory */
+done:
+	priv->fw_dump = FALSE;
+	for (idx = 0; idx < dump_num; idx++) {
+		if (bt_mem_type_mapping_tbl[idx].mem_Ptr) {
+			vfree(bt_mem_type_mapping_tbl[idx].mem_Ptr);
+			bt_mem_type_mapping_tbl[idx].mem_Ptr = NULL;
+		}
+	}
+	PRINTM(MSG, "==== DEBUG MODE END ====\n");
+	return;
+}
+#endif //__SDIO__
+
 /**
  *  @brief This function shows debug info for timeout of command sending.
  *
@@ -721,7 +1034,15 @@ bt_cmd_timeout_func(bt_private *priv, u16 cmd)
 	PRINTM(ERROR, "suspended flag = %d\n", adapter->is_suspended);
 	PRINTM(ERROR, "Number of wakeup tries = %d\n", adapter->WakeupTries);
 	PRINTM(ERROR, "Host Cmd complet state = %d\n", adapter->cmd_complete);
+#ifdef __SDIO__
+	PRINTM(ERROR, "Last irq recv = %d\n", adapter->irq_recv);
+	PRINTM(ERROR, "Last irq processed = %d\n", adapter->irq_done);
+#endif // __SDIO__
 	PRINTM(ERROR, "tx pending = %d\n", adapter->skb_pending);
+#ifdef __SDIO__
+	PRINTM(ERROR, "sdio int status = %d\n", adapter->sd_ireg);
+	bt_dump_sdio_regs(priv);
+#endif // __SDIO__
 	LEAVE();
 }
 
@@ -829,6 +1150,12 @@ bt_send_module_cfg_cmd(bt_private *priv, int subcmd)
 	PRINTM(CMD, "Queue module cfg Command(0x%x)\n",
 	       __le16_to_cpu(pcmd->ocf_ogf));
 	wake_up_interruptible(&priv->MainThread.waitQ);
+	/*
+	   On some Android platforms certain delay is needed for HCI daemon to
+	   remove this module and close itself gracefully. Otherwise it hangs.
+	   This 10ms delay is a workaround for such platforms as the root cause
+	   has not been found yet. */
+	mdelay(10);
 	if (!os_wait_interruptible_timeout
 	    (priv->adapter->cmd_wait_q, priv->adapter->cmd_complete,
 	     WAIT_UNTIL_CMD_RESP)) {
@@ -991,6 +1318,59 @@ exit:
 	LEAVE();
 	return ret;
 }
+
+#ifdef __SDIO__
+/**
+ *  @brief This function sends sdio pull ctrl command
+ *
+ *  @param priv    A pointer to bt_private structure
+ *  @return    BT_STATUS_SUCCESS or BT_STATUS_FAILURE
+ */
+int
+bt_send_sdio_pull_ctrl_cmd(bt_private *priv)
+{
+	struct sk_buff *skb = NULL;
+	int ret = BT_STATUS_SUCCESS;
+	BT_CMD *pcmd;
+	ENTER();
+	skb = bt_skb_alloc(sizeof(BT_CMD), GFP_ATOMIC);
+	if (skb == NULL) {
+		PRINTM(WARN, "No free skb\n");
+		ret = BT_STATUS_FAILURE;
+		goto exit;
+	}
+	pcmd = (BT_CMD *)skb->data;
+	pcmd->ocf_ogf =
+		__cpu_to_le16((VENDOR_OGF << 10) | BT_CMD_SDIO_PULL_CFG_REQ);
+	pcmd->length = 4;
+	pcmd->data[0] = (priv->bt_dev.sdio_pull_cfg & 0x000000ff);
+	pcmd->data[1] = (priv->bt_dev.sdio_pull_cfg & 0x0000ff00) >> 8;
+	pcmd->data[2] = (priv->bt_dev.sdio_pull_cfg & 0x00ff0000) >> 16;
+	pcmd->data[3] = (priv->bt_dev.sdio_pull_cfg & 0xff000000) >> 24;
+	bt_cb(skb)->pkt_type = MRVL_VENDOR_PKT;
+	skb_put(skb, BT_CMD_HEADER_SIZE + pcmd->length);
+	skb->dev = (void *)(&(priv->bt_dev.m_dev[BT_SEQ]));
+	skb_queue_head(&priv->adapter->tx_queue, skb);
+	PRINTM(CMD,
+	       "Queue SDIO PULL CFG Command(0x%x), PullUp=0x%x%x,PullDown=0x%x%x\n",
+	       __le16_to_cpu(pcmd->ocf_ogf), pcmd->data[1], pcmd->data[0],
+	       pcmd->data[3], pcmd->data[2]);
+	priv->bt_dev.sendcmdflag = TRUE;
+	priv->bt_dev.send_cmd_opcode = __le16_to_cpu(pcmd->ocf_ogf);
+	priv->adapter->cmd_complete = FALSE;
+	wake_up_interruptible(&priv->MainThread.waitQ);
+	if (!os_wait_interruptible_timeout
+	    (priv->adapter->cmd_wait_q, priv->adapter->cmd_complete,
+	     WAIT_UNTIL_CMD_RESP)) {
+		ret = BT_STATUS_FAILURE;
+		PRINTM(MSG, "BT: SDIO PULL CFG timeout:\n");
+		bt_cmd_timeout_func(priv, BT_CMD_SDIO_PULL_CFG_REQ);
+	}
+exit:
+	LEAVE();
+	return ret;
+}
+#endif // __SDIO__
 
 /**
  *  @brief This function sends command to configure PMIC
@@ -1725,6 +2105,12 @@ bt_prepare_command(bt_private *priv)
 		priv->bt_dev.pscmd = 0;
 		ret = bt_enable_ps(priv);
 	}
+#ifdef __SDIO__
+	if (priv->bt_dev.sdio_pull_ctrl) {
+		priv->bt_dev.sdio_pull_ctrl = 0;
+		ret = bt_send_sdio_pull_ctrl_cmd(priv);
+	}
+#endif //__SDIO__
 	if (priv->bt_dev.hscmd) {
 		priv->bt_dev.hscmd = 0;
 		if (priv->bt_dev.hsmode)
@@ -1752,24 +2138,60 @@ static int
 send_single_packet(bt_private *priv, struct sk_buff *skb)
 {
 	int ret;
+#ifdef __SDIO__
+	struct sk_buff *new_skb = NULL;
+#endif // __SDIO__
 	ENTER();
 	if (!skb || !skb->data) {
 		LEAVE();
 		return BT_STATUS_FAILURE;
 	}
 
+#ifdef __SDIO__
+	if (!skb->len || ((skb->len + BT_HEADER_LEN) > BT_UPLD_SIZE)) {
+#else // __SDIO__
 	if (!skb->len || (skb->len > BT_UPLD_SIZE)) {
+#endif // __SDIO__
 		PRINTM(ERROR, "Tx Error: Bad skb length %d : %d\n", skb->len,
 		       BT_UPLD_SIZE);
 		LEAVE();
 		return BT_STATUS_FAILURE;
 	}
+#ifdef __SDIO__
+	if (skb_headroom(skb) < BT_HEADER_LEN) {
+		new_skb = skb_realloc_headroom(skb, BT_HEADER_LEN);
+		if (!new_skb) {
+			PRINTM(ERROR, "TX error: realloc_headroom failed %d\n",
+			       BT_HEADER_LEN);
+			kfree_skb(skb);
+			LEAVE();
+			return BT_STATUS_FAILURE;
+		} else {
+			if (new_skb != skb)
+				dev_kfree_skb_any(skb);
+			skb = new_skb;
+		}
+	}
+	/* This is SDIO/PCIE specific header length: byte[3][2][1], * type:
+	   byte[0] (HCI_COMMAND = 1, ACL_DATA = 2, SCO_DATA = 3, 0xFE = Vendor)
+	 */
+	skb_push(skb, BT_HEADER_LEN);
+	skb->data[0] = (skb->len & 0x0000ff);
+	skb->data[1] = (skb->len & 0x00ff00) >> 8;
+	skb->data[2] = (skb->len & 0xff0000) >> 16;
+	skb->data[3] = bt_cb(skb)->pkt_type;
 
+	if (bt_cb(skb)->pkt_type == MRVL_VENDOR_PKT)
+		PRINTM(CMD, "DNLD_CMD: ocf_ogf=0x%x len=%d\n",
+		       __le16_to_cpu(*((u16 *) & skb->data[4])), skb->len);
+	ret = sbi_host_to_card(priv, skb->data, skb->len);
+#else // __SDIO__
 	if (bt_cb(skb)->pkt_type == MRVL_VENDOR_PKT)
 		PRINTM(CMD, "DNLD_CMD: ocf_ogf=0x%x len=%d\n",
 		       __le16_to_cpu(*((u16 *) & skb->data[0])), skb->len);
 
 	ret = sbi_host_to_card(priv, skb);
+#endif // __SDIO__
 	if (ret == BT_STATUS_FAILURE)
 		((struct m_dev *)skb->dev)->stat.err_tx++;
 	else
@@ -2018,9 +2440,16 @@ bt_init_fw(bt_private *priv)
 	int ret = BT_STATUS_SUCCESS;
 	ENTER();
 	if (fw == 0) {
+#ifdef __SDIO__
+		sbi_enable_host_int(priv);
+#else
 		PRINTM(MSG, "BT FW download skipped\n");
+#endif // __SDIO__
 		goto done;
 	}
+#ifdef __SDIO__
+	sbi_disable_host_int(priv);
+#endif // __SDIO__
 	if (sbi_download_fw(priv)) {
 		PRINTM(ERROR, " FW failed to be download!\n");
 		ret = BT_STATUS_FAILURE;
@@ -2030,6 +2459,97 @@ done:
 	LEAVE();
 	return ret;
 }
+
+#ifdef __SDIO__
+#define FW_POLL_TRIES 100
+#define FW_RESET_REG  0x0EE
+#define FW_RESET_VAL  0x99
+
+/**
+ *  @brief This function reload firmware
+ *
+ *  @param priv   A pointer to bt_private
+ *  @param mode   FW reload mode
+ *
+ *  @return       0--success, otherwise failure
+ */
+static int
+bt_reload_fw(bt_private *priv, int mode)
+{
+	int ret = 0, tries = 0;
+	u8 value = 1;
+	u32 reset_reg = FW_RESET_REG;
+	u8 reset_val = FW_RESET_VAL;
+
+	ENTER();
+	if ((mode != FW_RELOAD_SDIO_INBAND_RESET) &&
+	    (mode != FW_RELOAD_NO_EMULATION)) {
+		PRINTM(ERROR, "Invalid fw reload mode=%d\n", mode);
+		return -EFAULT;
+	}
+
+    /** flush pending tx_queue */
+	skb_queue_purge(&priv->adapter->tx_queue);
+	if (mode == FW_RELOAD_SDIO_INBAND_RESET) {
+		sbi_disable_host_int(priv);
+	    /** Wake up firmware firstly */
+		sbi_wakeup_firmware(priv);
+
+	/** wait SOC fully wake up */
+		for (tries = 0; tries < FW_POLL_TRIES; ++tries) {
+			ret = sd_write_reg(priv, reset_reg, 0xba);
+			if (!ret) {
+				ret = sd_read_reg(priv, reset_reg, &value);
+				if (!ret && (value == 0xba)) {
+					PRINTM(MSG, "Fw wake up\n");
+					break;
+				}
+			}
+			udelay(1000);
+		}
+
+		ret = sd_write_reg(priv, reset_reg, reset_val);
+		if (ret) {
+			PRINTM(ERROR, "Failed to write register.\n");
+			goto done;
+		}
+
+	    /** Poll register around 1 ms */
+		for (; tries < FW_POLL_TRIES; ++tries) {
+			ret = sd_read_reg(priv, reset_reg, &value);
+			if (ret) {
+				PRINTM(ERROR, "Failed to read register.\n");
+				goto done;
+			}
+			if (value == 0)
+			    /** FW is ready */
+				break;
+			udelay(1000);
+		}
+		if (value) {
+			PRINTM(ERROR,
+			       "Failed to poll FW reset register %X=0x%x\n",
+			       reset_reg, value);
+			ret = -EFAULT;
+			goto done;
+		}
+	}
+
+	sbi_enable_host_int(priv);
+	/** reload FW */
+	ret = bt_init_fw(priv);
+	if (ret) {
+		PRINTM(ERROR, "Re download firmware failed.\n");
+		ret = -EFAULT;
+	}
+	LEAVE();
+	return ret;
+done:
+	sbi_enable_host_int(priv);
+	LEAVE();
+	return ret;
+}
+#endif // __SDIO__
 
 /**
  *  @brief This function request to reload firmware
@@ -2049,6 +2569,17 @@ bt_request_fw_reload(bt_private *priv, int mode)
 		LEAVE();
 		return;
 	}
+#ifdef __SDIO__
+	/** Reload FW */
+	priv->fw_reload = TRUE;
+	if (bt_reload_fw(priv, mode)) {
+		PRINTM(ERROR, "FW reload fail\n");
+		goto done;
+	}
+	priv->fw_reload = FALSE;
+	/** Other operation here? */
+done:
+#endif // __SDIO__
 	LEAVE();
 	return;
 }
@@ -2065,6 +2596,10 @@ bt_free_adapter(bt_private *priv)
 	bt_adapter *adapter = priv->adapter;
 	ENTER();
 	skb_queue_purge(&priv->adapter->tx_queue);
+#ifdef __SDIO__
+	kfree(adapter->tx_buffer);
+	kfree(adapter->hw_regs_buf);
+#endif // __SDIO__
 	/* Free allocated memory for fwdump filename */
 	if (adapter->fwdump_fname) {
 		kfree(adapter->fwdump_fname);
@@ -2161,6 +2696,10 @@ mdev_ioctl(struct m_dev *m_dev, unsigned int cmd, void *arg)
 		break;
 #endif
 	case MBTCHAR_IOCTL_BT_FW_DUMP:
+#ifdef __SDIO__
+		bt_dump_sdio_regs(priv);
+		bt_dump_firmware_info_v2(priv);
+#endif // __SDIO__
 		break;
 	default:
 		break;
@@ -2264,7 +2803,9 @@ mdev_flush(struct m_dev *m_dev)
 	ENTER();
 	skb_queue_purge(&priv->adapter->tx_queue);
 	skb_queue_purge(&priv->adapter->pending_queue);
+#ifndef __SDIO__
 	usb_flush(priv);
+#endif // __SDIO__
 	LEAVE();
 	return BT_STATUS_SUCCESS;
 }
@@ -2279,7 +2820,9 @@ mdev_flush(struct m_dev *m_dev)
 static int
 mdev_close(struct m_dev *m_dev)
 {
+#ifndef __SDIO__
 	bt_private *priv = (bt_private *)m_dev->driver_data;
+#endif // __SDIO__
 
 	ENTER();
 	mdev_req_lock(m_dev);
@@ -2295,7 +2838,9 @@ mdev_close(struct m_dev *m_dev)
 	wake_up_interruptible(&m_dev->req_wait_q);
 	/* Drop queues */
 	skb_queue_purge(&m_dev->rx_q);
+#ifndef __SDIO__
 	usb_free_frags(priv);
+#endif // __SDIO__
 	if (!test_and_clear_bit(HCI_RUNNING, &m_dev->flags)) {
 		mdev_req_unlock(m_dev);
 		LEAVE();
@@ -2329,6 +2874,7 @@ mdev_open(struct m_dev *m_dev)
 	return BT_STATUS_SUCCESS;
 }
 
+#ifndef __SDIO__
 /**
  *  @brief This function notify BT sco connection for USB char device
  *
@@ -2359,6 +2905,7 @@ mdev_notify(struct m_dev *m_dev, unsigned int arg)
 
 	LEAVE();
 }
+#endif // __SDIO__
 
 /**
  *  @brief This function queries the wrapper device
@@ -2405,7 +2952,9 @@ init_m_dev(struct m_dev *m_dev)
 	m_dev->flush = mdev_flush;
 	m_dev->send = mdev_send_frame;
 	m_dev->destruct = mdev_destruct;
+#ifndef __SDIO__
 	m_dev->notify = mdev_notify;
+#endif // __SDIO__
 	m_dev->ioctl = mdev_ioctl;
 	m_dev->query = mdev_query;
 	m_dev->owner = THIS_MODULE;
@@ -2459,6 +3008,9 @@ bt_service_main_thread(void *data)
 			OS_INT_DISABLE;
 			adapter->IntCounter = 0;
 			OS_INT_RESTORE;
+#ifdef __SDIO__
+			sbi_get_int_status(priv);
+#endif // __SDIO__
 		} else if ((priv->adapter->ps_state == PS_SLEEP) &&
 			   (!skb_queue_empty(&priv->adapter->tx_queue)
 			   )) {
@@ -2668,18 +3220,98 @@ bt_init_cmd(bt_private *priv)
 			goto done;
 		}
 	}
+#if defined(SDIO_SUSPEND_RESUME)
 	priv->bt_dev.gpio_gap = DEF_GPIO_GAP;
 	ret = bt_send_hscfg_cmd(priv);
 	if (ret < 0) {
 		PRINTM(FATAL, "Send HSCFG failed!\n");
 		goto done;
 	}
+#endif
+#ifdef __SDIO__
+	priv->bt_dev.sdio_pull_cfg = 0xffffffff;
+	priv->bt_dev.sdio_pull_ctrl = 0;
+#endif // __SDIO__
 	wake_up_interruptible(&priv->MainThread.waitQ);
 
 done:
 	LEAVE();
 	return ret;
 }
+
+#ifdef __SDIO__
+/**
+ *  @brief This function reinit firmware after redownload firmware
+ *
+ *  @param priv   A pointer to bt_private structure
+ *  @return       BT_STATUS_SUCESS/BT_STATUS_FAILURE
+ */
+int
+bt_reinit_fw(bt_private *priv)
+{
+	int ret = BT_STATUS_SUCCESS;
+	priv->adapter->tx_lock = FALSE;
+	priv->adapter->ps_state = PS_AWAKE;
+	priv->adapter->suspend_fail = FALSE;
+	priv->adapter->is_suspended = FALSE;
+	priv->adapter->hs_skip = 0;
+	priv->adapter->num_cmd_timeout = 0;
+
+	ret = bt_init_cmd(priv);
+	if (ret < 0) {
+		PRINTM(FATAL, "BT init command failed!\n");
+		goto done;
+	}
+	/* block all the packet from bluez */
+	if (init_cfg || cal_cfg || bt_mac || cal_cfg_ext)
+		priv->adapter->tx_lock = TRUE;
+
+	if (init_cfg)
+		if (BT_STATUS_SUCCESS != bt_init_config(priv, init_cfg)) {
+			PRINTM(FATAL,
+			       "BT: Set user init data and param failed\n");
+			ret = BT_STATUS_FAILURE;
+			goto done;
+		}
+
+	if (cal_cfg) {
+		if (BT_STATUS_SUCCESS != bt_cal_config(priv, cal_cfg, bt_mac)) {
+			PRINTM(FATAL, "BT: Set cal data failed\n");
+			ret = BT_STATUS_FAILURE;
+			goto done;
+		}
+	}
+
+	if (bt_mac) {
+		PRINTM(INFO,
+		       "Set BT mac_addr from insmod parametre bt_mac = %s\n",
+		       bt_mac);
+		if (BT_STATUS_SUCCESS != bt_init_mac_address(priv, bt_mac)) {
+			PRINTM(FATAL,
+			       "BT: Fail to set mac address from insmod parametre\n");
+			ret = BT_STATUS_FAILURE;
+			goto done;
+		}
+	}
+
+	if (cal_cfg_ext) {
+		if (BT_STATUS_SUCCESS != bt_cal_config_ext(priv, cal_cfg_ext)) {
+			PRINTM(FATAL, "BT: Set cal ext data failed\n");
+			ret = BT_STATUS_FAILURE;
+			goto done;
+		}
+	}
+	if (init_cfg || cal_cfg || bt_mac || cal_cfg_ext) {
+		priv->adapter->tx_lock = FALSE;
+		bt_restore_tx_queue(priv);
+	}
+	bt_get_fw_version(priv);
+	snprintf((char *)priv->adapter->drv_ver, MAX_VER_STR_LEN,
+		 mbt_driver_version, fw_version);
+done:
+	return ret;
+}
+#endif //__SDIO__
 
 /**
  *  @brief Module configuration and register device
@@ -2701,6 +3333,13 @@ sbi_register_conf_dpc(bt_private *priv)
 	ENTER();
 
 	priv->bt_dev.tx_dnld_rdy = TRUE;
+#ifdef __SDIO__
+	if (priv->fw_reload) {
+		bt_reinit_fw(priv);
+		LEAVE();
+		return ret;
+	}
+#endif //__SDIO__
 
 	if (drv_mode & DRV_MODE_BT) {
 		mbt_dev = alloc_mbt_dev();
@@ -2714,9 +3353,16 @@ sbi_register_conf_dpc(bt_private *priv)
 		priv->bt_dev.m_dev[BT_SEQ].spec_type = IANYWHERE_SPEC;
 		priv->bt_dev.m_dev[BT_SEQ].dev_pointer = (void *)mbt_dev;
 		priv->bt_dev.m_dev[BT_SEQ].driver_data = priv;
+#ifdef __SDIO__
+		priv->bt_dev.m_dev[BT_SEQ].read_continue_flag = 0;
+#endif //__SDIO__
 	}
 
+#ifdef __SDIO__
+	dev_type = HCI_SDIO;
+#else
 	dev_type = HCI_USB;
+#endif //__SDIO__
 
 	if (mbt_dev)
 		mbt_dev->type = dev_type;
@@ -2927,6 +3573,24 @@ bt_add_card(void *card)
 		PRINTM(FATAL, "Allocate buffer for bt_adapter failed!\n");
 		goto err_kmalloc;
 	}
+#ifdef __SDIO__
+	priv->adapter->tx_buffer =
+		kzalloc(MAX_TX_BUF_SIZE + DMA_ALIGNMENT, GFP_KERNEL);
+	if (!priv->adapter->tx_buffer) {
+		PRINTM(FATAL, "Allocate buffer for transmit\n");
+		goto err_kmalloc;
+	}
+	priv->adapter->tx_buf =
+		(u8 *)ALIGN_ADDR(priv->adapter->tx_buffer, DMA_ALIGNMENT);
+	priv->adapter->hw_regs_buf =
+		kzalloc(SD_BLOCK_SIZE + DMA_ALIGNMENT, GFP_KERNEL);
+	if (!priv->adapter->hw_regs_buf) {
+		PRINTM(FATAL, "Allocate buffer for INT read buf failed!\n");
+		goto err_kmalloc;
+	}
+	priv->adapter->hw_regs =
+		(u8 *)ALIGN_ADDR(priv->adapter->hw_regs_buf, DMA_ALIGNMENT);
+#endif // __SDIO__
 	bt_init_adapter(priv);
 
 	PRINTM(INFO, "Starting kthread...\n");
@@ -2945,6 +3609,10 @@ bt_add_card(void *card)
 
 	priv->bt_dev.card = card;
 
+#ifdef __SDIO__
+	((struct sdio_mmc_card *)card)->priv = priv;
+	priv->adapter->sd_ireg = 0;
+#endif // __SDIO__
 	/*
 	 * Register the device. Fillup the private data structure with
 	 * relevant information from the card and request for the required
@@ -2967,6 +3635,9 @@ err_init_fw:
 	PRINTM(INFO, "Unregister device\n");
 	sbi_unregister_dev(priv);
 err_registerdev:
+#ifdef __SDIO__
+	((struct sdio_mmc_card *)card)->priv = NULL;
+#endif // __SDIO__
 	/* Stop the thread servicing the interrupts */
 	priv->adapter->SurpriseRemoved = TRUE;
 	wake_up_interruptible(&priv->MainThread.waitQ);
@@ -3313,7 +3984,9 @@ bt_exit_module(void)
 				bt_send_module_cfg_cmd(priv,
 						       MODULE_SHUTDOWN_REQ);
 		}
-
+#ifdef __SDIO__
+		sbi_disable_host_int(priv);
+#endif // __SDIO__
 	}
 
 	sbi_unregister();
@@ -3344,6 +4017,10 @@ MODULE_PARM_DESC(dts_enable, "0: Disable DTS; 1: Enable DTS");
 #ifdef	DEBUG_LEVEL1
 module_param(mbt_drvdbg, uint, 0);
 MODULE_PARM_DESC(mbt_drvdbg, "BIT3:DBG_DATA BIT4:DBG_CMD 0xFF:DBG_ALL");
+#endif
+#ifdef SDIO_SUSPEND_RESUME
+module_param(mbt_pm_keep_power, int, 0);
+MODULE_PARM_DESC(mbt_pm_keep_power, "1: PM keep power; 0: PM no power");
 #endif
 module_param(init_cfg, charp, 0);
 MODULE_PARM_DESC(init_cfg, "BT init config file name");

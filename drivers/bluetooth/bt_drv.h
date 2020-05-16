@@ -33,6 +33,10 @@
 #include <linux/skbuff.h>
 #include <linux/vmalloc.h>
 
+#ifdef __SDIO__
+#define SDIO_SUSPEND_RESUME
+#endif //__SDIO__
+
 #include "hci_wrapper.h"
 
 #define FPNUM "26"
@@ -448,6 +452,18 @@ typedef struct _bt_dev {
 	u8 devType;
 	/** Device Features    */
 	u8 devFeature;
+#ifdef __SDIO__
+	/** cmd52 function */
+	u8 cmd52_func;
+	/** cmd52 register */
+	u8 cmd52_reg;
+	/** cmd52 value */
+	u8 cmd52_val;
+	/** SDIO pull control command */
+	u8 sdio_pull_ctrl;
+	/** Low 2 bytes is pullUp, high 2 bytes for pull-down */
+	u32 sdio_pull_cfg;
+#endif //__SDIO__
 	/** Test mode command */
 	u8 test_mode;
 } bt_dev_t, *pbt_dev_t;
@@ -456,6 +472,10 @@ typedef struct _bt_dev {
 typedef struct _bt_adapter {
 	/** Chip revision ID */
 	u8 chip_rev;
+#ifdef __SDIO__
+    /** magic val */
+	u8 magic_val;
+#endif //__SDIO__
 	/** Surprise removed flag */
 	u8 SurpriseRemoved;
 	/** IRQ number */
@@ -491,6 +511,22 @@ typedef struct _bt_adapter {
 	u8 cmd_complete;
 	/** indicate using wait event timeout */
 	u8 wait_event_timeout;
+#ifdef __SDIO__
+	/** last irq recv */
+	u8 irq_recv;
+	/** last irq processed */
+	u8 irq_done;
+	/** sdio int status */
+	u8 sd_ireg;
+     /** buf allocated for transmit */
+	u8 *tx_buffer;
+    /** buf for transmit */
+	u8 *tx_buf;
+    /** buf allocated for read interrupt status */
+	u8 *hw_regs_buf;
+    /** buf for read interrupt status */
+	u8 *hw_regs;
+#endif //__SDIO__
 	/** tx pending */
 	u32 skb_pending;
 /** Version string buffer length */
@@ -580,6 +616,9 @@ typedef struct _bt_private {
 	struct kobject kobj;
 	int debug_device_pending;
 	int debug_ocf_ogf[2];
+#ifdef __SDIO__
+	u8 fw_reload;
+#endif //__SDIO__
 	/* hist_data_len */
 	u8 hist_data_len;
     /** hist data */
@@ -642,6 +681,10 @@ int bt_get_histogram(bt_private *priv);
 /** Bluetooth command : PMIC Configure */
 #define BT_CMD_PMIC_CONFIGURE           0x7D
 
+#ifdef __SDIO__
+/** Bluetooth command : SDIO pull up down configuration request */
+#define BT_CMD_SDIO_PULL_CFG_REQ	0x69
+#endif //__SDIO__
 /** Bluetooth command : Set Evt Filter Command */
 #define BT_CMD_SET_EVT_FILTER		0x05
 /** Bluetooth command : Enable Write Scan Command */
@@ -704,8 +747,15 @@ int bt_get_histogram(bt_private *priv);
 #define MRVDRV_BT_RX_PACKET_BUFFER_SIZE \
 	(HCI_MAX_FRAME_SIZE + EXTRA_LEN)
 
+#ifdef __SDIO__
+/** Buffer size to allocate */
+#define ALLOC_BUF_SIZE	(((MAX(MRVDRV_BT_RX_PACKET_BUFFER_SIZE, \
+			MRVDRV_SIZE_OF_CMD_BUFFER) + SDIO_HEADER_LEN \
+			+ SD_BLOCK_SIZE - 1) / SD_BLOCK_SIZE) * SD_BLOCK_SIZE)
+#else // __SDIO__
 #define ALLOC_BUF_SIZE	(MAX(MRVDRV_BT_RX_PACKET_BUFFER_SIZE, \
 			MRVDRV_SIZE_OF_CMD_BUFFER) + BT_HEADER_LEN)
+#endif // __SDIO__
 
 /** Request FW timeout in second */
 #define REQUEST_FW_TIMEOUT		30
@@ -749,7 +799,11 @@ typedef struct _BT_EVENT {
 	u8 data[BT_EVT_DATA_LEN];
 } BT_EVENT;
 
+#if defined(SDIO_SUSPEND_RESUME)
+#define DEF_GPIO_GAP        0xffff
+#else
 #define DEF_GPIO_GAP        0x0d64
+#endif
 
 #ifdef BLE_WAKEUP
 #define BD_ADDR_SIZE 6
@@ -821,19 +875,53 @@ int sbi_wakeup_firmware(bt_private *priv);
 int sbi_register_conf_dpc(bt_private *priv);
 
 /** This function is used to send the data/cmd to hardware */
+#ifdef __SDIO__
+int sbi_host_to_card(bt_private *priv, u8 *payload, u16 nb);
+/** This function reads the current interrupt status register */
+int sbi_get_int_status(bt_private *priv);
+/** This function enables the host interrupts */
+int sbi_enable_host_int(bt_private *priv);
+/** This function disables the host interrupts */
+int sbi_disable_host_int(bt_private *priv);
+#else //__SDIO__
 int sbi_host_to_card(bt_private *priv, struct sk_buff *skb);
+#endif //__SDIO__
 
 /** bt fw reload flag */
 extern int bt_fw_reload;
+#ifdef __SDIO__
+/** driver initial the fw reset */
+#define FW_RELOAD_SDIO_INBAND_RESET   1
+/** out band reset trigger reset, no interface re-emulation */
+#define FW_RELOAD_NO_EMULATION  2
+#endif //__SDIO__
 /** out band reset with interface re-emulation */
 #define FW_RELOAD_WITH_EMULATION 3
 /** This function reload firmware */
 void bt_request_fw_reload(bt_private *priv, int mode);
 
+#ifdef __SDIO__
+#define MAX_TX_BUF_SIZE     2312
+/** This function downloads firmware image to the card */
+int sd_download_firmware_w_helper(bt_private *priv);
+void bt_dump_sdio_regs(bt_private *priv);
+#define FW_DUMP_TYPE_ENDED                    0x002
+#define FW_DUMP_TYPE_MEM_ITCM                 0x004
+#define FW_DUMP_TYPE_MEM_DTCM                 0x005
+#define FW_DUMP_TYPE_MEM_SQRAM                0x006
+#define FW_DUMP_TYPE_MEM_IRAM                 0x007
+#define FW_DUMP_TYPE_REG_MAC                  0x009
+#define FW_DUMP_TYPE_REG_CIU                  0x00E
+#define FW_DUMP_TYPE_REG_APU                  0x00F
+#define FW_DUMP_TYPE_REG_ICU                  0x014
+/* dumps the firmware to /var/ or /data/ */
+void bt_dump_firmware_info_v2(bt_private *priv);
+#else //__SDIO__
 /** This function flushes anchored Tx URBs */
 int usb_flush(bt_private *priv);
 void usb_free_frags(bt_private *priv);
 void usb_char_notify(bt_private *priv, unsigned int arg);
+#endif //__SDIO__
 
 /** Max line length allowed in init config file */
 #define MAX_LINE_LEN        256

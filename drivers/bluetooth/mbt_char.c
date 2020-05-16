@@ -308,10 +308,13 @@ chardev_read(struct file * filp, char *buf, size_t count, loff_t * f_pos)
 	if (!skb)
 		goto out;
 
-	PRINTM(DATA, "BT: chardev_read count=%d pkt_type: 0x%x, len=%d %p\n",
-	       (int)count, bt_cb(skb)->pkt_type, skb->len, skb);
-	DBG_HEXDUMP(DAT_D, "chardev_read", skb->data,
-		    MIN((int)count, skb->len));
+	if (m_dev->read_continue_flag == 0) {
+		/* Put type byte before the data */
+		memcpy(skb_push(skb, 1), &bt_cb(skb)->pkt_type, 1);
+		PRINTM(DATA, "BT: chardev read: pkt_type: 0x%x, len=%d @%lu\n",
+		       bt_cb(skb)->pkt_type, skb->len, jiffies);
+	}
+	DBG_HEXDUMP(DAT_D, "chardev_read", skb->data, skb->len);
 	if (skb->len > count) {
 		/* user data length is smaller than the skb length */
 		if (copy_to_user(buf, skb->data, count)) {
@@ -320,6 +323,7 @@ chardev_read(struct file * filp, char *buf, size_t count, loff_t * f_pos)
 		}
 		skb_pull(skb, count);
 		skb_queue_head(&m_dev->rx_q, skb);
+		m_dev->read_continue_flag = 1;
 		wake_up_interruptible(&m_dev->req_wait_q);
 		ret = count;
 		goto out;
@@ -328,8 +332,8 @@ chardev_read(struct file * filp, char *buf, size_t count, loff_t * f_pos)
 			ret = -EFAULT;
 			goto outf;
 		}
+		m_dev->read_continue_flag = 0;
 		ret = skb->len;
-		PRINTM(DATA, "BT: chardev_read complete %p\n", skb);
 	}
 outf:
 	kfree_skb(skb);
@@ -454,11 +458,13 @@ chardev_open(struct inode *inode, struct file *filp)
 		goto done;
 	}
 	set_bit(HCI_UP, &m_dev->flags);
+#ifndef __SDIO__
 	/* enable sco when open BT char device */
 	if (m_dev->dev_type == BT_TYPE) {
 		PRINTM(CMD, "submit ISOC urb after chardev is open!\n");
 		m_dev->notify(m_dev, 1);
 	}
+#endif // __SDIO__
 
 done:
 	mdev_req_unlock(m_dev);
@@ -491,12 +497,14 @@ chardev_release(struct inode *inode, struct file *filp)
 		LEAVE();
 		return ret;
 	}
+#ifdef __SDIO__
 	/* disable sco when close BT char device */
 	if (m_dev != NULL && m_dev->dev_type == BT_TYPE) {
 		PRINTM(CMD,
 		       "kill anchored ISOC urb since chardev is released\n");
 		m_dev->notify(m_dev, 0);
 	}
+#endif // __SDIO__
 	if (m_dev)
 		ret = dev->m_dev->close(dev->m_dev);
 	filp->private_data = NULL;

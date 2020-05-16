@@ -56,3 +56,16 @@ bt8997usb-y			+= bt_usb.o
 bt8997usb-y			+= bt_proc.o
 bt8997usb-y			+= mbt_char.o
 bt8997usb-y			+= bt_init.o
+
+obj-$(CONFIG_BT_88W8997_MCHAR_SDIO) += bt8997sd.o
+bt8997sd-y			+= bt_main_nxpsd.o
+bt8997sd-y			+= bt_sdiommc_nxpsd.o
+bt8997sd-y			+= bt_proc_nxpsd.o
+bt8997sd-y			+= mbt_char_nxpsd.o
+bt8997sd-y			+= bt_init_nxpsd.o
+
+# all SDIO .o files need to be created with __SDIO__ as that is used
+# within included .h files.
+$(obj)/%_nxpsd.o: $(src)/%.c
+	$(CC) $(c_flags) -D__SDIO__ -c -o $@ $<
+
