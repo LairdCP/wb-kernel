@@ -1060,4 +1060,7 @@ void ath6kl_recovery_init(struct ath6kl *ar);
 void ath6kl_recovery_cleanup(struct ath6kl *ar);
 void ath6kl_recovery_suspend(struct ath6kl *ar);
 void ath6kl_recovery_resume(struct ath6kl *ar);
+
+extern unsigned char allow_5720;
+
 #endif /* CORE_H */

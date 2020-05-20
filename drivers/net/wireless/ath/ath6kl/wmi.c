@@ -2014,7 +2014,6 @@ static int ath6kl_wmi_startscan_cmd(struct wmi *wmi, u8 if_idx,
 	struct wmi_start_scan_cmd *sc;
 	s8 size;
 	int ret;
-	int i;
 
 	if (num_chan > WMI_MAX_CHANNELS)
 		num_chan = 0;
@@ -4385,6 +4384,77 @@ static int ath6kl_genl_wmi_passthru (struct sk_buff *skb_2, struct genl_info *in
 	return 0;
 }
 
+
+// note this channel list should match list in cfg80211.c
+static u16 defchan[] = {
+	cpu_to_le16(2412),
+	cpu_to_le16(2417),
+	cpu_to_le16(2422),
+	cpu_to_le16(2427),
+	cpu_to_le16(2432),
+	cpu_to_le16(2437),
+	cpu_to_le16(2442),
+	cpu_to_le16(2447),
+	cpu_to_le16(2452),
+	cpu_to_le16(2457),
+	cpu_to_le16(2462),
+	cpu_to_le16(2467),
+	cpu_to_le16(2472),
+	cpu_to_le16(2484),
+
+	cpu_to_le16(5180), cpu_to_le16(5200),
+	cpu_to_le16(5220), cpu_to_le16(5240),
+
+	cpu_to_le16(5260), cpu_to_le16(5280),
+	cpu_to_le16(5300), cpu_to_le16(5320),
+
+	cpu_to_le16(5500), cpu_to_le16(5520),
+	cpu_to_le16(5540), cpu_to_le16(5560),
+
+	cpu_to_le16(5580), cpu_to_le16(5600),
+	cpu_to_le16(5620), cpu_to_le16(5640),
+
+	cpu_to_le16(5660), cpu_to_le16(5680),
+	cpu_to_le16(5700), cpu_to_le16(5720),
+
+	cpu_to_le16(5745), cpu_to_le16(5765),
+	cpu_to_le16(5785), cpu_to_le16(5805),
+	cpu_to_le16(5825)
+};
+
+static int _lrd_chan_allowed(u16 chan)
+{
+	if (chan == cpu_to_le16(5720)) {
+		if (!allow_5720)
+			return 0;
+	}
+	return 1;
+}
+
+static void _lrd_set_channel_list(struct ath6kl *ar,
+									  u8 num_channels, u16 *channel)
+{
+	u16 *out_channel = ar->laird.channel_list;
+	u8 out_num_channels = 0;
+	if (num_channels > WMI_MAX_CHANNELS)
+		num_channels = 0; // force back to default channels;
+	if (num_channels != 0) {
+		int i;
+		for (i = 0; i<num_channels; i++) {
+			if (!_lrd_chan_allowed(channel[i]))
+				continue;
+			*out_channel++ = channel[i];
+			out_num_channels++;
+		}
+	}
+	if (out_num_channels == 0 && channel != defchan) {
+		_lrd_set_channel_list(ar, ARRAY_SIZE(defchan), defchan);
+		return;
+	}
+	ar->laird.num_channels = out_num_channels;
+}
+
+
 static int ath6kl_genl_set_phy_mode(struct sk_buff *skb_2, struct genl_info *info)
 {
 	struct nlattr *na;
@@ -4412,9 +4482,8 @@ static int ath6kl_genl_set_phy_mode(struct sk_buff *skb_2, struct genl_info *inf
 		else
 		{
 			ar->laird.phy_mode = params->phy_mode;
-			ar->laird.num_channels = params->num_channels;
-			memcpy(&ar->laird.channel_list, params->channel_list, sizeof(uint16_t) * params->num_channels);
-
+			_lrd_set_channel_list(ar, params->num_channels,
+									  params->channel_list);
 			ath6kl_wmi_channel_params_cmd(wmi, 0, 0, ar->laird.phy_mode, ar->laird.num_channels,
 										ar->laird.channel_list);
 		}
@@ -4733,5 +4802,14 @@ static void __lrd_set_AP_IP(struct wmi *wmi, const char *apip)
 	else
 	{
 		memcpy(ar->laird.AP_IP, apip, 4);
+	}
+}
+
+// set default channels and phy-mode
+void ath6kl_wmi_lrd_init_channels(struct ath6kl *ar)
+{
+	if (ar->laird.phy_mode == 0) {
+		_lrd_set_channel_list(ar, 0, NULL);
+		ar->laird.phy_mode = WMI_11AG_MODE;
 	}
 }
