@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: GPL-2.0
+
+config BT_88W8997_MCHAR_USB
+	tristate "NXP 88W8997 USB BT driver for emulating UART interface (Android)"
+	help
+		Select to build the driver supporting the:
+
+		NXP (Marvell) 88W8997 BT USB
+
+		This driver creates a pseudo character device, /dev/mbtcharX, which will
+		be used to communicate between Android's Bluetooth_manager and the USB
+		transport layer.
+
+config BT_88W8997_MCHAR_SDIO
+	tristate "NXP 88W8997 SDIO BT driver for emulating UART interface (Android)"
+	help
+		Select to build the driver supporting the:
+
+		NXP (Marvell) 88W8997 BT SDIO
+
+		This driver creates a pseudo character device, /dev/mbtcharX, which will
+		be used to communicate between Android's Bluetooth_manager and the SDIO
+		transport layer.
