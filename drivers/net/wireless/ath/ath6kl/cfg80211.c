@@ -115,11 +115,21 @@ static struct ieee80211_channel ath6kl_5ghz_a_channels[] = {
 	CHAN5G(140, 0), CHAN5G(149, 0),
 	CHAN5G(153, 0), CHAN5G(157, 0),
 	CHAN5G(161, 0), CHAN5G(165, 0),
-	CHAN5G(184, 0), CHAN5G(188, 0),
-	CHAN5G(192, 0), CHAN5G(196, 0),
-	CHAN5G(200, 0), CHAN5G(204, 0),
-	CHAN5G(208, 0), CHAN5G(212, 0),
-	CHAN5G(216, 0),
+};
+
+static struct ieee80211_channel ath6kl_5ghz_a_channels_with_5720[] = {
+	CHAN5G(36, 0), CHAN5G(40, 0),
+	CHAN5G(44, 0), CHAN5G(48, 0),
+	CHAN5G(52, 0), CHAN5G(56, 0),
+	CHAN5G(60, 0), CHAN5G(64, 0),
+	CHAN5G(100, 0), CHAN5G(104, 0),
+	CHAN5G(108, 0), CHAN5G(112, 0),
+	CHAN5G(116, 0), CHAN5G(120, 0),
+	CHAN5G(124, 0), CHAN5G(128, 0),
+	CHAN5G(132, 0), CHAN5G(136, 0),
+	CHAN5G(140, 0), CHAN5G(144, 0), CHAN5G(149, 0),
+	CHAN5G(153, 0), CHAN5G(157, 0),
+	CHAN5G(161, 0), CHAN5G(165, 0),
 };
 
 static struct ieee80211_supported_band ath6kl_band_2ghz = {
@@ -3887,6 +3897,11 @@ int ath6kl_cfg80211_init(struct ath6kl *ar)
 			ath6kl_err("Firmware lacks RSN-CAP-OVERRIDE, so HT (802.11n) is disabled.");
 	}
 
+	if (allow_5720) {
+		ath6kl_band_5ghz.channels = ath6kl_5ghz_a_channels_with_5720;
+		ath6kl_band_5ghz.n_channels = ARRAY_SIZE(ath6kl_5ghz_a_channels_with_5720);
+	}
+
 	if (test_bit(ATH6KL_FW_CAPABILITY_64BIT_RATES,
 		     ar->fw_capabilities)) {
 		ath6kl_band_2ghz.ht_cap.mcs.rx_mask[0] = 0xff;
@@ -3940,6 +3955,7 @@ int ath6kl_cfg80211_init(struct ath6kl *ar)
 
 	ar->wiphy->regulatory_flags = REGULATORY_WIPHY_SELF_MANAGED;
 
+	ath6kl_wmi_lrd_init_channels(ar);
 	lrd_set_vendor_commands(wiphy);
 
 	ret = wiphy_register(wiphy);
