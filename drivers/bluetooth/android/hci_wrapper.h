@@ -63,6 +63,8 @@ struct m_dev {
 	int spec_type;
 	void *driver_data;
 	int read_continue_flag;
+	int partial_write_flag;
+	int partial_write_value;
 	int wait_rx_complete;
 	int rx_complete_flag;
 	wait_queue_head_t rx_wait_q;

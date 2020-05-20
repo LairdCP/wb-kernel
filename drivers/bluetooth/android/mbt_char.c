@@ -222,11 +222,28 @@ chardev_write(struct file * filp, const char *buf, size_t count, loff_t * f_pos)
 		return -EBUSY;
 	}
 	nwrite = count;
+
+	/* Android's Bluetooth_manager can write the packet type in a separate
+	 * call to the device's write() routine followed by a second call to
+	 * write() with the remaining payload. We need to catch this and
+	 * assemble into a single packet before passing to transport layer */
+	if (count==1) {
+		m_dev->partial_write_flag = 1;
+		m_dev->partial_write_value = buf[0];
+		LEAVE();
+		return 1;
+	}
+
 	skb = bt_skb_alloc(count, GFP_ATOMIC);
 	if (!skb) {
 		PRINTM(ERROR, "mbtchar_write(): fail to alloc skb\n");
 		LEAVE();
 		return -ENOMEM;
+	}
+
+	if (m_dev->partial_write_flag) {
+		memcpy(skb_put(skb, 1), &m_dev->partial_write_value, 1);
+		m_dev->partial_write_flag = 0;
 	}
 
 	if (copy_from_user((void *)skb_put(skb, count), buf, count)) {

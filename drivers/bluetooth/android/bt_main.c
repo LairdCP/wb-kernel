@@ -3353,9 +3353,8 @@ sbi_register_conf_dpc(bt_private *priv)
 		priv->bt_dev.m_dev[BT_SEQ].spec_type = IANYWHERE_SPEC;
 		priv->bt_dev.m_dev[BT_SEQ].dev_pointer = (void *)mbt_dev;
 		priv->bt_dev.m_dev[BT_SEQ].driver_data = priv;
-#ifdef __SDIO__
 		priv->bt_dev.m_dev[BT_SEQ].read_continue_flag = 0;
-#endif //__SDIO__
+		priv->bt_dev.m_dev[BT_SEQ].partial_write_flag = 0;
 	}
 
 #ifdef __SDIO__
