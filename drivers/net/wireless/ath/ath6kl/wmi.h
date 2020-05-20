@@ -2801,4 +2801,6 @@ void ath6kl_wmi_shutdown(struct wmi *wmi);
 void ath6kl_wmi_reset(struct wmi *wmi);
 int ath6kl_get_txpower(struct wiphy *wiphy, int *dbm);
 
+extern void ath6kl_wmi_lrd_init_channels(struct ath6kl *ar);
+
 #endif /* WMI_H */
