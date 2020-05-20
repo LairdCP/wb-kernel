@@ -23,6 +23,19 @@
 		compatible = "laird,fs_mem";
 		memory-region = <&fs_reserved>;
 	};
+
+	wifi_pwrseq: wifi_pwrseq {
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_wifi_pmu_en>;
+
+		compatible = "mmc-pwrseq-simple";
+		reset-gpios = <&pioE 3 GPIO_ACTIVE_LOW>;
+		post-power-on-delay-ms = <1>;
+	};
+};
+
+&mmc1 {
+	mmc-pwrseq = <&wifi_pwrseq>;
 };
 
 &nand_partitions {
