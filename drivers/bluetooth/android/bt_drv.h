@@ -26,7 +26,6 @@
 #ifndef DEBUG_LEVEL1
 #define DEBUG_LEVEL1
 #endif
-#define MBT_64BIT
 
 #include <linux/version.h>
 #include <linux/kthread.h>
@@ -49,7 +48,7 @@
 #define BIT(x) (1UL << (x))
 #endif
 
-#ifdef MBT_64BIT
+#ifdef __LP64__
 typedef u64 t_ptr;
 #else
 typedef u32 t_ptr;
