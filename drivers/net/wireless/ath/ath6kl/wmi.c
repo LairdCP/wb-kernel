@@ -4267,10 +4267,14 @@ void lrd_ath6kl_wmi_send_radio_mode(struct wmi *wmi, u8 if_idx)
 	if(ar->laird.phy_mode == 0)
 		return;
 
-	ath6kl_wmi_send_buf_cmd(wmi, if_idx, WMI_SET_HT_CAP_CMDID, sizeof(struct wmi_set_htcap_cmd),
-							(u8*)&(ar->laird.htcap_params_2ghz));
-	ath6kl_wmi_send_buf_cmd(wmi, if_idx, WMI_SET_HT_CAP_CMDID, sizeof(struct wmi_set_htcap_cmd),
-							(u8*)&(ar->laird.htcap_params_5ghz));
+	if (ar->laird.htcap_2ghz_set) {
+		ath6kl_wmi_send_buf_cmd(wmi, if_idx, WMI_SET_HT_CAP_CMDID, sizeof(struct wmi_set_htcap_cmd),
+								(u8*)&(ar->laird.htcap_params_2ghz));
+	}
+	if (ar->laird.htcap_5ghz_set) {
+		ath6kl_wmi_send_buf_cmd(wmi, if_idx, WMI_SET_HT_CAP_CMDID, sizeof(struct wmi_set_htcap_cmd),
+								(u8*)&(ar->laird.htcap_params_5ghz));
+	}
 	ath6kl_wmi_channel_params_cmd(wmi, if_idx, 0, ar->laird.phy_mode, ar->laird.num_channels,
 								ar->laird.channel_list);
 }
@@ -4353,9 +4357,15 @@ static int ath6kl_genl_wmi_passthru (struct sk_buff *skb_2, struct genl_info *in
 					{
 					struct wmi_set_htcap_cmd *htcap = (struct wmi_set_htcap_cmd*)p;
 					if(htcap->band == NL80211_BAND_2GHZ)
+					{
 						memcpy(&ar->laird.htcap_params_2ghz, htcap, sizeof(struct wmi_set_htcap_cmd));
+						ar->laird.htcap_2ghz_set = 1;
+					}
 					else if(htcap->band == NL80211_BAND_5GHZ)
+					{
 						memcpy(&ar->laird.htcap_params_5ghz, htcap, sizeof(struct wmi_set_htcap_cmd));
+						ar->laird.htcap_5ghz_set = 1;
+					}
 					}
 					break;
 				case 0xf0b0:

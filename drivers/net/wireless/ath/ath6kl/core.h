@@ -911,6 +911,8 @@ struct ath6kl {
 		enum wmi_phy_mode phy_mode;
 		u8 num_channels;
 		u16 channel_list[WMI_MAX_CHANNELS];
+		u8 htcap_2ghz_set;
+		u8 htcap_5ghz_set;
 		struct wmi_set_htcap_cmd htcap_params_2ghz;
 		struct wmi_set_htcap_cmd htcap_params_5ghz;
 		char AP_Name[17];
