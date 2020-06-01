@@ -234,7 +234,7 @@ chardev_write(struct file * filp, const char *buf, size_t count, loff_t * f_pos)
 		return 1;
 	}
 
-	skb = bt_skb_alloc(count, GFP_ATOMIC);
+	skb = bt_skb_alloc(count+m_dev->partial_write_flag, GFP_ATOMIC);
 	if (!skb) {
 		PRINTM(ERROR, "mbtchar_write(): fail to alloc skb\n");
 		LEAVE();
@@ -514,7 +514,7 @@ chardev_release(struct inode *inode, struct file *filp)
 		LEAVE();
 		return ret;
 	}
-#ifdef __SDIO__
+#ifndef __SDIO__
 	/* disable sco when close BT char device */
 	if (m_dev != NULL && m_dev->dev_type == BT_TYPE) {
 		PRINTM(CMD,
