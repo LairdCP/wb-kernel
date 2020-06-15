@@ -1314,9 +1314,12 @@ static int ath6kl_sdio_pm_resume(struct device *device)
  */
 static int ath6kl_sdio_pm_suspend_late(struct device *device)
 {
+	struct ath6kl_sdio *ar_sdio = dev_get_drvdata(device);
+
 	ath6kl_dbg(ATH6KL_DBG_SUSPEND, "sdio pm ath6kl_sdio_pm_suspend_late\n");
 
-	if (gpio_is_valid(reset_pwd_gpio))
+	if (ar_sdio->ar->state == ATH6KL_STATE_CUTPOWER &&
+	    gpio_is_valid(reset_pwd_gpio))
 		gpio_set_value(reset_pwd_gpio, 0);
 
 	return 0;
@@ -1324,9 +1327,12 @@ static int ath6kl_sdio_pm_suspend_late(struct device *device)
 
 static int ath6kl_sdio_pm_resume_early(struct device *device)
 {
+	struct ath6kl_sdio *ar_sdio = dev_get_drvdata(device);
+
 	ath6kl_dbg(ATH6KL_DBG_SUSPEND, "sdio pm ath6kl_sdio_pm_resume_early\n");
 
-	if (gpio_is_valid(reset_pwd_gpio)) {
+	if (ar_sdio->ar->state == ATH6KL_STATE_CUTPOWER &&
+	    gpio_is_valid(reset_pwd_gpio)) {
 		gpio_set_value(reset_pwd_gpio, 1);
 		usleep_range(1000, 5000); /* wait for power up */
 	}
