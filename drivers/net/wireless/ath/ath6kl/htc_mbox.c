@@ -415,9 +415,10 @@ static void htc_tx_comp_update(struct htc_target *target,
 	if (!packet->status)
 		return;
 
-	ath6kl_err("req failed (status:%d, ep:%d, len:%d creds:%d)\n",
-		   packet->status, packet->endpoint, packet->act_len,
-		   packet->info.tx.cred_used);
+	if (packet->status != -ECANCELED)
+		ath6kl_err("req failed (status:%d, ep:%d, len:%d creds:%d)\n",
+			   packet->status, packet->endpoint, packet->act_len,
+			   packet->info.tx.cred_used);
 
 	/* on failure to submit, reclaim credits for this packet */
 	spin_lock_bh(&target->tx_lock);
