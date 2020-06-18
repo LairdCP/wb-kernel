@@ -36,6 +36,11 @@
 
 &mmc1 {
 	mmc-pwrseq = <&wifi_pwrseq>;
+
+	slot@0 {
+		non-removable;
+		cap-power-off-card;
+	};
 };
 
 &nand_partitions {
