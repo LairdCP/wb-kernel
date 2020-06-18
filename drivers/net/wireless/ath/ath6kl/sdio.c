@@ -23,6 +23,7 @@
 #include <linux/mmc/sdio_ids.h>
 #include <linux/mmc/sdio.h>
 #include <linux/mmc/sd.h>
+#include <linux/pm_runtime.h>
 #include <linux/gpio.h>
 #include "hif.h"
 #include "hif-ops.h"
@@ -526,6 +527,9 @@ static int ath6kl_sdio_power_on(struct ath6kl *ar)
 
 	ath6kl_dbg(ATH6KL_DBG_BOOT, "sdio power on\n");
 
+	if (ar->allow_off_when_down)
+		pm_runtime_get_sync(&func->dev);
+
 	sdio_claim_host(func);
 
 	ret = sdio_enable_func(func);
@@ -574,6 +578,9 @@ static int ath6kl_sdio_power_off(struct ath6kl *ar)
 		return ret;
 
 	ar_sdio->is_disabled = true;
+
+	if (ar->allow_off_when_down)
+		pm_runtime_put(&ar_sdio->func->dev);
 
 	return ret;
 }
@@ -1419,6 +1426,10 @@ static int ath6kl_sdio_probe(struct sdio_func *func,
 	ar->hif_ops = &ath6kl_sdio_ops;
 	ar->bmi.max_data_size = 256;
 
+	ar->allow_off_when_down =
+		!mmc_card_is_removable(func->card->host) &&
+		!gpio_is_valid(reset_pwd_gpio);
+
 	ath6kl_sdio_set_mbox_info(ar);
 
 	ret = ath6kl_sdio_config(ar);
@@ -1432,6 +1443,9 @@ static int ath6kl_sdio_probe(struct sdio_func *func,
 		ath6kl_err("Failed to init ath6kl core\n");
 		goto err_core_alloc;
 	}
+
+	if (ar->allow_off_when_down)
+		pm_runtime_put_noidle(&func->dev);
 
 	return ret;
 
@@ -1460,6 +1474,9 @@ static void ath6kl_sdio_remove(struct sdio_func *func)
 
 	ath6kl_core_cleanup(ar_sdio->ar);
 	ath6kl_core_destroy(ar_sdio->ar);
+
+	if (ar_sdio->ar->allow_off_when_down)
+		pm_runtime_get_noresume(&func->dev);
 
 	kfree(ar_sdio->dma_buffer);
 	kfree(ar_sdio);

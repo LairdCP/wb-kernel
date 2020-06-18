@@ -1095,6 +1095,8 @@ static int ath6kl_open(struct net_device *dev)
 {
 	struct ath6kl_vif *vif = netdev_priv(dev);
 
+	ath6kl_cfg80211_on(vif->ar);
+
 	set_bit(WLAN_ENABLED, &vif->flags);
 
 	if (test_bit(CONNECTED, &vif->flags)) {
@@ -1116,6 +1118,8 @@ static int ath6kl_close(struct net_device *dev)
 	ath6kl_cfg80211_stop(vif);
 
 	clear_bit(WLAN_ENABLED, &vif->flags);
+
+	ath6kl_cfg80211_off(vif->ar);
 
 	return 0;
 }

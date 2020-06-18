@@ -52,6 +52,9 @@ int ath6kl_cfg80211_suspend(struct ath6kl *ar,
 
 int ath6kl_cfg80211_resume(struct ath6kl *ar);
 
+int ath6kl_cfg80211_on(struct ath6kl *ar);
+int ath6kl_cfg80211_off(struct ath6kl *ar);
+
 void ath6kl_cfg80211_vif_cleanup(struct ath6kl_vif *vif);
 
 void ath6kl_cfg80211_stop(struct ath6kl_vif *vif);

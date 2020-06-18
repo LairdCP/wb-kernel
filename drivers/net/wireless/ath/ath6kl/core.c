@@ -189,6 +189,9 @@ int ath6kl_core_init(struct ath6kl *ar, enum ath6kl_htc_type htc_type)
 	else
 		ar->suspend_mode = 0;
 
+	ar->allow_off_when_down = ar->allow_off_when_down &&
+		suspend_mode == WLAN_POWER_STATE_CUT_PWR;
+
 	if (suspend_mode == WLAN_POWER_STATE_WOW &&
 	    (wow_mode == WLAN_POWER_STATE_CUT_PWR ||
 	     wow_mode == WLAN_POWER_STATE_DEEP_SLEEP))
@@ -237,12 +240,11 @@ int ath6kl_core_init(struct ath6kl *ar, enum ath6kl_htc_type htc_type)
 	wdev = ath6kl_interface_add(ar, "wlan%d", NET_NAME_ENUM,
 				    NL80211_IFTYPE_STATION, 0, INFRA_NETWORK);
 
-	rtnl_unlock();
-
 	if (!wdev) {
 		ath6kl_err("Failed to instantiate a network device\n");
 		ret = -ENOMEM;
 		wiphy_unregister(ar->wiphy);
+		rtnl_unlock();
 		goto err_rxbuf_cleanup;
 	}
 
@@ -250,15 +252,18 @@ int ath6kl_core_init(struct ath6kl *ar, enum ath6kl_htc_type htc_type)
 		   __func__, wdev->netdev->name, wdev->netdev, ar);
 
 	ar->fw_recovery.enable = !!recovery_enable;
-	if (!ar->fw_recovery.enable)
-		return ret;
+	if (ar->fw_recovery.enable) {
+		if (heart_beat_poll &&
+			test_bit(ATH6KL_FW_CAPABILITY_HEART_BEAT_POLL,
+				 ar->fw_capabilities))
+			ar->fw_recovery.hb_poll = heart_beat_poll;
 
-	if (heart_beat_poll &&
-	    test_bit(ATH6KL_FW_CAPABILITY_HEART_BEAT_POLL,
-		     ar->fw_capabilities))
-		ar->fw_recovery.hb_poll = heart_beat_poll;
+		ath6kl_recovery_init(ar);
+	}
 
-	ath6kl_recovery_init(ar);
+	ath6kl_cfg80211_off(ar);
+
+	rtnl_unlock();
 
 	return ret;
 

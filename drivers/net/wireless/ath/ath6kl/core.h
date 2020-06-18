@@ -906,6 +906,7 @@ struct ath6kl {
 	bool disable_fw_dbglog;
 
 	bool fips_mode;
+	bool allow_off_when_down;
 
 	struct {
 		enum wmi_phy_mode phy_mode;
