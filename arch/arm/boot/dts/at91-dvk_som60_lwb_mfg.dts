@@ -13,7 +13,7 @@
 #include "at91-som60.dtsi"
 
 /* DVK MFG board definition */
-#include "at91-dvk_su60_somc.dtsi"
+#include "at91-dvk_su60_somc_mfg.dtsi"
 
 /* On-board 60 series radio disabled */
 &mmc1 {
