@@ -3566,6 +3566,11 @@ static int reg_set_rd_driver(const struct ieee80211_regdomain *rd,
 	const struct ieee80211_regdomain *tmp;
 	struct wiphy *request_wiphy;
 
+#ifdef _REMOVE_LAIRD_MODS_
+	if (is_world_regdom(rd->alpha2))
+		return -EINVAL;
+#endif
+
 	if (!regdom_changes(rd->alpha2))
 		return -EALREADY;
 

@@ -1298,8 +1298,15 @@ static int cfg80211_netdev_notifier_call(struct notifier_block *nb,
 		/* allow mac80211 to determine the timeout */
 		wdev->ps_timeout = -1;
 
+#ifndef _REMOVE_LAIRD_MODS_
 		if (wdev->iftype == NL80211_IFTYPE_P2P_CLIENT && !wdev->use_4addr)
 			dev->priv_flags |= IFF_DONT_BRIDGE;
+#else
+		if ((wdev->iftype == NL80211_IFTYPE_STATION ||
+		     wdev->iftype == NL80211_IFTYPE_P2P_CLIENT ||
+		     wdev->iftype == NL80211_IFTYPE_ADHOC) && !wdev->use_4addr)
+			dev->priv_flags |= IFF_DONT_BRIDGE;
+#endif
 
 		INIT_WORK(&wdev->disconnect_wk, cfg80211_autodisconnect_wk);
 
