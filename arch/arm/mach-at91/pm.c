@@ -433,7 +433,7 @@ static void at91_ddr_standby(void)
 	cpu_do_idle();
 
 	at91_ramc_write(0, AT91_DDRSDRC_LPR, saved_lpr0);
-	if (pm_data.ramc[1]) {
+	if (soc_pm.data.ramc[1]) 
 		at91_ramc_write(1, AT91_DDRSDRC_LPR, saved_lpr1);
 }
 
