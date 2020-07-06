@@ -360,35 +360,25 @@ static void at91rm9200_standby(void)
  */
 static void at91_ddr_standby(void)
 {
-	/* Those two values allow us to delay self-refresh activation
-	 * to the maximum. */
 	u32 lpr0, lpr1 = 0;
-	u32 mdr, saved_mdr0, saved_mdr1 = 0;
+	u32 mdr;
 	u32 saved_lpr0, saved_lpr1 = 0;
 
-	/* LPDDR1 --> force DDR2 mode during self-refresh */
-	saved_mdr0 = at91_ramc_read(0, AT91_DDRSDRC_MDR);
-	if ((saved_mdr0 & AT91_DDRSDRC_MD) == AT91_DDRSDRC_MD_LOW_POWER_DDR) {
-		mdr = saved_mdr0 & ~AT91_DDRSDRC_MD;
-		mdr |= AT91_DDRSDRC_MD_DDR2;
-		at91_ramc_write(0, AT91_DDRSDRC_MDR, mdr);
-	}
-
 	if (pm_data.ramc[1]) {
+		mdr = at91_ramc_read(1, AT91_DDRSDRC_MDR);
+
 		saved_lpr1 = at91_ramc_read(1, AT91_DDRSDRC_LPR);
 		lpr1 = saved_lpr1 & ~AT91_DDRSDRC_LPCB;
-		lpr1 |= AT91_DDRSDRC_LPCB_SELF_REFRESH;
-		saved_mdr1 = at91_ramc_read(1, AT91_DDRSDRC_MDR);
-		if ((saved_mdr1 & AT91_DDRSDRC_MD) == AT91_DDRSDRC_MD_LOW_POWER_DDR) {
-			mdr = saved_mdr1 & ~AT91_DDRSDRC_MD;
-			mdr |= AT91_DDRSDRC_MD_DDR2;
-			at91_ramc_write(1, AT91_DDRSDRC_MDR, mdr);
-		}
+		lpr1 |= ((mdr & AT91_DDRSDRC_MD) == AT91_DDRSDRC_MD_LOW_POWER_DDR) ?
+			AT91_DDRSDRC_LPCB_POWER_DOWN : AT91_DDRSDRC_LPCB_SELF_REFRESH;
 	}
+
+	mdr = at91_ramc_read(0, AT91_DDRSDRC_MDR);
 
 	saved_lpr0 = at91_ramc_read(0, AT91_DDRSDRC_LPR);
 	lpr0 = saved_lpr0 & ~AT91_DDRSDRC_LPCB;
-	lpr0 |= AT91_DDRSDRC_LPCB_SELF_REFRESH;
+	lpr0 |= ((mdr & AT91_DDRSDRC_MD) == AT91_DDRSDRC_MD_LOW_POWER_DDR) ?
+		AT91_DDRSDRC_LPCB_POWER_DOWN : AT91_DDRSDRC_LPCB_SELF_REFRESH;
 
 	/* self-refresh mode now */
 	at91_ramc_write(0, AT91_DDRSDRC_LPR, lpr0);
@@ -397,28 +387,9 @@ static void at91_ddr_standby(void)
 
 	cpu_do_idle();
 
-	at91_ramc_write(0, AT91_DDRSDRC_MDR, saved_mdr0);
 	at91_ramc_write(0, AT91_DDRSDRC_LPR, saved_lpr0);
-	if (pm_data.ramc[1]) {
-		at91_ramc_write(0, AT91_DDRSDRC_MDR, saved_mdr1);
+	if (pm_data.ramc[1])
 		at91_ramc_write(1, AT91_DDRSDRC_LPR, saved_lpr1);
-	}
-}
-
-static void sama5d3_ddr_standby(void)
-{
-	u32 lpr0;
-	u32 saved_lpr0;
-
-	saved_lpr0 = at91_ramc_read(0, AT91_DDRSDRC_LPR);
-	lpr0 = saved_lpr0 & ~AT91_DDRSDRC_LPCB;
-	lpr0 |= AT91_DDRSDRC_LPCB_POWER_DOWN;
-
-	at91_ramc_write(0, AT91_DDRSDRC_LPR, lpr0);
-
-	cpu_do_idle();
-
-	at91_ramc_write(0, AT91_DDRSDRC_LPR, saved_lpr0);
 }
 
 /* We manage both DDRAM/SDRAM controllers, we need more than one value to
@@ -460,7 +431,7 @@ static const struct ramc_info ramc_infos[] __initconst = {
 	{ .idle = at91rm9200_standby, .memctrl = AT91_MEMCTRL_MC},
 	{ .idle = at91sam9_sdram_standby, .memctrl = AT91_MEMCTRL_SDRAMC},
 	{ .idle = at91_ddr_standby, .memctrl = AT91_MEMCTRL_DDRSDR},
-	{ .idle = sama5d3_ddr_standby, .memctrl = AT91_MEMCTRL_DDRSDR},
+	{ .idle = at91_ddr_standby, .memctrl = AT91_MEMCTRL_DDRSDR},
 };
 
 static const struct of_device_id ramc_ids[] __initconst = {
