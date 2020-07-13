@@ -57,6 +57,7 @@ int btbcm_patchram(struct hci_dev *hdev, const struct firmware *fw);
 
 int btbcm_setup_patchram(struct hci_dev *hdev);
 int btbcm_setup_apple(struct hci_dev *hdev);
+int btbcm_setup_cypress_patchram(struct hci_dev *hdev);
 
 int btbcm_initialize(struct hci_dev *hdev, char *fw_name, size_t len,
 		     bool reinit);
@@ -80,6 +81,11 @@ static inline int btbcm_patchram(struct hci_dev *hdev, const struct firmware *fw
 }
 
 static inline int btbcm_setup_patchram(struct hci_dev *hdev)
+{
+	return 0;
+}
+
+static inline int btbcm_setup_cypress_patchram(struct hci_dev *hdev)
 {
 	return 0;
 }

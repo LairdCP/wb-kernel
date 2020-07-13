@@ -490,6 +490,130 @@ done:
 }
 EXPORT_SYMBOL_GPL(btbcm_setup_patchram);
 
+static int btbcm_poke_arm32(struct hci_dev *hdev, u32 addr, u32 data)
+{
+	int err = 0;
+	struct sk_buff *skb;
+	u8 buf[10];
+
+	buf[0] = 8;
+	addr = cpu_to_le32(addr);
+	memcpy(&buf[1], &addr, 4);
+	buf[5] = 0;
+	data = cpu_to_le32(data);
+	memcpy(&buf[6], &data, 4);
+
+	skb = __hci_cmd_sync(hdev, 0xfc0c, 10, buf, HCI_INIT_TIMEOUT);
+	if (IS_ERR(skb)) {
+		err = PTR_ERR(skb);
+		bt_dev_err(hdev, "BCM: poke arm32 failed! (%d)",
+			   err);
+		goto done;
+	}
+	kfree_skb(skb);
+done:
+	return err;
+}
+
+static int btbcm_write_ram(struct hci_dev *hdev, u32 addr, const u8 * data, u32 count)
+{
+	int err = 0;
+	struct sk_buff *skb;
+	u8 * buf;
+
+	buf = kmalloc(count + 4, GFP_KERNEL);
+	addr = cpu_to_le32(addr);
+	memcpy(buf, &addr, 4);
+	memcpy(&buf[4], data, count);
+
+	skb = __hci_cmd_sync(hdev, 0xfc4c, count+4, buf, HCI_INIT_TIMEOUT);
+	if (IS_ERR(skb)) {
+		err = PTR_ERR(skb);
+		bt_dev_err(hdev, "BCM: write_ram failed! (%d)",
+			   err);
+		goto done;
+	}
+	kfree_skb(skb);
+done:
+	kfree(buf);
+	return err;
+
+}
+
+static const u8 brcm_cypress_patch[] = {
+	0x22, 0xF6, 0xE5, 0xF8, 0x28, 0x46, 0x00, 0xF0,
+	0x0A, 0xF8, 0x45, 0xF6, 0xDD, 0xB8, 0x00, 0x00,
+	0x3C, 0x71, 0x4B, 0xF6, 0x5D, 0xFF, 0x4B, 0xF6,
+	0xA3, 0xFC, 0x4B, 0xF6, 0x4D, 0xBB, 0x00, 0x28,
+	0x03, 0xDA, 0x80, 0x01, 0x01, 0xD5, 0x45, 0xF6,
+	0x83, 0xBB, 0x70, 0x47
+};
+
+int btbcm_setup_cypress_patchram(struct hci_dev *hdev)
+{
+	char fw_name[64];
+	const struct firmware *fw;
+	struct sk_buff *skb;
+	int err;
+	u8 opcode;
+
+	/* Initialize */
+	err = btbcm_initialize(hdev, fw_name, sizeof(fw_name), false);
+	if (err)
+		return err;
+
+	err = request_firmware(&fw, fw_name, &hdev->dev);
+	if (err < 0) {
+		bt_dev_info(hdev, "BCM: Patch %s not found", fw_name);
+		goto done;
+	}
+
+	btbcm_poke_arm32(hdev, 0x310000, 0x29531);
+	btbcm_poke_arm32(hdev, 0x260000, 0xBF1CF1BA);
+	btbcm_poke_arm32(hdev, 0x310004, 0x2AE6A);
+	btbcm_poke_arm32(hdev, 0x260004, 0xBCB2F1B4);
+	btbcm_poke_arm32(hdev, 0x310008, 0x11B17);
+	btbcm_poke_arm32(hdev, 0x260008, 0x3DEF04F);
+	btbcm_poke_arm32(hdev, 0x310304, 0x7);
+
+	btbcm_write_ram(hdev, 0x260300, brcm_cypress_patch, sizeof(brcm_cypress_patch));
+
+	opcode = 1;
+	skb = __hci_cmd_sync(hdev, 0xfd3d, 1, &opcode, HCI_INIT_TIMEOUT);
+	if (IS_ERR(skb)) {
+		err = PTR_ERR(skb);
+		bt_dev_err(hdev, "BCM: Write_USB_Config failed (%d)",
+			   err);
+		goto done;
+	}
+	kfree_skb(skb);
+
+	btbcm_patchram(hdev, fw);
+
+	release_firmware(fw);
+
+	/* Re-initialize */
+	err = btbcm_initialize(hdev, fw_name, sizeof(fw_name), true);
+	if (err)
+		return err;
+
+	/* Read Local Name */
+	skb = btbcm_read_local_name(hdev);
+	if (IS_ERR(skb))
+		return PTR_ERR(skb);
+
+	bt_dev_info(hdev, "%s", (char *)(skb->data + 1));
+	kfree_skb(skb);
+
+done:
+	btbcm_check_bdaddr(hdev);
+
+	set_bit(HCI_QUIRK_STRICT_DUPLICATE_FILTER, &hdev->quirks);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(btbcm_setup_cypress_patchram);
+
 int btbcm_setup_apple(struct hci_dev *hdev)
 {
 	struct sk_buff *skb;
