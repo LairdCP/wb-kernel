@@ -3247,7 +3247,7 @@ static int alg_test_cipher(const struct alg_test_desc *desc,
 	}
 
 	err = test_cipher(tfm, ENCRYPT, suite->vecs, suite->count);
-	if (!err || fips_prevent_panic)
+	if (!err)
 		err = test_cipher(tfm, DECRYPT, suite->vecs, suite->count);
 
 	crypto_free_cipher(tfm);
