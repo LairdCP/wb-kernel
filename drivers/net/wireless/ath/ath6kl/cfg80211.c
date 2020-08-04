@@ -150,6 +150,31 @@ static struct ieee80211_supported_band ath6kl_band_5ghz = {
 	.ht_cap.ht_supported = true,
 };
 
+#define WIDE(_control, _center) {	\
+	.control_chan   = (_control),	\
+	.center_chan    = (_center),	\
+}
+
+struct ath6kl_wide_channel_mapping {
+	int control_chan;
+	int center_chan;
+};
+
+static struct ath6kl_wide_channel_mapping wide_channel_mapping[] = {
+	WIDE(36, 38), WIDE(40, 38),
+	WIDE(44, 46), WIDE(48, 46),
+	WIDE(52, 54), WIDE(56, 54),
+	WIDE(60, 62), WIDE(64, 62),
+	WIDE(100, 102), WIDE(104, 102),
+	WIDE(108, 110), WIDE(112, 110),
+	WIDE(116, 118), WIDE(120, 118),
+	WIDE(124, 126), WIDE(128, 126),
+	WIDE(132, 136), WIDE(136, 136),
+	WIDE(140, 142), WIDE(144, 142),
+	WIDE(149, 151), WIDE(153, 151),
+	WIDE(157, 159), WIDE(161, 159),
+};
+
 #define CCKM_KRK_CIPHER_SUITE 0x004096ff /* use for KRK */
 
 /* returns true if scheduled scan was stopped */
@@ -3415,6 +3440,46 @@ ath6kl_mgmt_stypes[NUM_NL80211_IFTYPES] = {
 	},
 };
 
+int ath6kl_cfg80211_get_channel(struct wiphy *wiphy,
+				struct wireless_dev *wdev,
+				struct cfg80211_chan_def *chandef)
+{
+	struct ath6kl_vif *vif = ath6kl_vif_from_wdev(wdev);
+	int i, chnum;
+	struct ath6kl_wide_channel_mapping * pmapping;
+	int ret = -EINVAL;
+
+	/* vif->bss_ch is the control frequency in mhz */
+	chandef->chan = ieee80211_get_channel(wiphy, vif->bss_ch);
+
+	if (!chandef->chan)
+		goto error;
+
+	chandef->width = NL80211_CHAN_WIDTH_20;
+	chandef->center_freq1 = vif->bss_ch;
+	chandef->center_freq2 = 0;
+
+	if (vif->bss_is_40mhz) {
+		chnum = ieee80211_frequency_to_channel(vif->bss_ch);
+		for (i=0; i<ARRAY_SIZE(wide_channel_mapping); i++) {
+			pmapping = &wide_channel_mapping[i];
+			if (chnum == pmapping->control_chan) {
+				chandef->width = NL80211_CHAN_WIDTH_40;
+				chandef->center_freq1 = ieee80211_channel_to_frequency(
+								pmapping->center_chan,
+								chandef->chan->band);
+				break;
+			}
+		}
+		if (chandef->center_freq1 == vif->bss_ch)
+			goto error;
+	}
+
+	ret = 0;
+error:
+	return ret;
+}
+
 static struct cfg80211_ops ath6kl_cfg80211_ops = {
 	.add_virtual_intf = ath6kl_cfg80211_add_iface,
 	.del_virtual_intf = ath6kl_cfg80211_del_iface,
@@ -3455,6 +3520,7 @@ static struct cfg80211_ops ath6kl_cfg80211_ops = {
 	.sched_scan_stop = ath6kl_cfg80211_sscan_stop,
 	.set_bitrate_mask = ath6kl_cfg80211_set_bitrate,
 	.set_cqm_txe_config = ath6kl_cfg80211_set_txe_config,
+	.get_channel = ath6kl_cfg80211_get_channel,
 };
 
 void ath6kl_cfg80211_stop(struct ath6kl_vif *vif)
@@ -3942,6 +4008,9 @@ int ath6kl_cfg80211_init(struct ath6kl *ar)
 		ar->hw.tx_ant = 1;
 		ar->hw.rx_ant = 1;
 	}
+
+	ath6kl_band_2ghz.ht_cap.mcs.tx_params = IEEE80211_HT_MCS_TX_DEFINED;
+	ath6kl_band_5ghz.ht_cap.mcs.tx_params = IEEE80211_HT_MCS_TX_DEFINED;
 
 	wiphy->available_antennas_tx = ar->hw.tx_ant;
 	wiphy->available_antennas_rx = ar->hw.rx_ant;
