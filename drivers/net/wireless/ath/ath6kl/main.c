@@ -623,6 +623,10 @@ static void ath6kl_check_ch_switch(struct ath6kl *ar, u16 channel)
 	spin_unlock_bh(&ar->list_lock);
 }
 
+#define PHY_MODE_MASK	0xFF00
+#define PHY_MODE_SHIFT	8
+#define PHY_MODE_HT40A	6
+#define PHY_MODE_HT40G	7
 void ath6kl_connect_event(struct ath6kl_vif *vif, u16 channel, u8 *bssid,
 			  u16 listen_int, u16 beacon_int,
 			  enum network_type net_type, u8 beacon_ie_len,
@@ -630,6 +634,7 @@ void ath6kl_connect_event(struct ath6kl_vif *vif, u16 channel, u8 *bssid,
 			  u8 *assoc_info)
 {
 	struct ath6kl *ar = vif->ar;
+	int mode;
 
 	ath6kl_cfg80211_connect_event(vif, channel, bssid,
 				      listen_int, beacon_int,
@@ -639,6 +644,14 @@ void ath6kl_connect_event(struct ath6kl_vif *vif, u16 channel, u8 *bssid,
 
 	memcpy(vif->bssid, bssid, sizeof(vif->bssid));
 	vif->bss_ch = channel;
+
+	/* phy mode is encoded in upper bits of net_type when in station mode*/
+	mode = (net_type & PHY_MODE_MASK) >> PHY_MODE_SHIFT;
+	if ((mode == PHY_MODE_HT40A) || (mode == PHY_MODE_HT40G)) {
+		vif->bss_is_40mhz = 1;
+	} else {
+		vif->bss_is_40mhz = 0;
+	}
 
 	if (vif->nw_type == INFRA_NETWORK) {
 		ath6kl_wmi_listeninterval_cmd(ar->wmi, vif->fw_vif_idx,

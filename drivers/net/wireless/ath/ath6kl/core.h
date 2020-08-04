@@ -648,6 +648,7 @@ struct ath6kl_vif {
 	u8 req_bssid[ETH_ALEN];
 	u16 ch_hint;
 	u16 bss_ch;
+	u8 bss_is_40mhz;
 	struct ath6kl_wep_key wep_key_list[WMI_MAX_KEY_INDEX + 1];
 	struct ath6kl_key keys[WMI_MAX_KEY_INDEX + 1];
 	struct aggr_info *aggr_cntxt;
