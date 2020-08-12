@@ -7099,16 +7099,16 @@ struct brcmf_cfg80211_info *brcmf_cfg80211_attach(struct brcmf_pub *drvr,
 	if (brcmf_feat_is_enabled(ifp, BRCMF_FEAT_WOWL_GTK))
 		ops->set_rekey_data = brcmf_cfg80211_set_rekey_data;
 #endif
+	err = brcmf_setup_wiphybands(cfg);
+	if (err) {
+		bphy_err(drvr, "Setting wiphy bands failed (%d)\n", err);
+		goto priv_out;
+	}
+
 	err = wiphy_register(wiphy);
 	if (err < 0) {
 		bphy_err(drvr, "Could not register wiphy device (%d)\n", err);
 		goto priv_out;
-	}
-
-	err = brcmf_setup_wiphybands(cfg);
-	if (err) {
-		bphy_err(drvr, "Setting wiphy bands failed (%d)\n", err);
-		goto wiphy_unreg_out;
 	}
 
 	/* If cfg80211 didn't disable 40MHz HT CAP in wiphy_register(),
