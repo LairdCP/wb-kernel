@@ -2160,6 +2160,10 @@ struct wmi_txe_notify_event {
 	__le32 pkts;
 } __packed;
 
+struct wmi_rsn_cap_cmd {
+	__le16 rsn_cap;
+} __packed;
+
 /* WMI_SET_AKMP_PARAMS_CMD */
 
 struct wmi_pmkid {
@@ -2685,6 +2689,7 @@ int ath6kl_wmi_get_tx_pwr_cmd(struct wmi *wmi, u8 if_idx);
 int ath6kl_wmi_get_roam_tbl_cmd(struct wmi *wmi);
 
 int ath6kl_wmi_set_wmm_txop(struct wmi *wmi, u8 if_idx, enum wmi_txop_cfg cfg);
+int ath6kl_wmi_set_rsn_cap_cmd(struct wmi *wmi, u8 if_idx, u16 rsn_cap);
 int ath6kl_wmi_set_keepalive_cmd(struct wmi *wmi, u8 if_idx,
 				 u8 keep_alive_intvl);
 int ath6kl_wmi_set_htcap_cmd(struct wmi *wmi, u8 if_idx,

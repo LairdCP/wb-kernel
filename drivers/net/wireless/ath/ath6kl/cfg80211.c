@@ -2946,10 +2946,14 @@ static int ath6kl_start_ap(struct wiphy *wiphy, struct net_device *dev,
 	if (!ath6kl_get_rsn_capab(&info->beacon, (u8 *) &rsn_capab) &&
 	    test_bit(ATH6KL_FW_CAPABILITY_RSN_CAP_OVERRIDE,
 		     ar->fw_capabilities)) {
-		res = ath6kl_wmi_set_ie_cmd(ar->wmi, vif->fw_vif_idx,
-					    WLAN_EID_RSN, WMI_RSN_IE_CAPB,
-					    (const u8 *) &rsn_capab,
-					    sizeof(rsn_capab));
+		if (ar->target_type == TARGET_TYPE_AR6004) {
+			res = ath6kl_wmi_set_rsn_cap_cmd(ar->wmi, vif->fw_vif_idx, rsn_capab);
+		} else {
+			res = ath6kl_wmi_set_ie_cmd(ar->wmi, vif->fw_vif_idx,
+										WLAN_EID_RSN, WMI_RSN_IE_CAPB,
+										(const u8 *) &rsn_capab,
+										sizeof(rsn_capab));
+		}
 		vif->rsn_capab = rsn_capab;
 		if (res < 0)
 			return res;
