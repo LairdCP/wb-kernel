@@ -86,6 +86,10 @@
 #define DP83867_IO_MUX_CFG_CLK_O_SEL_MASK	(0x1f << 8)
 #define DP83867_IO_MUX_CFG_CLK_O_SEL_SHIFT	8
 
+#define DP83867_IO_IMPEDANCE_OHM_MIN	35
+#define DP83867_IO_IMPEDANCE_OHM_MAX	70
+#define DP83867_IO_IMPEDANCE_OHM_CAL	50
+
 /* CFG3 bits */
 #define DP83867_CFG3_INT_OE			BIT(7)
 #define DP83867_CFG3_ROBUST_AUTO_MDIX		BIT(9)
@@ -172,7 +176,7 @@ static int dp83867_of_init(struct phy_device *phydev)
 	if (!of_node)
 		return -ENODEV;
 
-	dp83867->io_impedance = -EINVAL;
+	dp83867->io_impedance = DP83867_IO_IMPEDANCE_OHM_CAL;
 
 	/* Optional configuration */
 	ret = of_property_read_u32(of_node, "ti,clk-output-sel",
@@ -184,9 +188,17 @@ static int dp83867_of_init(struct phy_device *phydev)
 		dp83867->clk_output_sel = DP83867_CLK_O_SEL_REF_CLK;
 
 	if (of_property_read_bool(of_node, "ti,max-output-impedance"))
-		dp83867->io_impedance = DP83867_IO_MUX_CFG_IO_IMPEDANCE_MAX;
+		dp83867->io_impedance = DP83867_IO_IMPEDANCE_OHM_MAX;
 	else if (of_property_read_bool(of_node, "ti,min-output-impedance"))
-		dp83867->io_impedance = DP83867_IO_MUX_CFG_IO_IMPEDANCE_MIN;
+		dp83867->io_impedance = DP83867_IO_IMPEDANCE_OHM_MIN;
+	else {
+		of_property_read_u32(of_node, "ti,output-impedance",
+			&dp83867->io_impedance);
+		if (dp83867->io_impedance > DP83867_IO_IMPEDANCE_OHM_MAX)
+			dp83867->io_impedance = DP83867_IO_IMPEDANCE_OHM_MAX;
+		else if (dp83867->io_impedance < DP83867_IO_IMPEDANCE_OHM_MIN)
+			dp83867->io_impedance = DP83867_IO_IMPEDANCE_OHM_MIN;
+	}
 
 	dp83867->rxctrl_strap_quirk = of_property_read_bool(of_node,
 					"ti,dp83867-rxctrl-strap-quirk");
@@ -221,10 +233,15 @@ static int dp83867_of_init(struct phy_device *phydev)
 }
 #endif /* CONFIG_OF_MDIO */
 
+static int dp83867_interp(int x, int x0, int y0, int x1, int y1)
+{
+	return y0 + ((y1 - y0) * (x - x0) + (x1 - x0) / 2) / (x1 - x0);
+}
+
 static int dp83867_config_init(struct phy_device *phydev)
 {
 	struct dp83867_private *dp83867;
-	int ret, val, bs;
+	int ret, val, bs, val50;
 	u16 delay;
 
 	if (!phydev->priv) {
@@ -293,13 +310,26 @@ static int dp83867_config_init(struct phy_device *phydev)
 		phy_write_mmd(phydev, DP83867_DEVADDR, DP83867_RGMIIDCTL,
 			      delay);
 
-		if (dp83867->io_impedance >= 0) {
+		if (dp83867->io_impedance != DP83867_IO_IMPEDANCE_OHM_CAL) {
 			val = phy_read_mmd(phydev, DP83867_DEVADDR,
 					   DP83867_IO_MUX_CFG);
 
+			val50 = val & DP83867_IO_MUX_CFG_IO_IMPEDANCE_CTRL;
 			val &= ~DP83867_IO_MUX_CFG_IO_IMPEDANCE_CTRL;
-			val |= dp83867->io_impedance &
-			       DP83867_IO_MUX_CFG_IO_IMPEDANCE_CTRL;
+
+			if (dp83867->io_impedance < DP83867_IO_IMPEDANCE_OHM_CAL) {
+				val |= dp83867_interp(dp83867->io_impedance,
+					DP83867_IO_IMPEDANCE_OHM_MIN,
+					DP83867_IO_MUX_CFG_IO_IMPEDANCE_MIN,
+					DP83867_IO_IMPEDANCE_OHM_CAL,
+					val50);
+			} else if (dp83867->io_impedance < DP83867_IO_IMPEDANCE_OHM_CAL) {
+				val |= dp83867_interp(dp83867->io_impedance,
+					DP83867_IO_IMPEDANCE_OHM_CAL,
+					val50,
+					DP83867_IO_IMPEDANCE_OHM_MAX,
+					DP83867_IO_MUX_CFG_IO_IMPEDANCE_MAX);
+			}
 
 			phy_write_mmd(phydev, DP83867_DEVADDR,
 				      DP83867_IO_MUX_CFG, val);
