@@ -234,6 +234,8 @@ static int dp83867_of_init(struct phy_device *phydev)
 #else
 static int dp83867_of_init(struct phy_device *phydev)
 {
+	dp83867->io_impedance = DP83867_IO_IMPEDANCE_OHM_CAL;
+
 	return 0;
 }
 #endif /* CONFIG_OF_MDIO */
@@ -329,9 +331,9 @@ static int dp83867_config_init(struct phy_device *phydev)
 			valr = dp83867_interp(dp83867->io_impedance);
 			valr += val50 - vale50;
 
-			if (valr > DP83867_IO_MUX_CFG_IO_IMPEDANCE_MAX)
+			if (valr < DP83867_IO_MUX_CFG_IO_IMPEDANCE_MAX)
 				valr = DP83867_IO_MUX_CFG_IO_IMPEDANCE_MAX;
-			else if (valr < DP83867_IO_MUX_CFG_IO_IMPEDANCE_MIN)
+			else if (valr > DP83867_IO_MUX_CFG_IO_IMPEDANCE_MIN)
 				valr = DP83867_IO_MUX_CFG_IO_IMPEDANCE_MIN;
 
 			val &= ~DP83867_IO_MUX_CFG_IO_IMPEDANCE_CTRL;
