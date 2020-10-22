@@ -10,7 +10,7 @@
 
 &nand_partitions {
 	ubootspl@0 {
-		label = "u-boot-spl";
+		label = "at91bs";
 		reg = <0x0 0x20000>;
 	};
 
