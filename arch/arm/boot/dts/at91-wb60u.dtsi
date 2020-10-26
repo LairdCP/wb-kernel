@@ -37,7 +37,7 @@
 		compatible = "gpio-of-helper";
 		status = "okay";
 		pinctrl-names = "default";
-		pinctrl-0 = <&pinctrl_gpio_lte>;
+		pinctrl-0 = <&pinctrl_gpio_lte &pinctrl_usb_vbus>;
 
 		lte_pwr_on {
 			gpio-name = "lte_pwr_on";
