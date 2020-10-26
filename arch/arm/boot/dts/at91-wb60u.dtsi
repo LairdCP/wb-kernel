@@ -2,8 +2,8 @@
 /*
  * at91-wb60.dts - Device Tree file for the WB60 module
  *
- *  Copyright (C) 2019 Laird Connectivity,
- *		  2019 Boris Krasnovskiy <boris.krasnovskiy@lairdconnect.com>
+ *  Copyright (C) 2020 Laird Connectivity,
+ *		  2020 Boris Krasnovskiy <boris.krasnovskiy@lairdconnect.com>
  *
  * Licensed under GPLv2 or later.
  */
@@ -14,13 +14,23 @@
 	model = "Laird WB60";
 	compatible = "laird,wb60", "laird,som60", "atmel,sama5d36", "atmel,sama5d3", "atmel,sama5";
 
+	ahb {
+		apb {
+			tdes@f803c000 {
+				// Disabled due shortage of DMA channels
+				status = "disabled";
+			};
+		};
+	};
+
 	wakeup_button {
 		pinctrl-names = "default";
-		pinctrl-0 = <&pinctrl_pb_wake>;
+		pinctrl-0 = <&pinctrl_wake>;
 
 		compatible = "gpio-wakeup";
 
 		interrupts-extended = <&pioC 31 IRQ_TYPE_EDGE_FALLING>;
+			//<&pioA 20 IRQ_TYPE_EDGE_FALLING>;
 	};
 
 	gpio {
@@ -29,32 +39,30 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_gpio_lte>;
 
-		lte_wkup {
-			gpio-name = "lte_wkup";
-			gpio = <&pioE 23 GPIO_ACTIVE_HIGH>;
-			output;
-			init-low;
-		};
-
 		lte_pwr_on {
 			gpio-name = "lte_pwr_on";
-			gpio = <&pioE 24 GPIO_ACTIVE_HIGH>;
-			output;
-			init-high;
-		};
-
-		lte_fast_shdn {
-			gpio-name = "lte_fast_shdn";
-			gpio = <&pioE 25 GPIO_ACTIVE_HIGH>;
+			gpio = <&pioE 15 GPIO_ACTIVE_HIGH>;
 			output;
 			init-high;
 		};
 
 		lte_reset {
 			gpio-name = "lte_reset";
-			gpio = <&pioE 26 GPIO_ACTIVE_HIGH>;
+			gpio = <&pioE 20 GPIO_ACTIVE_HIGH>;
 			output;
 			init-high;
+		};
+
+		lte_int {
+			gpio-name = "lte_int";
+			gpio = <&pioE 30 GPIO_ACTIVE_HIGH>;
+			output;
+		};
+
+		lte_v_int {
+			gpio-name = "lte_v_int";
+			gpio = <&pioE 31 GPIO_ACTIVE_HIGH>;
+			input;
 		};
 	};
 };
@@ -71,23 +79,33 @@
 				<AT91_PIOA 4 AT91_PERIPH_GPIO AT91_PINCTRL_NONE>;
 		};
 
-		pinctrl_pb_wake: pb_wake {
+		pinctrl_wake: wake {
 			atmel,pins =
-				<AT91_PIOC 31 AT91_PERIPH_GPIO AT91_PINCTRL_PULL_UP_DEGLITCH>;
+				<AT91_PIOC 31 AT91_PERIPH_GPIO AT91_PINCTRL_PULL_UP_DEGLITCH>,
+				<AT91_PIOA 20 AT91_PERIPH_GPIO AT91_PINCTRL_PULL_UP_DEGLITCH>;
 		};
 
 		pinctrl_gpio_lte: gpio_lte {
 		   atmel,pins =
-				<AT91_PIOE 23 AT91_PERIPH_GPIO AT91_PINCTRL_NONE>,
-				<AT91_PIOE 24 AT91_PERIPH_GPIO AT91_PINCTRL_NONE>,
-				<AT91_PIOE 25 AT91_PERIPH_GPIO AT91_PINCTRL_NONE>,
-				<AT91_PIOE 26 AT91_PERIPH_GPIO AT91_PINCTRL_NONE>;
+				<AT91_PIOE 15 AT91_PERIPH_GPIO AT91_PINCTRL_MULTI_DRIVE>,
+				<AT91_PIOE 20 AT91_PERIPH_GPIO AT91_PINCTRL_MULTI_DRIVE>,
+				<AT91_PIOE 30 AT91_PERIPH_GPIO AT91_PINCTRL_NONE>,
+				<AT91_PIOE 31 AT91_PERIPH_GPIO AT91_PINCTRL_NONE>;
 		};
 	};
 };
 
 &usart1 {
 	pinctrl-0 = <&pinctrl_usart1 &pinctrl_usart1_rts_cts>;
+
+	atmel,use-dma-rx;
+	atmel,use-dma-tx;
+
+	status = "okay";
+};
+
+&usart2 {
+	pinctrl-0 = <&pinctrl_usart2 &pinctrl_usart2_rts_cts>;
 
 	atmel,use-dma-rx;
 	atmel,use-dma-tx;
@@ -119,6 +137,4 @@
 
 	num-ports = <3>;
 	atmel,vbus-gpio = <0>, <0>, <&pioA 4 GPIO_ACTIVE_HIGH>;
-
-	status = "okay";
 };
