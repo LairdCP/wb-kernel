@@ -4670,21 +4670,25 @@ static int ath6kl_genl_qos(struct sk_buff *skb_2, struct genl_info *info)
 const struct genl_ops atheros_ops[] = {
 	{
 		.cmd = ATHEROS_CMD_GET_VALUE,
+		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 		.flags = 0,
 		.doit = ath6kl_genl_get_value,
 		.dumpit = NULL,
 	}, {
 		.cmd = ATHEROS_CMD_SET_PHY_MODE,
+		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 		.flags = 0,
 		.doit = ath6kl_genl_set_phy_mode,
 		.dumpit = NULL,
 	}, {
 		.cmd = ATHEROS_CMD_SEND_WMI,
+		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 		.flags = 0,
 		.doit = ath6kl_genl_wmi_passthru,
 		.dumpit = NULL,
 	}, {
 		.cmd = ATHEROS_CMD_QOS,
+		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 		.flags = 0,
 		.doit = ath6kl_genl_qos,
 		.dumpit = NULL,
