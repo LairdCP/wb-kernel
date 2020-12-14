@@ -1100,8 +1100,13 @@ int ieee80211_register_hw(struct ieee80211_hw *hw)
 	if (hw->queues > IEEE80211_MAX_QUEUES)
 		hw->queues = IEEE80211_MAX_QUEUES;
 
+#ifndef _REMOVE_LAIRD_MODS_
+	local->workqueue =
+		alloc_ordered_workqueue("%s", WQ_HIGHPRI, wiphy_name(local->hw.wiphy));
+#else
 	local->workqueue =
 		alloc_ordered_workqueue("%s", 0, wiphy_name(local->hw.wiphy));
+#endif
 	if (!local->workqueue) {
 		result = -ENOMEM;
 		goto fail_workqueue;
