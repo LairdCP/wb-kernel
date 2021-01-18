@@ -1195,7 +1195,7 @@ static int atmel_aes_ctr_transfer(struct atmel_aes_dev *dd)
 	if (blocks >> 16 || end < start) {
 		ctr |= 0xffff;
 		datalen = AES_BLOCK_SIZE * (0x10000 - start);
-		fragmented = true;
+		fragmented = !(ctr + 1);
 	}
 
 	use_dma = (datalen >= ATMEL_AES_DMA_THRESHOLD);
