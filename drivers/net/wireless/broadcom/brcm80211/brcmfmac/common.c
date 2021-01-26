@@ -20,6 +20,8 @@
 #include "of.h"
 #include "firmware.h"
 #include "chip.h"
+#include "fweh.h"
+#include <brcm_hw_ids.h>
 
 MODULE_AUTHOR("Broadcom Corporation");
 MODULE_DESCRIPTION("Broadcom 802.11 wireless LAN fullmac driver.");
@@ -66,6 +68,11 @@ MODULE_PARM_DESC(roamoff, "Do not use internal roaming engine");
 static int brcmf_iapp_enable;
 module_param_named(iapp, brcmf_iapp_enable, int, 0);
 MODULE_PARM_DESC(iapp, "Enable partial support for the obsoleted Inter-Access Point Protocol");
+
+static char brcmf_regdomain[BRCMF_REGDOMAIN_LEN];
+module_param_string(regdomain, brcmf_regdomain,
+		    BRCMF_REGDOMAIN_LEN, 0400);
+MODULE_PARM_DESC(regdomain, "Regulatory domain/country code");
 
 #ifdef DEBUG
 /* always succeed brcmf_bus_started() */
@@ -417,6 +424,10 @@ struct brcmf_mp_device *brcmf_get_module_param(struct device *dev,
 	settings->ignore_probe_fail = !!brcmf_ignore_probe_fail;
 #endif
 
+	// Laird - Copy regulory domain module parameter, subject to
+	// override by DT
+	strlcpy(settings->regdomain, brcmf_regdomain, BRCMF_REGDOMAIN_LEN);
+
 	if (bus_type == BRCMF_BUSTYPE_SDIO)
 		settings->bus.sdio.txglomsz = brcmf_sdiod_txglomsz;
 
@@ -441,11 +452,11 @@ struct brcmf_mp_device *brcmf_get_module_param(struct device *dev,
 			}
 		}
 	}
-	if (!found) {
-		/* No platform data for this device, try OF and DMI data */
-		brcmf_dmi_probe(settings, chip, chiprev);
-		brcmf_of_probe(dev, bus_type, settings);
-	}
+
+	// Laird - dmi/of overrides pdata if both exist
+	brcmf_dmi_probe(settings, chip, chiprev);
+	brcmf_of_probe(dev, bus_type, settings);
+
 	return settings;
 }
 

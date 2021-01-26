@@ -21,6 +21,7 @@ void brcmf_of_probe(struct device *dev, enum brcmf_bus_type bus_type,
 	int irq;
 	u32 irqf;
 	u32 val;
+	const char * domain;
 
 	/* Set board-type to the first string of the machine compatible prop */
 	root = of_find_node_by_path("/");
@@ -30,8 +31,14 @@ void brcmf_of_probe(struct device *dev, enum brcmf_bus_type bus_type,
 		of_node_put(root);
 	}
 
-	if (!np || bus_type != BRCMF_BUSTYPE_SDIO ||
-	    !of_device_is_compatible(np, "brcm,bcm4329-fmac"))
+	if ((!np) || !of_device_is_compatible(np, "brcm,bcm4329-fmac"))
+		return;
+
+	// Laird - Get regdomain/country code string if it exists
+	if (of_property_read_string(np, "laird,regdomain", &domain) == 0)
+		strlcpy(settings->regdomain, domain, BRCMF_REGDOMAIN_LEN);
+
+	if (bus_type != BRCMF_BUSTYPE_SDIO)
 		return;
 
 	if (of_property_read_u32(np, "brcm,drive-strength", &val) == 0)
