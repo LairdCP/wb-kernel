@@ -1,5 +1,5 @@
 /*
- *  ebt_arpnat,c
+ *  ebt_arpnat.c
  *
  *	Authors:
  *      Kestutis Barkauskas <gpl@wilibox.com>
