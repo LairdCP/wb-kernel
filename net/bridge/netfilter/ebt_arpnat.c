@@ -71,7 +71,6 @@ struct mac2val
 {
 	u32 val;
 	u8 mac[ETH_ALEN];
-	ktime_t timestamp;
 
 	struct list_head node;
 };
@@ -242,8 +241,7 @@ static unsigned int ebt_target_arpnat(struct sk_buff *pskb, const struct xt_acti
 			arp_smac = raw + sizeof(struct arphdr);
 			arp_dip = (u32*)(raw + sizeof(struct arphdr) + (2*(arp_hdr(pskb)->ar_hln)) + arp_hdr(pskb)->ar_pln);
 			arp_dmac = raw + sizeof(struct arphdr) + arp_hdr(pskb)->ar_hln + arp_hdr(pskb)->ar_pln;
-		} else
-			ah = NULL;
+		}
 	}
 
 	if (in) {
@@ -258,8 +256,7 @@ static unsigned int ebt_target_arpnat(struct sk_buff *pskb, const struct xt_acti
 			pr_devel("IN ARPNAT:\n");
 			pr_devel("          arp_smac=%pM, arp_dmac=%pM\n", arp_smac, arp_dmac);
 			pr_devel("          arp_sip =%pI4, arp_dip =%pI4\n", arp_sip, arp_dip);
-			switch (ah->ar_op)
-			{
+			switch (ah->ar_op) {
 				case __constant_htons(ARPOP_REPLY):
 					pr_devel("           arp_op=reply\n");
 					break;
@@ -306,8 +303,7 @@ static unsigned int ebt_target_arpnat(struct sk_buff *pskb, const struct xt_acti
 				break;
 			}
 			spin_unlock_bh(&arpnat_lock);
-		}
-		else if (eth_hdr(pskb)->h_proto == __constant_htons(ETH_P_IP)) {
+		} else if (eth_hdr(pskb)->h_proto == __constant_htons(ETH_P_IP)) {
 			struct iphdr *iph = ip_hdr(pskb);
 
 			if (!is_multicast_ether_addr(eth_dmac)) {
@@ -340,8 +336,7 @@ static unsigned int ebt_target_arpnat(struct sk_buff *pskb, const struct xt_acti
 			spin_unlock_bh(&arpnat_lock);
 		}
 	}
-	else if (out)
-	{
+	else if (out) {
 		struct net_bridge_port *out_br_port;
 		out_br_port = br_port_get_rcu(out);
 
@@ -384,10 +379,9 @@ static unsigned int ebt_target_arpnat(struct sk_buff *pskb, const struct xt_acti
 				ether_addr_copy(arp_smac, out->dev_addr);
 				ether_addr_copy(eth_smac, out->dev_addr);
 				return info->target;
-				break;
 			}
 		}
-		else if (eth_hdr(pskb)->h_proto == __constant_htons(ETH_P_IP) && !ether_addr_equal(out_br_port->br->dev->dev_addr, eth_smac)) {
+		else if (eth_hdr(pskb)->h_proto == __constant_htons(ETH_P_IP)) {
 			struct iphdr *iph = ip_hdr(pskb);
 
 #if IS_ENABLED(CONFIG_BRIDGE_EBT_ARPNAT_DHCPRELAY)
