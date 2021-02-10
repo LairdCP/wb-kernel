@@ -1007,6 +1007,7 @@ static int atmel_aes_handle_queue_async(struct crypto_async_request *new_areq)
 	struct atmel_aes_base_ctx *ctx;
 	struct atmel_aes_dev *dd;
 	int ret = 0;
+	bool is_async = false;
 
 	spin_lock_bh(&atmel_aes.lock);
 
@@ -1029,6 +1030,8 @@ static int atmel_aes_handle_queue_async(struct crypto_async_request *new_areq)
 
 		if (!areq)
 			dd->flags &= ~AES_FLAGS_BUSY;
+		else
+			is_async = true;
 	}
 
 	spin_unlock_bh(&atmel_aes.lock);
@@ -1043,7 +1046,7 @@ static int atmel_aes_handle_queue_async(struct crypto_async_request *new_areq)
 		dd->ctx = ctx;
 
 		/* These flags could change later as crypto progresses */
-		dd->is_async = false;
+		dd->is_async = is_async;
 		dd->force_sync = false;
 
 		ret = ctx->start(dd);
@@ -1192,7 +1195,7 @@ static int atmel_aes_ctr_transfer(struct atmel_aes_dev *dd)
 	if (blocks >> 16 || end < start) {
 		ctr |= 0xffff;
 		datalen = AES_BLOCK_SIZE * (0x10000 - start);
-		fragmented = true;
+		fragmented = !(ctr + 1);
 	}
 
 	use_dma = (datalen >= ATMEL_AES_DMA_THRESHOLD);
