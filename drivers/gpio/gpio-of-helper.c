@@ -1,78 +1,36 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /*
  * GPIO OF based helper
  *
  * A simple DT based driver to provide access to GPIO functionality
  * to user-space via sysfs.
  *
+ * Copyright (C) 2021 Boris Krasnovskiy <boris.krasnovskiy@lairdconnect.com>
  * Copyright (C) 2013 Pantelis Antoniou <panto@antoniou-consulting.com>
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
 #include <linux/module.h>
 #include <linux/kernel.h>
-#include <linux/string.h>
-#include <linux/timer.h>
-#include <linux/errno.h>
-#include <linux/init.h>
-#include <linux/delay.h>
-#include <linux/bitops.h>
-#include <linux/err.h>
+#include <linux/platform_device.h>
 #include <linux/of.h>
-#include <linux/of_device.h>
-#include <linux/of_gpio.h>
-#include <linux/pinctrl/pinctrl.h>
-#include <linux/pinctrl/pinmux.h>
+#include <linux/gpio/consumer.h>
 #include <linux/pinctrl/consumer.h>
 #include <linux/atomic.h>
-#include <linux/clk.h>
 #include <linux/interrupt.h>
-#include <linux/math64.h>
-#include <linux/atomic.h>
-#include <linux/idr.h>
 
-/* fwd decl. */
-struct gpio_of_helper_info;
-
-enum gpio_type {
-	GPIO_TYPE_INPUT = 0,
-	GPIO_TYPE_OUTPUT = 1,
-};
-
-struct gpio_of_entry {
-	int id;
-	struct gpio_of_helper_info *info;
-	struct device_node *node;
-	enum gpio_type type;
-	int gpio;
-	enum of_gpio_flags gpio_flags;
-	int irq;
+struct gpio_entry {
 	const char *name;
+	struct gpio_desc *desc;
+	int irq;
 	atomic64_t counter;
-	unsigned int count_flags;
-#define COUNT_RISING_EDGE	(1 << 0)
-#define COUNT_FALLING_EDGE	(1 << 1)
 };
 
-struct gpio_of_helper_info {
+struct gpio_helper_info {
 	struct platform_device *pdev;
-	struct idr idr;
+	struct gpio_entry *gpios;
+	size_t size;
 };
-
-static DEFINE_IDR(gpio_of_helper_idr);
-static DEFINE_SPINLOCK(gpio_of_helper_lock);
 
 static const struct of_device_id gpio_of_helper_of_match[] = {
 	{ .compatible = "gpio-of-helper", },
@@ -84,27 +42,25 @@ static ssize_t status_show(struct device *dev,
 				struct device_attribute *attr, char *buf)
 {
 	struct platform_device *pdev = to_platform_device(dev);
-	struct gpio_of_helper_info *info = platform_get_drvdata(pdev);
-	struct gpio_of_entry *entry;
+	struct gpio_helper_info *info = platform_get_drvdata(pdev);
+	struct gpio_entry *entry;
 	char *p, *e;
-	int id, n;
+	int n;
+	unsigned i;
 
 	p = buf;
 	e = p + PAGE_SIZE;
 	n = 0;
-	idr_for_each_entry(&info->idr, entry, id) {
-		switch (entry->type) {
-		case GPIO_TYPE_INPUT:
+	for (i = 0; i < info->size; ++i) {
+		entry = &info->gpios[i];
+		if (gpiod_get_direction(entry->desc))
 			n = snprintf(p, e - p, "%2d %-24s %3d %-3s %llu\n",
-				entry->id, entry->name, entry->gpio, "IN",
-				(unsigned long long)
-					atomic64_read(&entry->counter));
-			break;
-		case GPIO_TYPE_OUTPUT:
+				i, entry->name, desc_to_gpio(entry->desc), "IN",
+				(unsigned long long)atomic64_read(&entry->counter));
+		else
 			n = snprintf(p, e - p, "%2d %-24s %3d %-3s\n",
-				entry->id, entry->name, entry->gpio, "OUT");
-			break;
-		}
+				i, entry->name, desc_to_gpio(entry->desc), "OUT");
+
 		p += n;
 	}
 
@@ -115,7 +71,7 @@ static DEVICE_ATTR_RO(status);
 
 static irqreturn_t gpio_of_helper_handler(int irq, void *ptr)
 {
-	struct gpio_of_entry *entry = ptr;
+	struct gpio_entry *entry = ptr;
 
 	/* caution - low speed interfaces only! */
 	atomic64_inc(&entry->counter);
@@ -123,177 +79,67 @@ static irqreturn_t gpio_of_helper_handler(int irq, void *ptr)
 	return IRQ_HANDLED;
 }
 
-static struct gpio_of_entry *
-gpio_of_entry_create(struct gpio_of_helper_info *info, struct device_node *node)
+static int gpio_of_entry_create(struct device *dev, struct device_node *node,
+	struct gpio_entry *entry)
 {
-	struct platform_device *pdev = info->pdev;
-	struct device *dev = &pdev->dev;
-	struct gpio_of_entry *entry;
-	long err, gpio, irq;
-	unsigned int req_flags, count_flags, irq_flags;
-	enum gpio_type type;
-	enum of_gpio_flags gpio_flags;
-	const char *name;
+	enum gpiod_flags gpio_flags;
+	unsigned long irq_flags = 0;
+	int err;
+
+	err = of_property_read_string(node, "gpio-name", &entry->name);
+	if (err) {
+		dev_err(dev, "Failed to get name property\n");
+		return err;
+	}
 
 	/* get the type of the node first */
-	if (of_property_read_bool(node, "input"))
-		type = GPIO_TYPE_INPUT;
-	else if (of_property_read_bool(node, "output"))
-		type = GPIO_TYPE_OUTPUT;
-	else {
+	if (of_property_read_bool(node, "input")) {
+		gpio_flags = GPIOD_IN;
+		if (of_property_read_bool(node, "count-falling-edge"))
+			irq_flags |= IRQF_TRIGGER_FALLING;
+		if (of_property_read_bool(node, "count-rising-edge"))
+			irq_flags |= IRQF_TRIGGER_RISING;
+	} else if (of_property_read_bool(node, "output")) {
+		if (of_property_read_bool(node, "init-high"))
+			gpio_flags = GPIOD_OUT_HIGH;
+		else if (of_property_read_bool(node, "init-low"))
+			gpio_flags = GPIOD_OUT_LOW;
+		else {
+			dev_err(dev, "Initial gpio state not specified\n");
+			return -EINVAL;
+		}
+	} else {
 		dev_err(dev, "Not valid gpio node type\n");
-		err = -EINVAL;
-		goto err_bad_node;
+		return -EINVAL;
 	}
 
-	/* get the name */
-	err = of_property_read_string(node, "gpio-name", &name);
-	if (err != 0) {
-		dev_err(dev, "Failed to get name property\n");
-		goto err_bad_node;
+	entry->desc = devm_gpiod_get_from_of_node(dev, node, "gpio", 0,
+		gpio_flags, entry->name);
+	if (IS_ERR(entry->desc)) {
+		err = PTR_ERR(entry->desc);
+		if (err != -EPROBE_DEFER)
+			dev_err(dev, "Failed to get gpio property of '%s' %d\n",
+				entry->name, err);
+		return err;
 	}
-
-	err = of_get_named_gpio_flags(node, "gpio", 0, &gpio_flags);
-	if (IS_ERR_VALUE(err)) {
-		dev_err(dev, "Failed to get gpio property of '%s'\n", name);
-		goto err_bad_node;
-	}
-	gpio = err;
-
-	if (!gpio_is_valid(gpio)) {
-		dev_err(dev, "Skipping unavailable gpio %ld (%s)\n",
-		         gpio, name);
-		goto err_bad_node;
-	}
-
-	req_flags = 0;
-	count_flags = 0;
-
-	/* set the request flags */
-	switch (type) {
-		case GPIO_TYPE_INPUT:
-			req_flags = GPIOF_DIR_IN;
-			if (of_property_read_bool(node, "count-falling-edge"))
-				count_flags |= COUNT_FALLING_EDGE;
-			if (of_property_read_bool(node, "count-rising-edge"))
-				count_flags |= COUNT_RISING_EDGE;
-			break;
-		case GPIO_TYPE_OUTPUT:
-			req_flags = GPIOF_DIR_OUT;
-			if (of_property_read_bool(node, "init-high"))
-				req_flags |= GPIOF_OUT_INIT_HIGH;
-			else if (of_property_read_bool(node, "init-low"))
-				req_flags |= GPIOF_OUT_INIT_LOW;
-			break;
-	}
-	if (gpio_flags)
-		req_flags |= GPIOF_ACTIVE_LOW;
-
-	/* request the gpio */
-	err = devm_gpio_request_one(dev, gpio, req_flags, name);
-	if (err != 0) {
-		dev_err(dev, "Failed to request gpio '%s'\n", name);
-		goto err_bad_node;
-	}
-
-	gpio_export(gpio, 0);
-	gpio_export_link(dev, name, gpio);
-
-	irq = -1;
-	irq_flags = 0;
 
 	/* counter mode requested - need an interrupt */
-	if (count_flags != 0) {
-		irq = gpio_to_irq(gpio);
-		if (IS_ERR_VALUE(irq)) {
-			dev_err(dev, "Failed to request gpio '%s'\n", name);
-			goto err_bad_node;
+	if (irq_flags) {
+		entry->irq = gpiod_to_irq(entry->desc);
+		if (entry->irq < 0) {
+			dev_err(dev, "Failed to request gpio '%s' %d\n",
+				entry->name, entry->irq);
+			return entry->irq;
 		}
 
-		if (count_flags & COUNT_RISING_EDGE)
-			irq_flags |= IRQF_TRIGGER_RISING;
-		if (count_flags & COUNT_FALLING_EDGE)
-			irq_flags |= IRQF_TRIGGER_FALLING;
-	}
-
-	entry = devm_kzalloc(dev, sizeof(*entry), GFP_KERNEL);
-	if (entry == NULL) {
-		dev_err(dev, "Failed to allocate gpio entry of '%s'\n", name);
-		err = -ENOMEM;
-		goto err_no_mem;
-	}
-
-	entry->id = -1;
-	entry->info = info;
-	entry->node = of_node_get(node); /* get node reference */
-	entry->type = type;
-	entry->gpio = gpio;
-	entry->gpio_flags = gpio_flags;
-	entry->irq = irq;
-	entry->name = name;
-
-	idr_preload(GFP_KERNEL);
-	spin_lock(&gpio_of_helper_lock);
-	err = idr_alloc(&gpio_of_helper_idr, entry, 0, 0, GFP_NOWAIT);
-	if (err >= 0)
-		entry->id = err;
-	spin_unlock(&gpio_of_helper_lock);
-	idr_preload_end();
-	if (err < 0) {
-		dev_err(dev, "Failed to idr_get_new  of '%s'\n", name);
-		goto err_fail_idr;
-	}
-
-	/* interrupt enable is last thing done */
-	if (irq >= 0) {
-		atomic64_set(&entry->counter, 0);
-		entry->count_flags = count_flags;
-		err = devm_request_irq(dev, irq, gpio_of_helper_handler,
-				irq_flags, name, entry);
-		if (err != 0) {
-			dev_err(dev, "Failed to request irq of '%s'\n", name);
-			goto err_no_irq;
+		err = devm_request_irq(dev, entry->irq, gpio_of_helper_handler,
+				irq_flags, entry->name, entry);
+		if (err) {
+			dev_err(dev, "Failed to request irq of '%s' %d\n",
+				entry->name, err);
+			return err;
 		}
 	}
-
-	dev_info(dev, "Allocated GPIO id=%d\n", entry->id);
-
-	return entry;
-
-err_fail_idr:
-	/* nothing to do */
-err_no_irq:
-	/* release node ref */
-	of_node_put(node);
-	/* nothing else needs to be done, devres handles it */
-err_no_mem:
-err_bad_node:
-	return ERR_PTR(err);
-}
-
-static int gpio_of_entry_destroy(struct gpio_of_entry *entry)
-{
-	struct gpio_of_helper_info *info = entry->info;
-	struct platform_device *pdev = info->pdev;
-	struct device *dev = &pdev->dev;
-
-	dev_info(dev, "Destroying GPIO id=%d\n", entry->id);
-
-	/* remove from the IDR */
-	idr_remove(&info->idr, entry->id);
-
-	/* remove node ref */
-	of_node_put(entry->node);
-
-	/* free gpio */
-	devm_gpio_free(dev, entry->gpio);
-
-	/* gree irq */
-	if (entry->irq >= 0)
-		devm_free_irq(dev, entry->irq, entry);
-
-	/* and free */
-	devm_kfree(dev, entry);
 
 	return 0;
 }
@@ -301,20 +147,21 @@ static int gpio_of_entry_destroy(struct gpio_of_entry *entry)
 static int gpio_of_helper_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
-	struct gpio_of_helper_info *info;
-	struct gpio_of_entry *entry;
-	struct device_node *pnode = pdev->dev.of_node;
+	struct gpio_helper_info *info;
+	struct gpio_entry *entry;
+	struct device_node *pnode = dev->of_node;
 	struct device_node *cnode;
 	struct pinctrl *pinctrl;
+	unsigned i;
 	int err;
 
 	/* we only support OF */
-	if (pnode == NULL) {
-		dev_err(&pdev->dev, "No platform of_node!\n");
+	if (!pnode) {
+		dev_err(dev, "No platform of_node!\n");
 		return -ENODEV;
 	}
 
-	pinctrl = devm_pinctrl_get_select_default(&pdev->dev);
+	pinctrl = devm_pinctrl_get_select_default(dev);
 	if (IS_ERR(pinctrl)) {
 		/* special handling for probe defer */
 		if (PTR_ERR(pinctrl) == -EPROBE_DEFER)
@@ -324,58 +171,58 @@ static int gpio_of_helper_probe(struct platform_device *pdev)
 			"pins are not configured from the driver\n");
 	}
 
-	info = devm_kzalloc(&pdev->dev, sizeof(*info), GFP_KERNEL);
-	if (info == NULL) {
-		dev_err(&pdev->dev, "Failed to allocate info\n");
-		err = -ENOMEM;
-		goto err_no_mem;
-	}
-	platform_set_drvdata(pdev, info);
-	info->pdev = pdev;
+	info = devm_kzalloc(dev, sizeof(*info), GFP_KERNEL);
+	if (!info)
+		return -ENOMEM;
 
-	idr_init(&info->idr);
+	info->size = of_get_child_count(pnode);
+	info->gpios = devm_kzalloc(dev, sizeof(struct gpio_entry) * info->size,
+		GFP_KERNEL);
+	if (!info->gpios)
+		return -ENOMEM;
 
-	err = device_create_file(dev, &dev_attr_status);
-	if (err != 0) {
-		dev_err(dev, "Failed to create status sysfs attribute\n");
-		goto err_no_sysfs;
-	}
+	entry = info->gpios;
 
 	for_each_child_of_node(pnode, cnode) {
-
-		entry = gpio_of_entry_create(info, cnode);
-		if (IS_ERR_OR_NULL(entry)) {
-			dev_err(dev, "Failed to create gpio entry\n");
-			err = PTR_ERR(entry);
-			goto err_fail_entry;
+		err = gpio_of_entry_create(dev, cnode, entry);
+		if (err) {
+			if (err != -EPROBE_DEFER)
+				dev_err(dev, "Failed to create gpio entry %d\n", err);
+			return err;
 		}
+		++entry;
 	}
 
-	dev_info(&pdev->dev, "ready\n");
+	err = device_create_file(dev, &dev_attr_status);
+	if (err) {
+		dev_err(dev, "Failed to create status sysfs attribute\n");
+		return err;
+	}
+
+	for (i = 0; i < info->size; ++i) {
+		gpiod_export(info->gpios[i].desc, 0);
+		gpiod_export_link(dev, info->gpios[i].name, info->gpios[i].desc);
+	}
+
+	platform_set_drvdata(pdev, info);
+
+	dev_info(dev, "gpio_of_helper started\n");
 
 	return 0;
-err_fail_entry:
-	device_remove_file(&pdev->dev, &dev_attr_status);
-err_no_sysfs:
-err_no_mem:
-	return err;
 }
 
 static int gpio_of_helper_remove(struct platform_device *pdev)
 {
-	struct gpio_of_helper_info *info = platform_get_drvdata(pdev);
-	struct gpio_of_entry *entry;
-	int id;
+	struct device *dev = &pdev->dev;
+	struct gpio_helper_info *info = platform_get_drvdata(pdev);
+	unsigned i;
 
-	dev_info(&pdev->dev, "removing\n");
-
-	device_remove_file(&pdev->dev, &dev_attr_status);
-
-	id = 0;
-	idr_for_each_entry(&info->idr, entry, id) {
-		/* destroy each and every one */
-		gpio_of_entry_destroy(entry);
+	for (i = 0; i < info->size; ++i) {
+		gpiod_unexport(info->gpios[i].desc);
+		sysfs_remove_link(&dev->kobj, info->gpios[i].name);
 	}
+
+	device_remove_file(dev, &dev_attr_status);
 
 	return 0;
 }
@@ -415,7 +262,7 @@ struct platform_driver gpio_of_helper_driver = {
 
 module_platform_driver(gpio_of_helper_driver);
 
-MODULE_AUTHOR("Pantelis Antoniou <panto@antoniou-consulting.com>");
+MODULE_AUTHOR("Boris Krasnovskiy <boris.krasnovskiy@lairdconnect.com>");
 MODULE_DESCRIPTION("GPIO OF Helper driver");
 MODULE_LICENSE("GPL");
 MODULE_ALIAS("platform:gpio-of-helper");
