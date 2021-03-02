@@ -19,6 +19,8 @@
 #include <linux/errno.h>
 #include <linux/interrupt.h>
 #include <linux/irq.h>
+#include <linux/dma-mapping.h>
+#include <linux/dma-direction.h>
 #include <linux/dmaengine.h>
 #include <linux/of_device.h>
 #include <linux/delay.h>
@@ -31,8 +33,6 @@
 #include <crypto/internal/aead.h>
 #include <crypto/hash.h>
 #include <crypto/internal/hash.h>
-#include <linux/platform_data/crypto-atmel.h>
-#include <dt-bindings/dma/at91.h>
 
 #include "atmel-aes-regs.h"
 #include "atmel-authenc.h"
@@ -83,14 +83,9 @@
 #define ATMEL_AES_DMA_THRESHOLD 256
 #define ATMEL_AES_SYNC_THRESHOLD 64
 
-#define ATMEL_CRYPTO_ALG_FLAGS_SYNC (CRYPTO_ALG_KERN_DRIVER_ONLY)
-
-#define ATMEL_CRYPTO_ALG_FLAGS_ASYNC (CRYPTO_ALG_ASYNC | CRYPTO_ALG_KERN_DRIVER_ONLY)
-
 struct atmel_aes_caps {
 	bool			has_dualbuff;
 	bool			has_cfb64;
-	bool			has_ctr32;
 	bool			has_gcm;
 	bool			has_xts;
 	bool			has_authenc;
@@ -130,7 +125,7 @@ struct atmel_aes_cmac_ctx {
 	bool			has_key;
 };
 
-#ifdef CONFIG_CRYPTO_DEV_ATMEL_AUTHENC
+#if IS_ENABLED(CONFIG_CRYPTO_DEV_ATMEL_AUTHENC)
 struct atmel_aes_authenc_ctx {
 	struct atmel_aes_base_ctx	base;
 	struct atmel_sha_authenc_ctx	*auth;
@@ -145,7 +140,7 @@ struct atmel_aes_reqctx {
 struct atmel_aes_ctr_reqctx {
 	struct atmel_aes_reqctx	base;
 
-	u32			iv[AES_BLOCK_SIZE / sizeof(u32)];
+	__be32			iv[AES_BLOCK_SIZE / sizeof(u32)];
 	size_t			offset;
 	size_t			cryptlen;
 	struct scatterlist	*rsrc;
@@ -160,13 +155,13 @@ struct atmel_aes_gcm_reqctx {
 	struct scatterlist	src[2];
 	struct scatterlist	dst[2];
 
-	u32			j0[AES_BLOCK_SIZE / sizeof(u32)];
+	__be32			j0[AES_BLOCK_SIZE / sizeof(u32)];
 	u32			tag[AES_BLOCK_SIZE / sizeof(u32)];
-	u32			ghash[AES_BLOCK_SIZE / sizeof(u32)];
+	__be32			ghash[AES_BLOCK_SIZE / sizeof(u32)];
 	size_t			textlen;
 
-	const u32		*ghash_in;
-	u32			*ghash_out;
+	const __be32		*ghash_in;
+	__be32			*ghash_out;
 	atmel_aes_fn_t		ghash_resume;
 };
 
@@ -192,7 +187,7 @@ struct atmel_aes_ccm_reqctx {
 	size_t sglen;
 };
 
-#ifdef CONFIG_CRYPTO_DEV_ATMEL_AUTHENC
+#if IS_ENABLED(CONFIG_CRYPTO_DEV_ATMEL_AUTHENC)
 struct atmel_aes_authenc_reqctx {
 	struct atmel_aes_reqctx	base;
 
@@ -423,13 +418,13 @@ static void atmel_aes_write_n(struct atmel_aes_dev *dd, u32 offset,
 }
 
 static inline void atmel_aes_read_block(struct atmel_aes_dev *dd, u32 offset,
-					u32 *value)
+					void *value)
 {
 	atmel_aes_read_n(dd, offset, value, SIZE_IN_WORDS(AES_BLOCK_SIZE));
 }
 
 static inline void atmel_aes_write_block(struct atmel_aes_dev *dd, u32 offset,
-					 const u32 *value)
+					 const void *value)
 {
 	atmel_aes_write_n(dd, offset, value, SIZE_IN_WORDS(AES_BLOCK_SIZE));
 }
@@ -515,13 +510,13 @@ static inline bool atmel_aes_is_encrypt(const struct atmel_aes_dev *dd)
 	return (dd->flags & AES_FLAGS_ENCRYPT);
 }
 
-#ifdef CONFIG_CRYPTO_DEV_ATMEL_AUTHENC
+#if IS_ENABLED(CONFIG_CRYPTO_DEV_ATMEL_AUTHENC)
 static void atmel_aes_authenc_complete(struct atmel_aes_dev *dd, int err);
 #endif
 
 static int atmel_aes_complete(struct atmel_aes_dev *dd, int err)
 {
-#ifdef CONFIG_CRYPTO_DEV_ATMEL_AUTHENC
+#if IS_ENABLED(CONFIG_CRYPTO_DEV_ATMEL_AUTHENC)
 	if (dd->ctx->is_aead)
 		atmel_aes_authenc_complete(dd, err);
 #endif
@@ -536,7 +531,7 @@ static int atmel_aes_complete(struct atmel_aes_dev *dd, int err)
 }
 
 static void atmel_aes_write_ctrl_key(struct atmel_aes_dev *dd, bool use_dma,
-				     const u32 *iv, const u32 *key, int keylen)
+				     const __be32 *iv, const u32 *key, int keylen)
 {
 	u32 valmr = 0;
 
@@ -565,7 +560,7 @@ static void atmel_aes_write_ctrl_key(struct atmel_aes_dev *dd, bool use_dma,
 	if (iv && (valmr & AES_MR_OPMOD_MASK) != AES_MR_OPMOD_ECB) {
 		/* Perform 4 byte alignment for iv if needed */
 		if ((unsigned long)iv & 3) {
-			u32 ivbuf[AES_BLOCK_SIZE / sizeof(u32)];
+			__be32 ivbuf[AES_BLOCK_SIZE / sizeof(u32)];
 			memcpy(ivbuf, iv, AES_BLOCK_SIZE);
 
 			atmel_aes_write_block(dd, AES_IVR(0), ivbuf);
@@ -575,7 +570,8 @@ static void atmel_aes_write_ctrl_key(struct atmel_aes_dev *dd, bool use_dma,
 }
 
 static inline void atmel_aes_write_ctrl(struct atmel_aes_dev *dd, bool use_dma,
-					void *iv)
+					const __be32 *iv)
+
 {
 	atmel_aes_write_ctrl_key(dd, use_dma, iv,
 				 dd->ctx->key, dd->ctx->keylen);
@@ -782,7 +778,7 @@ static void atmel_aes_unmap(struct atmel_aes_dev *dd)
 	} else {
 		if (dd->dst.sg != NULL) {
 			dma_unmap_sg(dd->dev, dd->dst.sg, dd->dst.nents,
-					 DMA_FROM_DEVICE);
+				     DMA_FROM_DEVICE);
 
 			if (dd->dst.sg != &dd->aligned_sg)
 				atmel_aes_restore_sg(&dd->dst);
@@ -812,7 +808,6 @@ static int atmel_aes_dma_transfer_start(struct atmel_aes_dev *dd,
 	int err;
 
 	memset(&config, 0, sizeof(config));
-	config.direction = dir;
 	config.src_addr_width = addr_width;
 	config.dst_addr_width = addr_width;
 	config.src_maxburst = maxburst;
@@ -1064,67 +1059,54 @@ static inline int atmel_aes_handle_queue(struct crypto_async_request *new_areq)
 		atmel_aes_handle_queue_async(new_areq);
 }
 
-/* AES async block ciphers */
-
-static int atmel_aes_bc_transfer_complete(struct atmel_aes_dev *dd)
+static int atmel_aes_transfer_complete(struct atmel_aes_dev *dd)
 {
 	struct skcipher_request *req = skcipher_request_cast(dd->areq);
 	struct atmel_aes_reqctx *rctx = skcipher_request_ctx(req);
+	unsigned int lastlen;
 
-	if (rctx->mode & AES_FLAGS_ENCRYPT) {
-		unsigned lbtail = req->cryptlen & (AES_BLOCK_SIZE - 1);
-		unsigned lboff = req->cryptlen - lbtail;
-
-		if (!lbtail)
+	switch (rctx->mode & AES_FLAGS_OPMODE_MASK) {
+	case AES_FLAGS_CBC:
+		if (rctx->mode & AES_FLAGS_ENCRYPT) {
 			scatterwalk_map_and_copy(req->iv, req->dst,
-				lboff - AES_BLOCK_SIZE, AES_BLOCK_SIZE, 0);
-		else
-			memcpy(req->iv, dd->buf + lboff, AES_BLOCK_SIZE);
-	} else if (req->src == req->dst)
-		memcpy(req->iv, rctx->lastc, AES_BLOCK_SIZE);
-	else {
-		unsigned lbtail = req->cryptlen & (AES_BLOCK_SIZE - 1);
+				req->cryptlen - AES_BLOCK_SIZE, 
+				AES_BLOCK_SIZE, 0);
+		} else {
+			if (req->src == req->dst)
+				memcpy(req->iv, rctx->lastc, AES_BLOCK_SIZE);
+			else
+				scatterwalk_map_and_copy(req->iv, req->src,
+					req->cryptlen - AES_BLOCK_SIZE,
+					AES_BLOCK_SIZE, 0);
+		}
+		break;
 
-		if (lbtail)
-			memset(req->iv + lbtail, 0, AES_BLOCK_SIZE - lbtail);
-		else
-			lbtail = AES_BLOCK_SIZE;
+	case AES_FLAGS_CFB128:
+		lastlen = req->cryptlen / AES_BLOCK_SIZE;
+		if (lastlen) {
+			if (req->src == req->dst)
+				memcpy(req->iv, rctx->lastc, AES_BLOCK_SIZE);
+			else
+				scatterwalk_map_and_copy(req->iv, req->src,
+					(lastlen - 1) * AES_BLOCK_SIZE,
+					AES_BLOCK_SIZE, 0);
+		}
+		break;
 
-		scatterwalk_map_and_copy(req->iv, req->src,
-			req->cryptlen - lbtail, lbtail, 0);
+	case AES_FLAGS_OFB:
+		lastlen = req->cryptlen % AES_BLOCK_SIZE;
+		if (!lastlen)
+			lastlen = AES_BLOCK_SIZE;
+		scatterwalk_map_and_copy(req->iv, req->dst,
+					req->cryptlen - lastlen, lastlen, 0);
+		crypto_xor(req->iv, (u8*)rctx->lastc, lastlen);
+		break;
+
+	default:
+		break;
 	}
 
 	return atmel_aes_complete(dd, 0);
-}
-
-static int atmel_aes_transfer_complete(struct atmel_aes_dev *dd)
-{
-	return atmel_aes_complete(dd, 0);
-}
-
-static int atmel_aes_bc_start(struct atmel_aes_dev *dd)
-{
-	struct skcipher_request *req = skcipher_request_cast(dd->areq);
-	struct atmel_aes_reqctx *rctx = skcipher_request_ctx(req);
-
-	bool use_dma = (req->cryptlen >= ATMEL_AES_DMA_THRESHOLD ||
-			dd->ctx->block_size != AES_BLOCK_SIZE);
-
-	dd->force_sync = atmel_aes.sync_mode ||
-		(req->cryptlen <= ATMEL_AES_SYNC_THRESHOLD);
-
-	atmel_aes_set_mode(dd, rctx);
-
-	atmel_aes_hw_init(dd);
-
-	atmel_aes_write_ctrl(dd, use_dma, req->iv);
-
-	if (use_dma)
-		return atmel_aes_dma_start(dd, req->src, req->dst,
-			req->cryptlen, atmel_aes_bc_transfer_complete);
-	else
-		return atmel_aes_cpu_start(dd, req->src, req->dst,
-			req->cryptlen, atmel_aes_bc_transfer_complete);
 }
 
 static int atmel_aes_start(struct atmel_aes_dev *dd)
@@ -1141,14 +1123,14 @@ static int atmel_aes_start(struct atmel_aes_dev *dd)
 
 	atmel_aes_hw_init(dd);
 
-	atmel_aes_write_ctrl(dd, use_dma, req->iv);
+	atmel_aes_write_ctrl(dd, use_dma, (void*)req->iv);
 
 	if (use_dma)
-		return atmel_aes_dma_start(dd, req->src, req->dst,
-			req->cryptlen, atmel_aes_transfer_complete);
-	else
-		return atmel_aes_cpu_start(dd, req->src, req->dst,
-			req->cryptlen, atmel_aes_transfer_complete);
+		return atmel_aes_dma_start(dd, req->src, req->dst, req->cryptlen,
+					   atmel_aes_transfer_complete);
+
+	return atmel_aes_cpu_start(dd, req->src, req->dst, req->cryptlen,
+				   atmel_aes_transfer_complete);
 }
 
 static int atmel_aes_ccm_ctr_transfer_complete(struct atmel_aes_dev *dd);
@@ -1159,8 +1141,8 @@ static int atmel_aes_ctr_transfer(struct atmel_aes_dev *dd)
 	struct scatterlist *src, *dst;
 	u8* iv;
 	size_t datalen;
-	u32 ctr, blocks;
-	bool use_dma, fragmented = false;
+	u32 ctr, blocks, max_blocks;
+	bool use_dma;
 
 	if (dd->ctx->is_aead) {
 		struct aead_request *req = aead_request_cast(dd->areq);
@@ -1189,27 +1171,16 @@ static int atmel_aes_ctr_transfer(struct atmel_aes_dev *dd)
 	datalen -= rctx->offset;
 	blocks = DIV_ROUND_UP(datalen, AES_BLOCK_SIZE);
 	ctr = be32_to_cpu(rctx->iv[3]);
-	if (dd->caps.has_ctr32) {
-		/* Check 32bit counter overflow. */
-		u32 start = ctr;
-		u32 end = start + blocks - 1;
 
-		if (end < start) {
-			ctr = 0xffffffff;
-			datalen = AES_BLOCK_SIZE * -start;
-			fragmented = true;
-		}
-	} else {
-		/* Check 16bit counter overflow. */
-		u16 start = ctr & 0xffff;
-		u16 end = start + (u16)blocks - 1;
-
-		if (blocks >> 16 || end < start) {
-			ctr |= 0xffff;
-			datalen = AES_BLOCK_SIZE * (0x10000 - start);
-			fragmented = !(ctr + 1);
-		}
+	/* Calculate number of blocks, before 16bit counter overflow. */
+	max_blocks = 0x10000 - (ctr & 0xffff);
+	if (blocks > max_blocks) {
+		blocks = max_blocks;
+		datalen = AES_BLOCK_SIZE * blocks;
 	}
+
+	/* Calculate counter for the next iteration */
+	ctr += blocks;
 
 	use_dma = (datalen >= ATMEL_AES_DMA_THRESHOLD);
 
@@ -1223,30 +1194,24 @@ static int atmel_aes_ctr_transfer(struct atmel_aes_dev *dd)
 
 	/* Configure hardware. */
 	atmel_aes_write_ctrl(dd, use_dma, rctx->iv);
-	if (unlikely(fragmented)) {
+
+	/* Update counter value in IV */
+	if (unlikely(!ctr)) {
 		/*
-		 * Increment the counter manually to cope with the hardware
-		 * counter overflow
+		 * Increment the counter manually with the 32 bit
+		 * counter overflow.
 		 */
-		rctx->iv[3] = cpu_to_be32(ctr);
+		rctx->iv[3] = 0xffffffff;
 		crypto_inc((u8 *)rctx->iv, AES_BLOCK_SIZE);
-	} else {
-		/* Update the counter for the next crypto operation */
-		ctr += blocks;
-		if (ctr)
-			rctx->iv[3] = cpu_to_be32(ctr);
-		else {
-			rctx->iv[3] = cpu_to_be32(ctr - 1);
-			crypto_inc((u8 *)rctx->iv, AES_BLOCK_SIZE);
-		}
-	}
+	} else
+		rctx->iv[3] = cpu_to_be32(ctr);
 
 	if (use_dma)
 		return atmel_aes_dma_start(dd, src, dst, datalen,
 					   atmel_aes_ctr_transfer);
-	else
-		return atmel_aes_cpu_start(dd, src, dst, datalen,
-					   atmel_aes_ctr_transfer);
+
+	return atmel_aes_cpu_start(dd, src, dst, datalen,
+				   atmel_aes_ctr_transfer);
 }
 
 static int atmel_aes_ctr_start(struct atmel_aes_dev *dd)
@@ -1278,31 +1243,47 @@ static int atmel_aes_ctr_start(struct atmel_aes_dev *dd)
 	return atmel_aes_ctr_transfer(dd);
 }
 
-static int atmel_aes_bc_crypt(struct skcipher_request *req, unsigned long mode)
-{
-	struct atmel_aes_reqctx *rctx = skcipher_request_ctx(req);
-
-	rctx->mode = mode;
-
-	if (!(mode & AES_FLAGS_ENCRYPT) && (req->src == req->dst)) {
-		unsigned lbtail = req->cryptlen & (AES_BLOCK_SIZE - 1);
-		if (lbtail)
-			memset(rctx->lastc + lbtail, 0, AES_BLOCK_SIZE - lbtail);
-		else
-			lbtail = AES_BLOCK_SIZE;
-
-		scatterwalk_map_and_copy(rctx->lastc, req->src,
-			req->cryptlen - lbtail, lbtail, 0);
-	}
-
-	return atmel_aes_handle_queue(&req->base);
-}
-
 static int atmel_aes_crypt(struct skcipher_request *req, unsigned long mode)
 {
 	struct atmel_aes_reqctx *rctx = skcipher_request_ctx(req);
+	struct crypto_skcipher *tfm = crypto_skcipher_reqtfm(req);
+	unsigned int lastlen;
+
+	if (!req->cryptlen)
+		return 0;
+
+	if (!IS_ALIGNED(req->cryptlen, crypto_skcipher_blocksize(tfm)))
+		return -EINVAL;
 
 	rctx->mode = mode;
+
+	switch (mode & AES_FLAGS_OPMODE_MASK) {
+	case AES_FLAGS_CBC:
+		if (!(mode & AES_FLAGS_ENCRYPT) && req->src == req->dst)
+			scatterwalk_map_and_copy(rctx->lastc, req->src,
+				req->cryptlen - AES_BLOCK_SIZE,
+				AES_BLOCK_SIZE, 0);
+		break;
+
+	case AES_FLAGS_CFB128:
+		lastlen = req->cryptlen / AES_BLOCK_SIZE;
+		if (lastlen && req->src == req->dst)
+			scatterwalk_map_and_copy(rctx->lastc, req->src,
+				(lastlen - 1) * AES_BLOCK_SIZE,
+				AES_BLOCK_SIZE, 0);
+		break;
+
+	case AES_FLAGS_OFB:
+		lastlen = req->cryptlen % AES_BLOCK_SIZE;
+		if (!lastlen)
+			lastlen = AES_BLOCK_SIZE;
+		scatterwalk_map_and_copy(rctx->lastc, req->src,
+			req->cryptlen - lastlen, lastlen, 0);
+		break;
+
+	default:
+		break;
+	}
 
 	return atmel_aes_handle_queue(&req->base);
 }
@@ -1314,10 +1295,8 @@ static int atmel_aes_setkey(struct crypto_skcipher *tfm, const u8 *key,
 
 	if (keylen != AES_KEYSIZE_128 &&
 	    keylen != AES_KEYSIZE_192 &&
-	    keylen != AES_KEYSIZE_256) {
-		crypto_skcipher_set_flags(tfm, CRYPTO_TFM_RES_BAD_KEY_LEN);
+	    keylen != AES_KEYSIZE_256)
 		return -EINVAL;
-	}
 
 	memcpy(ctx->key, key, keylen);
 	ctx->keylen = keylen;
@@ -1337,72 +1316,72 @@ static int atmel_aes_ecb_decrypt(struct skcipher_request *req)
 
 static int atmel_aes_cbc_encrypt(struct skcipher_request *req)
 {
-	return atmel_aes_bc_crypt(req, AES_FLAGS_CBC | AES_FLAGS_ENCRYPT);
+	return atmel_aes_crypt(req, AES_FLAGS_CBC | AES_FLAGS_ENCRYPT);
 }
 
 static int atmel_aes_cbc_decrypt(struct skcipher_request *req)
 {
-	return atmel_aes_bc_crypt(req, AES_FLAGS_CBC);
+	return atmel_aes_crypt(req, AES_FLAGS_CBC);
 }
 
 static int atmel_aes_ofb_encrypt(struct skcipher_request *req)
 {
-	return atmel_aes_bc_crypt(req, AES_FLAGS_OFB | AES_FLAGS_ENCRYPT);
+	return atmel_aes_crypt(req, AES_FLAGS_OFB | AES_FLAGS_ENCRYPT);
 }
 
 static int atmel_aes_ofb_decrypt(struct skcipher_request *req)
 {
-	return atmel_aes_bc_crypt(req, AES_FLAGS_OFB);
+	return atmel_aes_crypt(req, AES_FLAGS_OFB);
 }
 
 static int atmel_aes_cfb_encrypt(struct skcipher_request *req)
 {
-	return atmel_aes_bc_crypt(req, AES_FLAGS_CFB128 | AES_FLAGS_ENCRYPT);
+	return atmel_aes_crypt(req, AES_FLAGS_CFB128 | AES_FLAGS_ENCRYPT);
 }
 
 static int atmel_aes_cfb_decrypt(struct skcipher_request *req)
 {
-	return atmel_aes_bc_crypt(req, AES_FLAGS_CFB128);
+	return atmel_aes_crypt(req, AES_FLAGS_CFB128);
 }
 
 static int atmel_aes_cfb64_encrypt(struct skcipher_request *req)
 {
-	return atmel_aes_bc_crypt(req, AES_FLAGS_CFB64 | AES_FLAGS_ENCRYPT);
+	return atmel_aes_crypt(req, AES_FLAGS_CFB64 | AES_FLAGS_ENCRYPT);
 }
 
 static int atmel_aes_cfb64_decrypt(struct skcipher_request *req)
 {
-	return atmel_aes_bc_crypt(req, AES_FLAGS_CFB64);
+	return atmel_aes_crypt(req, AES_FLAGS_CFB64);
 }
 
 static int atmel_aes_cfb32_encrypt(struct skcipher_request *req)
 {
-	return atmel_aes_bc_crypt(req, AES_FLAGS_CFB32 | AES_FLAGS_ENCRYPT);
+	return atmel_aes_crypt(req, AES_FLAGS_CFB32 | AES_FLAGS_ENCRYPT);
 }
 
 static int atmel_aes_cfb32_decrypt(struct skcipher_request *req)
 {
-	return atmel_aes_bc_crypt(req, AES_FLAGS_CFB32);
+	return atmel_aes_crypt(req, AES_FLAGS_CFB32);
 }
 
 static int atmel_aes_cfb16_encrypt(struct skcipher_request *req)
 {
-	return atmel_aes_bc_crypt(req, AES_FLAGS_CFB16 | AES_FLAGS_ENCRYPT);
+	return atmel_aes_crypt(req, AES_FLAGS_CFB16 | AES_FLAGS_ENCRYPT);
 }
 
 static int atmel_aes_cfb16_decrypt(struct skcipher_request *req)
 {
-	return atmel_aes_bc_crypt(req, AES_FLAGS_CFB16);
+	return atmel_aes_crypt(req, AES_FLAGS_CFB16);
 }
 
 static int atmel_aes_cfb8_encrypt(struct skcipher_request *req)
 {
-	return atmel_aes_bc_crypt(req, AES_FLAGS_CFB8 | AES_FLAGS_ENCRYPT);
+	return atmel_aes_crypt(req, AES_FLAGS_CFB8 | AES_FLAGS_ENCRYPT);
 }
 
 static int atmel_aes_cfb8_decrypt(struct skcipher_request *req)
 {
-	return atmel_aes_bc_crypt(req, AES_FLAGS_CFB8);
+	return atmel_aes_crypt(req, AES_FLAGS_CFB8);
 }
 
 static int atmel_aes_ctr_encrypt(struct skcipher_request *req)
@@ -1415,1061 +1394,172 @@ static int atmel_aes_ctr_decrypt(struct skcipher_request *req)
 	return atmel_aes_crypt(req, AES_FLAGS_CTR);
 }
 
-static int atmel_aes_cra_init(struct crypto_tfm *tfm)
+static int atmel_aes_init_tfm(struct crypto_skcipher *tfm)
 {
-	struct atmel_aes_base_ctx *ctx = crypto_tfm_ctx(tfm);
+	struct atmel_aes_ctx *ctx = crypto_skcipher_ctx(tfm);
 
-	ctx->start = atmel_aes_start;
-	ctx->block_size = AES_BLOCK_SIZE;
-	ctx->is_aead = false;
-
-	crypto_skcipher_set_reqsize(__crypto_skcipher_cast(tfm),
-		sizeof(struct atmel_aes_reqctx));
+	crypto_skcipher_set_reqsize(tfm, sizeof(struct atmel_aes_reqctx));
+	ctx->base.start = atmel_aes_start;
+	ctx->base.block_size = crypto_skcipher_chunksize(tfm);
+	ctx->base.is_aead = false;
 
 	return 0;
 }
 
-static int atmel_aes_bc_cra_init(struct crypto_tfm *tfm)
+static int atmel_aes_ctr_init_tfm(struct crypto_skcipher *tfm)
 {
-	struct atmel_aes_base_ctx *ctx = crypto_tfm_ctx(tfm);
+	struct atmel_aes_ctx *ctx = crypto_skcipher_ctx(tfm);
 
-	ctx->start = atmel_aes_bc_start;
-	ctx->block_size = crypto_tfm_alg_blocksize(tfm);
-	ctx->is_aead = false;
-
-	crypto_skcipher_set_reqsize(__crypto_skcipher_cast(tfm),
-		sizeof(struct atmel_aes_reqctx));
+	crypto_skcipher_set_reqsize(tfm, sizeof(struct atmel_aes_ctr_reqctx));
+	ctx->base.start = atmel_aes_ctr_start;
+	ctx->base.block_size = crypto_skcipher_chunksize(tfm);
+	ctx->base.is_aead = false;
 
 	return 0;
 }
 
-static int atmel_aes_ctr_cra_init(struct crypto_tfm *tfm)
+static struct skcipher_alg aes_algs[] = {
 {
-	struct atmel_aes_base_ctx *ctx = crypto_tfm_ctx(tfm);
+	.base.cra_name		= "ecb(aes)",
+	.base.cra_driver_name	= "atmel-ecb-aes",
+	.base.cra_blocksize	= AES_BLOCK_SIZE,
+	.base.cra_ctxsize	= sizeof(struct atmel_aes_ctx),
 
-	ctx->start = atmel_aes_ctr_start;
-	ctx->block_size = AES_BLOCK_SIZE;
-	ctx->is_aead = false;
-
-	crypto_skcipher_set_reqsize(__crypto_skcipher_cast(tfm),
-		sizeof(struct atmel_aes_ctr_reqctx));
-
-	return 0;
-}
-
-/* xts functions */
-
-static inline struct atmel_aes_xts_ctx *
-atmel_aes_xts_ctx_cast(struct atmel_aes_base_ctx *ctx)
-{
-	return container_of(ctx, struct atmel_aes_xts_ctx, base);
-}
-
-static int atmel_aes_xts_process_data(struct atmel_aes_dev *dd);
-
-static int atmel_aes_xts_start(struct atmel_aes_dev *dd)
-{
-	struct atmel_aes_xts_ctx *ctx = atmel_aes_xts_ctx_cast(dd->ctx);
-	struct skcipher_request *req = skcipher_request_cast(dd->areq);
-	struct atmel_aes_reqctx *rctx = skcipher_request_ctx(req);
-	unsigned long flags;
-
-	atmel_aes_set_mode(dd, rctx);
-
-	atmel_aes_hw_init(dd);
-
-	/* Compute the tweak value from req->info with ecb(aes). */
-	flags = dd->flags;
-	dd->flags &= ~AES_FLAGS_MODE_MASK;
-	dd->flags |= (AES_FLAGS_ECB | AES_FLAGS_ENCRYPT);
-	atmel_aes_write_ctrl_key(dd, false, NULL,
-				 ctx->key2, ctx->base.keylen);
-	dd->flags = flags;
-
-	atmel_aes_write_block(dd, AES_IDATAR(0), (u32*)req->iv);
-	return atmel_aes_wait_for_data_ready(dd, atmel_aes_xts_process_data);
-}
-
-static int atmel_aes_xts_process_data(struct atmel_aes_dev *dd)
-{
-	struct skcipher_request *req = skcipher_request_cast(dd->areq);
-	bool use_dma = (req->cryptlen >= ATMEL_AES_DMA_THRESHOLD);
-	u32 tweak[AES_BLOCK_SIZE / sizeof(u32)];
-	static const u32 one[AES_BLOCK_SIZE / sizeof(u32)] = {cpu_to_le32(1), };
-	u8 *tweak_bytes = (u8 *)tweak;
-	int i;
-
-	/* Read the computed ciphered tweak value. */
-	atmel_aes_read_block(dd, AES_ODATAR(0), tweak);
-	/*
-	 * Hardware quirk:
-	 * the order of the ciphered tweak bytes need to be reversed before
-	 * writing them into the ODATARx registers.
-	 */
-	for (i = 0; i < AES_BLOCK_SIZE/2; ++i) {
-		u8 tmp = tweak_bytes[AES_BLOCK_SIZE - 1 - i];
-
-		tweak_bytes[AES_BLOCK_SIZE - 1 - i] = tweak_bytes[i];
-		tweak_bytes[i] = tmp;
-	}
-
-	/* Process the data. */
-	atmel_aes_write_ctrl(dd, use_dma, NULL);
-	atmel_aes_write_block(dd, AES_TWR(0), tweak);
-	atmel_aes_write_block(dd, AES_ALPHAR(0), one);
-	if (use_dma)
-		return atmel_aes_dma_start(dd, req->src, req->dst, req->cryptlen,
-					   atmel_aes_transfer_complete);
-
-	return atmel_aes_cpu_start(dd, req->src, req->dst, req->cryptlen,
-				   atmel_aes_transfer_complete);
-}
-
-static int atmel_aes_xts_setkey(struct crypto_skcipher *tfm, const u8 *key,
-				unsigned int keylen)
-{
-	struct atmel_aes_xts_ctx *ctx = crypto_skcipher_ctx(tfm);
-	int err;
-
-	err = xts_check_key(crypto_skcipher_tfm(tfm), key, keylen);
-	if (err)
-		return err;
-
-	memcpy(ctx->base.key, key, keylen/2);
-	memcpy(ctx->key2, key + keylen/2, keylen/2);
-	ctx->base.keylen = keylen/2;
-
-	return 0;
-}
-
-static int atmel_aes_xts_encrypt(struct skcipher_request *req)
-{
-	return atmel_aes_crypt(req, AES_FLAGS_XTS | AES_FLAGS_ENCRYPT);
-}
-
-static int atmel_aes_xts_decrypt(struct skcipher_request *req)
-{
-	return atmel_aes_crypt(req, AES_FLAGS_XTS);
-}
-
-static int atmel_aes_xts_cra_init(struct crypto_tfm *tfm)
-{
-	struct atmel_aes_base_ctx *ctx = crypto_tfm_ctx(tfm);
-
-	ctx->start = atmel_aes_xts_start;
-	ctx->block_size = crypto_tfm_alg_blocksize(tfm);
-	ctx->is_aead = false;
-
-	crypto_skcipher_set_reqsize(__crypto_skcipher_cast(tfm),
-		sizeof(struct atmel_aes_reqctx));
-
-	return 0;
-}
-
-static struct skcipher_alg skcipher_aes_algs[] = {
-{
-	.min_keysize	= AES_MIN_KEY_SIZE,
-	.max_keysize	= AES_MAX_KEY_SIZE,
-	.setkey		= atmel_aes_setkey,
-	.encrypt	= atmel_aes_ecb_encrypt,
-	.decrypt	= atmel_aes_ecb_decrypt,
-	.base = {
-		.cra_name		= "ecb(aes)",
-		.cra_driver_name	= "atmel-ecb-aes",
-		.cra_priority		= ATMEL_AES_PRIORITY,
-		.cra_flags		= ATMEL_CRYPTO_ALG_FLAGS_ASYNC,
-		.cra_blocksize		= AES_BLOCK_SIZE,
-		.cra_ctxsize		= sizeof(struct atmel_aes_ctx),
-		.cra_alignmask		= 0,
-		.cra_module		= THIS_MODULE,
-		.cra_init		= atmel_aes_cra_init,
-	}
+	.init			= atmel_aes_init_tfm,
+	.min_keysize		= AES_MIN_KEY_SIZE,
+	.max_keysize		= AES_MAX_KEY_SIZE,
+	.setkey			= atmel_aes_setkey,
+	.encrypt		= atmel_aes_ecb_encrypt,
+	.decrypt		= atmel_aes_ecb_decrypt,
 },
 {
-	.min_keysize	= AES_MIN_KEY_SIZE,
-	.max_keysize	= AES_MAX_KEY_SIZE,
-	.ivsize		= AES_BLOCK_SIZE,
-	.setkey		= atmel_aes_setkey,
-	.encrypt	= atmel_aes_cbc_encrypt,
-	.decrypt	= atmel_aes_cbc_decrypt,
-	.base = {
-		.cra_name		= "cbc(aes)",
-		.cra_driver_name	= "atmel-cbc-aes",
-		.cra_priority		= ATMEL_AES_PRIORITY,
-		.cra_flags		= ATMEL_CRYPTO_ALG_FLAGS_ASYNC,
-		.cra_blocksize		= AES_BLOCK_SIZE,
-		.cra_ctxsize		= sizeof(struct atmel_aes_ctx),
-		.cra_alignmask		= 0,
-		.cra_module		= THIS_MODULE,
-		.cra_init		= atmel_aes_bc_cra_init,
-	}
+	.base.cra_name		= "cbc(aes)",
+	.base.cra_driver_name	= "atmel-cbc-aes",
+	.base.cra_blocksize	= AES_BLOCK_SIZE,
+	.base.cra_ctxsize	= sizeof(struct atmel_aes_ctx),
+
+	.init			= atmel_aes_init_tfm,
+	.min_keysize		= AES_MIN_KEY_SIZE,
+	.max_keysize		= AES_MAX_KEY_SIZE,
+	.setkey			= atmel_aes_setkey,
+	.encrypt		= atmel_aes_cbc_encrypt,
+	.decrypt		= atmel_aes_cbc_decrypt,
+	.ivsize			= AES_BLOCK_SIZE,
 },
 {
-	.min_keysize	= AES_MIN_KEY_SIZE,
-	.max_keysize	= AES_MAX_KEY_SIZE,
-	.ivsize		= AES_BLOCK_SIZE,
-	.setkey		= atmel_aes_setkey,
-	.encrypt	= atmel_aes_ofb_encrypt,
-	.decrypt	= atmel_aes_ofb_decrypt,
-	.base = {
-		.cra_name		= "ofb(aes)",
-		.cra_driver_name	= "atmel-ofb-aes",
-		.cra_priority		= ATMEL_AES_PRIORITY,
-		.cra_flags		= ATMEL_CRYPTO_ALG_FLAGS_ASYNC,
-		.cra_blocksize		= AES_BLOCK_SIZE,
-		.cra_ctxsize		= sizeof(struct atmel_aes_ctx),
-		.cra_alignmask		= 0,
-		.cra_module		= THIS_MODULE,
-		.cra_init		= atmel_aes_bc_cra_init,
-	}
+	.base.cra_name		= "ofb(aes)",
+	.base.cra_driver_name	= "atmel-ofb-aes",
+	.base.cra_blocksize	= 1,
+	.base.cra_ctxsize	= sizeof(struct atmel_aes_ctx),
+
+	.init			= atmel_aes_init_tfm,
+	.min_keysize		= AES_MIN_KEY_SIZE,
+	.max_keysize		= AES_MAX_KEY_SIZE,
+	.setkey			= atmel_aes_setkey,
+	.encrypt		= atmel_aes_ofb_encrypt,
+	.decrypt		= atmel_aes_ofb_decrypt,
+	.ivsize			= AES_BLOCK_SIZE,
+	.chunksize		= AES_BLOCK_SIZE,
 },
 {
-	.min_keysize	= AES_MIN_KEY_SIZE,
-	.max_keysize	= AES_MAX_KEY_SIZE,
-	.ivsize		= AES_BLOCK_SIZE,
-	.setkey		= atmel_aes_setkey,
-	.encrypt	= atmel_aes_cfb_encrypt,
-	.decrypt	= atmel_aes_cfb_decrypt,
-	.base = {
-		.cra_name		= "cfb(aes)",
-		.cra_driver_name	= "atmel-cfb-aes",
-		.cra_priority		= ATMEL_AES_PRIORITY,
-		.cra_flags		= ATMEL_CRYPTO_ALG_FLAGS_ASYNC,
-		.cra_blocksize		= AES_BLOCK_SIZE,
-		.cra_ctxsize		= sizeof(struct atmel_aes_ctx),
-		.cra_alignmask		= 0,
-		.cra_module		= THIS_MODULE,
-		.cra_init		= atmel_aes_bc_cra_init,
-	}
+	.base.cra_name		= "cfb(aes)",
+	.base.cra_driver_name	= "atmel-cfb-aes",
+	.base.cra_blocksize	= 1,
+	.base.cra_ctxsize	= sizeof(struct atmel_aes_ctx),
+
+	.init			= atmel_aes_init_tfm,
+	.min_keysize		= AES_MIN_KEY_SIZE,
+	.max_keysize		= AES_MAX_KEY_SIZE,
+	.setkey			= atmel_aes_setkey,
+	.encrypt		= atmel_aes_cfb_encrypt,
+	.decrypt		= atmel_aes_cfb_decrypt,
+	.ivsize			= AES_BLOCK_SIZE,
+	.chunksize		= AES_BLOCK_SIZE,
 },
 {
-	.min_keysize	= AES_MIN_KEY_SIZE,
-	.max_keysize	= AES_MAX_KEY_SIZE,
-	.ivsize		= AES_BLOCK_SIZE,
-	.setkey		= atmel_aes_setkey,
-	.encrypt	= atmel_aes_cfb32_encrypt,
-	.decrypt	= atmel_aes_cfb32_decrypt,
-	.base = {
-		.cra_name		= "cfb32(aes)",
-		.cra_driver_name	= "atmel-cfb32-aes",
-		.cra_priority		= ATMEL_AES_PRIORITY,
-		.cra_flags		= ATMEL_CRYPTO_ALG_FLAGS_ASYNC,
-		.cra_blocksize		= CFB32_BLOCK_SIZE,
-		.cra_ctxsize		= sizeof(struct atmel_aes_ctx),
-		.cra_alignmask		= 0,
-		.cra_module		= THIS_MODULE,
-		.cra_init		= atmel_aes_bc_cra_init,
-	}
+	.base.cra_name		= "cfb32(aes)",
+	.base.cra_driver_name	= "atmel-cfb32-aes",
+	.base.cra_blocksize	= 1,
+	.base.cra_ctxsize	= sizeof(struct atmel_aes_ctx),
+
+	.init			= atmel_aes_init_tfm,
+	.min_keysize		= AES_MIN_KEY_SIZE,
+	.max_keysize		= AES_MAX_KEY_SIZE,
+	.setkey			= atmel_aes_setkey,
+	.encrypt		= atmel_aes_cfb32_encrypt,
+	.decrypt		= atmel_aes_cfb32_decrypt,
+	.ivsize			= AES_BLOCK_SIZE,
+	.chunksize		= CFB32_BLOCK_SIZE,
 },
 {
-	.min_keysize	= AES_MIN_KEY_SIZE,
-	.max_keysize	= AES_MAX_KEY_SIZE,
-	.ivsize		= AES_BLOCK_SIZE,
-	.setkey		= atmel_aes_setkey,
-	.encrypt	= atmel_aes_cfb16_encrypt,
-	.decrypt	= atmel_aes_cfb16_decrypt,
-	.base = {
-		.cra_name		= "cfb16(aes)",
-		.cra_driver_name	= "atmel-cfb16-aes",
-		.cra_priority		= ATMEL_AES_PRIORITY,
-		.cra_flags		= ATMEL_CRYPTO_ALG_FLAGS_ASYNC,
-		.cra_blocksize		= CFB16_BLOCK_SIZE,
-		.cra_ctxsize		= sizeof(struct atmel_aes_ctx),
-		.cra_alignmask		= 0,
-		.cra_module		= THIS_MODULE,
-		.cra_init		= atmel_aes_bc_cra_init,
-	}
+	.base.cra_name		= "cfb16(aes)",
+	.base.cra_driver_name	= "atmel-cfb16-aes",
+	.base.cra_blocksize	= 1,
+	.base.cra_ctxsize	= sizeof(struct atmel_aes_ctx),
+
+	.init			= atmel_aes_init_tfm,
+	.min_keysize		= AES_MIN_KEY_SIZE,
+	.max_keysize		= AES_MAX_KEY_SIZE,
+	.setkey			= atmel_aes_setkey,
+	.encrypt		= atmel_aes_cfb16_encrypt,
+	.decrypt		= atmel_aes_cfb16_decrypt,
+	.ivsize			= AES_BLOCK_SIZE,
+	.chunksize		= CFB16_BLOCK_SIZE,
 },
 {
-	.min_keysize	= AES_MIN_KEY_SIZE,
-	.max_keysize	= AES_MAX_KEY_SIZE,
-	.ivsize		= AES_BLOCK_SIZE,
-	.setkey		= atmel_aes_setkey,
-	.encrypt	= atmel_aes_cfb8_encrypt,
-	.decrypt	= atmel_aes_cfb8_decrypt,
-	.base = {
-		.cra_name		= "cfb8(aes)",
-		.cra_driver_name	= "atmel-cfb8-aes",
-		.cra_priority		= ATMEL_AES_PRIORITY,
-		.cra_flags		= ATMEL_CRYPTO_ALG_FLAGS_ASYNC,
-		.cra_blocksize		= CFB8_BLOCK_SIZE,
-		.cra_ctxsize		= sizeof(struct atmel_aes_ctx),
-		.cra_alignmask		= 0,
-		.cra_module		= THIS_MODULE,
-		.cra_init		= atmel_aes_bc_cra_init,
-	}
+	.base.cra_name		= "cfb8(aes)",
+	.base.cra_driver_name	= "atmel-cfb8-aes",
+	.base.cra_blocksize	= 1,
+	.base.cra_ctxsize	= sizeof(struct atmel_aes_ctx),
+
+	.init			= atmel_aes_init_tfm,
+	.min_keysize		= AES_MIN_KEY_SIZE,
+	.max_keysize		= AES_MAX_KEY_SIZE,
+	.setkey			= atmel_aes_setkey,
+	.encrypt		= atmel_aes_cfb8_encrypt,
+	.decrypt		= atmel_aes_cfb8_decrypt,
+	.ivsize			= AES_BLOCK_SIZE,
+	.chunksize		= CFB8_BLOCK_SIZE,
 },
 {
-	.min_keysize	= AES_MIN_KEY_SIZE,
-	.max_keysize	= AES_MAX_KEY_SIZE,
-	.ivsize		= AES_BLOCK_SIZE,
-	.chunksize	= AES_BLOCK_SIZE,
-	.setkey		= atmel_aes_setkey,
-	.encrypt	= atmel_aes_ctr_encrypt,
-	.decrypt	= atmel_aes_ctr_decrypt,
-	.base = {
-		.cra_name		= "ctr(aes)",
-		.cra_driver_name	= "atmel-ctr-aes",
-		.cra_priority		= ATMEL_AES_PRIORITY,
-		.cra_flags		= ATMEL_CRYPTO_ALG_FLAGS_ASYNC,
-		.cra_blocksize		= 1,
-		.cra_ctxsize		= sizeof(struct atmel_aes_ctx),
-		.cra_alignmask		= 0,
-		.cra_module		= THIS_MODULE,
-		.cra_init		= atmel_aes_ctr_cra_init,
-	}
-},
-{
-	.min_keysize	= AES_MIN_KEY_SIZE,
-	.max_keysize	= AES_MAX_KEY_SIZE,
-	.ivsize		= AES_BLOCK_SIZE,
-	.setkey		= atmel_aes_setkey,
-	.encrypt	= atmel_aes_cfb64_encrypt,
-	.decrypt	= atmel_aes_cfb64_decrypt,
-	.base = {
-		.cra_name		= "cfb64(aes)",
-		.cra_driver_name	= "atmel-cfb64-aes",
-		.cra_priority		= ATMEL_AES_PRIORITY,
-		.cra_flags		= ATMEL_CRYPTO_ALG_FLAGS_ASYNC,
-		.cra_blocksize		= CFB64_BLOCK_SIZE,
-		.cra_ctxsize		= sizeof(struct atmel_aes_ctx),
-		.cra_alignmask		= 0,
-		.cra_module		= THIS_MODULE,
-		.cra_init		= atmel_aes_bc_cra_init,
-	}
-},
-{
-	.min_keysize	= 2 * AES_MIN_KEY_SIZE,
-	.max_keysize	= 2 * AES_MAX_KEY_SIZE,
-	.ivsize		= AES_BLOCK_SIZE,
-	.setkey		= atmel_aes_xts_setkey,
-	.encrypt	= atmel_aes_xts_encrypt,
-	.decrypt	= atmel_aes_xts_decrypt,
-	.base = {
-		.cra_name		= "xts(aes)",
-		.cra_driver_name	= "atmel-xts-aes",
-		.cra_priority		= ATMEL_AES_PRIORITY,
-		.cra_flags		= ATMEL_CRYPTO_ALG_FLAGS_ASYNC,
-		.cra_blocksize		= AES_BLOCK_SIZE,
-		.cra_ctxsize		= sizeof(struct atmel_aes_xts_ctx),
-		.cra_alignmask		= 0,
-		.cra_module		= THIS_MODULE,
-		.cra_init		= atmel_aes_xts_cra_init,
-	}
+	.base.cra_name		= "ctr(aes)",
+	.base.cra_driver_name	= "atmel-ctr-aes",
+	.base.cra_blocksize	= 1,
+	.base.cra_ctxsize	= sizeof(struct atmel_aes_ctx),
+
+	.init			= atmel_aes_ctr_init_tfm,
+	.min_keysize		= AES_MIN_KEY_SIZE,
+	.max_keysize		= AES_MAX_KEY_SIZE,
+	.setkey			= atmel_aes_setkey,
+	.encrypt		= atmel_aes_ctr_encrypt,
+	.decrypt		= atmel_aes_ctr_decrypt,
+	.ivsize			= AES_BLOCK_SIZE,
+	.chunksize		= AES_BLOCK_SIZE,
 },
 };
 
-static int atmel_aes_cbcmac_do_start(struct atmel_aes_dev *dd,
-	struct scatterlist *src, u32 cryptlen, u32 *iv, atmel_aes_fn_t resume)
-{
-	bool use_dma = (cryptlen >= ATMEL_AES_DMA_THRESHOLD);
-
-	dd->force_sync = atmel_aes.sync_mode ||
-		(cryptlen <= ATMEL_AES_SYNC_THRESHOLD);
-
-	dd->flags = (dd->flags & AES_FLAGS_PERSISTENT) |
-		AES_FLAGS_CBCMAC | AES_FLAGS_ENCRYPT;
-
-	atmel_aes_hw_init(dd);
-	atmel_aes_write_ctrl(dd, use_dma, iv);
-
-	return use_dma ?
-		atmel_aes_dma_start(dd, src, NULL, cryptlen, resume) :
-		atmel_aes_cpu_start(dd, src, NULL, cryptlen, resume);
-}
-
-static int atmel_aes_cbcmac_transfer_complete(struct atmel_aes_dev *dd)
-{
-	struct ahash_request *req = ahash_request_cast(dd->areq);
-	struct atmel_aes_mac_reqctx *rctx = ahash_request_ctx(req);
-
-	atmel_aes_read_block(dd, AES_ODATAR(0), rctx->base.lastc);
-
-	if (!rctx->is_final) {
-		size_t reqlen = dd->total - rctx->residue_len;
-		size_t remlen = req->nbytes - reqlen;
-
-		rctx->residue_len = sg_pcopy_to_buffer(req->src,
-			sg_nents(req->src), rctx->residue, remlen, reqlen);
-	} else if (req->result)
-		memcpy(req->result, rctx->base.lastc, AES_BLOCK_SIZE);
-
-	return atmel_aes_complete(dd, 0);
-}
-
-static int atmel_aes_cbcmac_start(struct atmel_aes_dev *dd)
-{
-	struct ahash_request *req = ahash_request_cast(dd->areq);
-	struct atmel_aes_mac_reqctx *rctx = ahash_request_ctx(req);
-
-	struct scatterlist *sg = req->src;
-	size_t datalen = rctx->residue_len + req->nbytes;
-
-	if (!rctx->is_final) {
-		datalen &= ~(AES_BLOCK_SIZE - 1);
-	} else if (!rctx->is_finup)
-		datalen = rctx->residue_len;
-
-	if (rctx->residue_len) {
-		sg = rctx->sg;
-		if (datalen > rctx->residue_len) {
-			sg_init_table(sg, 2);
-			sg_chain(sg, 2, req->src);
-		} else
-			sg_init_table(sg, 1);
-
-		sg_set_buf(sg, rctx->residue, rctx->residue_len);
-	}
-
-	return atmel_aes_cbcmac_do_start(dd, sg, datalen, rctx->base.lastc,
-		atmel_aes_cbcmac_transfer_complete);
-}
-
-static int atmel_aes_cbcmac_cra_init(struct crypto_tfm *tfm)
-{
-	struct atmel_aes_base_ctx *ctx = crypto_tfm_ctx(tfm);
-
-	ctx->start = atmel_aes_cbcmac_start;
-	ctx->block_size = AES_BLOCK_SIZE;
-	ctx->is_aead = false;
-
-	crypto_ahash_set_reqsize(__crypto_ahash_cast(tfm),
-				 sizeof(struct atmel_aes_mac_reqctx));
-	return 0;
-}
-
-static int atmel_aes_cbcmac_init(struct ahash_request *req)
-{
-	struct atmel_aes_mac_reqctx *rctx = ahash_request_ctx(req);
-
-	memset(rctx, 0, sizeof(struct atmel_aes_mac_reqctx));
-
-	rctx->base.mode = AES_FLAGS_CBCMAC | AES_FLAGS_ENCRYPT;
-
-	return 0;
-}
-
-static int atmel_aes_cbcmac_update(struct ahash_request *req)
-{
-	struct atmel_aes_mac_reqctx *rctx = ahash_request_ctx(req);
-	size_t datalen = rctx->residue_len + req->nbytes;
-
-	if (datalen <= AES_BLOCK_SIZE) {
-		sg_copy_to_buffer(req->src, sg_nents(req->src),
-			(u8*)rctx->residue + rctx->residue_len,
-			req->nbytes);
-		rctx->residue_len = datalen;
-		return 0;
-	}
-
-	return atmel_aes_handle_queue(&req->base);
-}
-
-static int atmel_aes_cbcmac_final(struct ahash_request *req)
-{
-	struct atmel_aes_mac_reqctx *rctx = ahash_request_ctx(req);
-
-	rctx->is_final = true;
-
-	if (rctx->residue_len)
-		return atmel_aes_handle_queue(&req->base);
-
-	if (req->result)
-		memcpy(req->result, rctx->base.lastc, AES_BLOCK_SIZE);
-
-	return 0;
-}
-
-static int atmel_aes_cbcmac_finup(struct ahash_request *req)
-{
-	struct atmel_aes_mac_reqctx *rctx = ahash_request_ctx(req);
-
-	rctx->is_final = true;
-	rctx->is_finup = true;
-
-	if (rctx->residue_len || req->nbytes)
-		return atmel_aes_handle_queue(&req->base);
-
-	if (req->result)
-		memcpy(req->result, rctx->base.lastc, AES_BLOCK_SIZE);
-
-	return 0;
-}
-
-static int atmel_aes_cbcmac_digest(struct ahash_request *req)
-{
-	struct crypto_ahash *tfm = crypto_ahash_reqtfm(req);
-
-	return tfm->init(req) ?: tfm->finup(req);
-}
-
-static int atmel_aes_cbcmac_export(struct ahash_request *req, void *out)
-{
-	const struct atmel_aes_mac_reqctx *rctx = ahash_request_ctx(req);
-
-	memcpy(out, rctx, sizeof(*rctx));
-	return 0;
-}
-
-static int atmel_aes_cbcmac_import(struct ahash_request *req, const void *in)
-{
-	struct atmel_aes_mac_reqctx *rctx = ahash_request_ctx(req);
-
-	memcpy(rctx, in, sizeof(*rctx));
-	return 0;
-}
-
-static int atmel_aes_cbcmac_setkey(struct crypto_ahash *tfm, const u8 *key,
-			   unsigned int keylen)
-{
-	struct atmel_aes_base_ctx *ctx = crypto_ahash_ctx(tfm);
-
-	if (keylen != AES_KEYSIZE_128 &&
-	    keylen != AES_KEYSIZE_192 &&
-	    keylen != AES_KEYSIZE_256) {
-		crypto_ahash_set_flags(tfm, CRYPTO_TFM_RES_BAD_KEY_LEN);
-		return -EINVAL;
-	}
-
-	memcpy(ctx->key, key, keylen);
-	ctx->keylen = keylen;
-
-	return 0;
-}
-
-static void atmel_aes_cmac_kd(u32 *k1t, const u32 *lt)
-{
-    int i;
-    u8 *k1 = (u8*)k1t;
-    const u8 *l = (const u8*)lt;
-    u8 c = l[0], carry = c >> 7, cnext;
-
-    /* Shift block to left, including carry */
-    for (i = 0; i < AES_BLOCK_SIZE - 1; i++, c = cnext)
-        k1[i] = (c << 1) | ((cnext = l[i + 1]) >> 7);
-
-    /* If MSB set fixup with R */
-    k1[i] = (c << 1) ^ ((0 - carry) & 0x87);
-}
-
-static int atmel_aes_cmac_transfer_complete_final(struct atmel_aes_dev *dd)
-{
-	struct ahash_request *req = ahash_request_cast(dd->areq);
-	struct atmel_aes_mac_reqctx *rctx = ahash_request_ctx(req);
-
-	atmel_aes_read_block(dd, AES_ODATAR(0), rctx->base.lastc);
-
-	if (req->result)
-		memcpy(req->result, rctx->base.lastc, AES_BLOCK_SIZE);
-
-	return atmel_aes_complete(dd, 0);
-}
-
-static int atmel_aes_cmac_do_final(struct atmel_aes_dev *dd, bool do_init)
-{
-	struct ahash_request *req = ahash_request_cast(dd->areq);
-	struct atmel_aes_mac_reqctx *rctx = ahash_request_ctx(req);
-	struct atmel_aes_cmac_ctx *ctx = (struct atmel_aes_cmac_ctx *)dd->ctx;
-
-	size_t datalen = rctx->residue_len;
-	u8 *data = (u8*)rctx->residue;
-
-	if (datalen == AES_BLOCK_SIZE)
-		crypto_xor(data, (u8*)ctx->k1, AES_BLOCK_SIZE);
-	else {
-		data[datalen++] = 0x80;
-		if (datalen < AES_BLOCK_SIZE)
-		    memset(data + datalen, 0, AES_BLOCK_SIZE - datalen);
-		crypto_xor(data, (u8*)ctx->k2, AES_BLOCK_SIZE);
-	}
-
-	if (do_init) {
-		atmel_aes_set_mode(dd, &rctx->base);
-		atmel_aes_hw_init(dd);
-		atmel_aes_write_ctrl(dd, false, rctx->base.lastc);
-	}
-
-	dd->force_sync = true;
-
-	atmel_aes_write_block(dd, AES_IDATAR(0), (u32*)data);
-
-	return atmel_aes_wait_for_data_ready(dd,
-		atmel_aes_cmac_transfer_complete_final);
-}
-
-static int atmel_aes_cmac_transfer_complete(struct atmel_aes_dev *dd)
-{
-	struct ahash_request *req = ahash_request_cast(dd->areq);
-	struct atmel_aes_mac_reqctx *rctx = ahash_request_ctx(req);
-
-	size_t reqlen = dd->total - rctx->residue_len;
-	size_t remlen = req->nbytes - reqlen;
-
-	rctx->residue_len = sg_pcopy_to_buffer(req->src, sg_nents(req->src),
-		rctx->residue, remlen, reqlen);
-
-	if (rctx->is_final)
-		return atmel_aes_cmac_do_final(dd, false);
-
-	atmel_aes_read_block(dd, AES_ODATAR(0), rctx->base.lastc);
-	return atmel_aes_complete(dd, 0);
-}
-
-static int atmel_aes_cmac_start(struct atmel_aes_dev *dd);
-
-static int atmel_aes_cmac_transfer_complete_keys(struct atmel_aes_dev *dd)
-{
-	struct atmel_aes_cmac_ctx *ctx = (struct atmel_aes_cmac_ctx *)dd->ctx;
-
-	atmel_aes_read_block(dd, AES_ODATAR(0), ctx->bl);
-
-	atmel_aes_cmac_kd(ctx->k1, ctx->bl);
-	atmel_aes_cmac_kd(ctx->k2, ctx->k1);
-	ctx->has_key = true;
-
-	memset(ctx->bl, 0, AES_BLOCK_SIZE);
-
-	return atmel_aes_cmac_start(dd);
-}
-
-static int atmel_aes_cmac_keys_start(struct atmel_aes_dev *dd)
-{
-	struct atmel_aes_cmac_ctx *ctx = (struct atmel_aes_cmac_ctx *)dd->ctx;
-
-	dd->force_sync = true;
-
-	dd->flags &= ~AES_FLAGS_MODE_MASK;
-	dd->flags |= (AES_FLAGS_ECB | AES_FLAGS_ENCRYPT);
-
-	atmel_aes_hw_init(dd);
-	atmel_aes_write_ctrl(dd, false, NULL);
-
-	atmel_aes_write_block(dd, AES_IDATAR(0), ctx->bl);
-
-	return atmel_aes_wait_for_data_ready(dd,
-		atmel_aes_cmac_transfer_complete_keys);
-}
-
-static int atmel_aes_cmac_start(struct atmel_aes_dev *dd)
-{
-	struct ahash_request *req = ahash_request_cast(dd->areq);
-	struct atmel_aes_mac_reqctx *rctx = ahash_request_ctx(req);
-	struct atmel_aes_cmac_ctx *ctx = (struct atmel_aes_cmac_ctx *)dd->ctx;
-
-	struct scatterlist *sg = req->src;
-	size_t datalen;
-
-	if (!ctx->has_key)
-		return atmel_aes_cmac_keys_start(dd);
-
-	if (rctx->is_final && !rctx->is_finup)
-		return atmel_aes_cmac_do_final(dd, true);
-
-	if (rctx->residue_len) {
-		sg = rctx->sg;
-		sg_set_buf(sg, rctx->residue, rctx->residue_len);
-		sg_chain(sg, 2, req->src);
-	}
-
-	datalen = ALIGN((rctx->residue_len + req->nbytes), AES_BLOCK_SIZE) -
-		AES_BLOCK_SIZE;
-
-	return atmel_aes_cbcmac_do_start(dd, sg, datalen, rctx->base.lastc,
-		atmel_aes_cmac_transfer_complete);
-}
-
-static int atmel_aes_cmac_cra_init(struct crypto_tfm *tfm)
-{
-	struct atmel_aes_base_ctx *ctx = crypto_tfm_ctx(tfm);
-
-	ctx->start = atmel_aes_cmac_start;
-	ctx->block_size = AES_BLOCK_SIZE;
-	ctx->is_aead = false;
-
-	crypto_ahash_set_reqsize(__crypto_ahash_cast(tfm),
-				 sizeof(struct atmel_aes_mac_reqctx));
-
-	return 0;
-}
-
-static int atmel_aes_cmac_final(struct ahash_request *req)
-{
-	struct atmel_aes_mac_reqctx *rctx = ahash_request_ctx(req);
-
-	rctx->is_final = true;
-
-	return atmel_aes_handle_queue(&req->base);
-}
-
-static int atmel_aes_cmac_finup(struct ahash_request *req)
-{
-	struct atmel_aes_mac_reqctx *rctx = ahash_request_ctx(req);
-	size_t datalen = rctx->residue_len + req->nbytes;
-
-	if (datalen <= AES_BLOCK_SIZE) {
-		sg_copy_to_buffer(req->src, sg_nents(req->src),
-			(u8*)rctx->residue + rctx->residue_len,
-			req->nbytes);
-		rctx->residue_len = datalen;
-	} else
-		rctx->is_finup = true;
-
-	rctx->is_final = true;
-
-	return atmel_aes_handle_queue(&req->base);
-}
-
-static int atmel_aes_cmac_setkey(struct crypto_ahash *tfm, const u8 *key,
-			   unsigned int keylen)
-{
-	struct atmel_aes_cmac_ctx *ctx = crypto_ahash_ctx(tfm);
-
-	ctx->has_key = false;
-	memset(ctx->bl, 0, AES_BLOCK_SIZE);
-	memset(ctx->k1, 0, AES_BLOCK_SIZE);
-	memset(ctx->k2, 0, AES_BLOCK_SIZE);
-
-	return atmel_aes_cbcmac_setkey(tfm, key, keylen);;
-}
-
-
-static struct ahash_alg ahash_aes_algs[] = {
-{
-	.init		= atmel_aes_cbcmac_init,
-	.update		= atmel_aes_cbcmac_update,
-	.final		= atmel_aes_cbcmac_final,
-	.finup		= atmel_aes_cbcmac_finup,
-	.digest		= atmel_aes_cbcmac_digest,
-	.export		= atmel_aes_cbcmac_export,
-	.import		= atmel_aes_cbcmac_import,
-	.setkey		= atmel_aes_cbcmac_setkey,
-	.halg = {
-		.digestsize	= AES_BLOCK_SIZE,
-		.statesize	= sizeof(struct atmel_aes_mac_reqctx),
-		.base	= {
-			.cra_name	  = "cbcmac(aes)",
-			.cra_driver_name  = "atmel-cbcmac-aes",
-			.cra_priority	  = ATMEL_AES_PRIORITY,
-			.cra_flags	  = ATMEL_CRYPTO_ALG_FLAGS_ASYNC,
-			.cra_blocksize	  = 1,
-			.cra_ctxsize	  = sizeof(struct atmel_aes_ctx),
-			.cra_alignmask	  = 0,
-			.cra_module	  = THIS_MODULE,
-			.cra_init	  = atmel_aes_cbcmac_cra_init,
-		}
-	}
-},
-{
-	.init		= atmel_aes_cbcmac_init,
-	.update		= atmel_aes_cbcmac_update,
-	.final		= atmel_aes_cmac_final,
-	.finup		= atmel_aes_cmac_finup,
-	.digest		= atmel_aes_cbcmac_digest,
-	.export		= atmel_aes_cbcmac_export,
-	.import		= atmel_aes_cbcmac_import,
-	.setkey		= atmel_aes_cmac_setkey,
-	.halg = {
-		.digestsize	= AES_BLOCK_SIZE,
-		.statesize	= sizeof(struct atmel_aes_mac_reqctx),
-		.base	= {
-			.cra_name	  = "cmac(aes)",
-			.cra_driver_name  = "atmel-cmac-aes",
-			.cra_priority	  = ATMEL_AES_PRIORITY,
-			.cra_flags	  = ATMEL_CRYPTO_ALG_FLAGS_ASYNC,
-			.cra_blocksize	  = 1,
-			.cra_ctxsize	  = sizeof(struct atmel_aes_cmac_ctx),
-			.cra_alignmask	  = 0,
-			.cra_module	  = THIS_MODULE,
-			.cra_init	  = atmel_aes_cmac_cra_init,
-		}
-	}
-},
+static struct skcipher_alg aes_cfb64_alg = {
+	.base.cra_name		= "cfb64(aes)",
+	.base.cra_driver_name	= "atmel-cfb64-aes",
+	.base.cra_blocksize	= 1,
+	.base.cra_ctxsize	= sizeof(struct atmel_aes_ctx),
+
+	.init			= atmel_aes_init_tfm,
+	.min_keysize		= AES_MIN_KEY_SIZE,
+	.max_keysize		= AES_MAX_KEY_SIZE,
+	.setkey			= atmel_aes_setkey,
+	.encrypt		= atmel_aes_cfb64_encrypt,
+	.decrypt		= atmel_aes_cfb64_decrypt,
+	.ivsize			= AES_BLOCK_SIZE,
+	.chunksize		= CFB64_BLOCK_SIZE,
 };
 
-static int atmel_aes_ccm_set_msg_len(u8 *block, unsigned int msglen, int csize)
-{
-	__be32 data;
 
-	memset(block, 0, csize);
-	block += csize;
-
-	if (csize >= 4)
-		csize = 4;
-	else if (msglen > (1 << (8 * csize)))
-		return -EOVERFLOW;
-
-	data = cpu_to_be32(msglen);
-	memcpy(block - csize, (u8 *)&data + 4 - csize, csize);
-
-	return 0;
-}
-
-static int atmel_aes_ccm_format_input(u8 *info, struct aead_request *req,
-			unsigned int cryptlen)
-{
-	struct crypto_aead *aead = crypto_aead_reqtfm(req);
-	unsigned int lp = req->iv[0];
-	unsigned int l = lp + 1;
-	unsigned int m;
-
-	m = crypto_aead_authsize(aead);
-
-	memcpy(info, req->iv, AES_BLOCK_SIZE);
-
-	/* format control info per RFC 3610 and
-	 * NIST Special Publication 800-38C
-	 */
-	*info |= (8 * ((m - 2) / 2));
-	if (req->assoclen)
-		*info |= 64;
-
-	return atmel_aes_ccm_set_msg_len(info + 16 - l, cryptlen, l);
-}
-
-static size_t atmel_aes_ccm_format_adata(u8 *adata, unsigned int a)
-{
-	size_t len = 0;
-
-	/* add control info for associated data
-	 * RFC 3610 and NIST Special Publication 800-38C
-	 */
-	if (a < 65280) {
-		*(__be16 *)adata = cpu_to_be16(a);
-		len = 2;
-	} else  {
-		*(__be16 *)adata = cpu_to_be16(0xfffe);
-		*(__be32 *)&adata[2] = cpu_to_be32(a);
-		len = 6;
-	}
-
-	return len;
-}
-
-static inline int atmel_aes_ccm_check_iv(const u8 *iv)
-{
-	/* 2 <= L <= 8, so 1 <= L' <= 7. */
-	if (1 > iv[0] || iv[0] > 7)
-		return -EINVAL;
-
-	return 0;
-}
-
-static int atmel_aes_ccm_setauthsize(struct crypto_aead *tfm,
-	unsigned int authsize)
-{
-	switch (authsize) {
-	case 4:
-	case 6:
-	case 8:
-	case 10:
-	case 12:
-	case 14:
-	case 16:
-		break;
-	default:
-		return -EINVAL;
-	}
-
-	return 0;
-}
-
-static int atmel_aes_ccm_auth_transfer_complete2(struct atmel_aes_dev *dd)
-{
-	struct aead_request *req = aead_request_cast(dd->areq);
-	struct atmel_aes_ccm_reqctx *rctx = aead_request_ctx(req);
-
-	atmel_aes_read_block(dd, AES_ODATAR(0), rctx->odata);
-
-	if (rctx->ctr.base.mode & AES_FLAGS_ENCRYPT) {
-		return atmel_aes_ctr_start(dd);
-	} else {
-		struct crypto_aead *aead = crypto_aead_reqtfm(req);
-		int err = 0;
-
-		if (crypto_memneq(rctx->auth_tag, rctx->odata,
-			crypto_aead_authsize(aead)))
-			err = -EBADMSG;
-
-		return atmel_aes_complete(dd, err);
-	}
-}
-
-static int atmel_aes_ccm_auth_transfer_complete1(struct atmel_aes_dev *dd)
-{
-	struct aead_request *req = aead_request_cast(dd->areq);
-	struct atmel_aes_ccm_reqctx *rctx = aead_request_ctx(req);
-	struct scatterlist *sg;
-
-	if (rctx->ctr.cryptlen <= AES_BLOCK_SIZE)
-		return atmel_aes_ccm_auth_transfer_complete2(dd);
-
-	atmel_aes_read_block(dd, AES_ODATAR(0), rctx->odata);
-
-	sg = rctx->ctr.base.mode & AES_FLAGS_ENCRYPT ?
-		rctx->src : rctx->ctr.rdst;
-
-	return atmel_aes_cbcmac_do_start(dd, sg_next(sg),
-		rctx->ctr.cryptlen - AES_BLOCK_SIZE, rctx->odata,
-		atmel_aes_ccm_auth_transfer_complete2);
-}
-
-static int atmel_aes_ccm_auth(struct atmel_aes_dev *dd, size_t cryptlen)
-{
-	struct aead_request *req = aead_request_cast(dd->areq);
-	struct atmel_aes_ccm_reqctx *rctx = aead_request_ctx(req);
-	u32 iv[AES_BLOCK_SIZE /sizeof(u32)];
-
-	/* format control data for input */
-	int err = atmel_aes_ccm_format_input((u8*)rctx->odata, req, cryptlen);
-	if (err)
-		return err;
-
-	memset(iv, 0, AES_BLOCK_SIZE);
-
-	return atmel_aes_cbcmac_do_start(dd, rctx->sg, rctx->sglen, iv,
-		atmel_aes_ccm_auth_transfer_complete1);
-}
-
-static int atmel_aes_ccm_ctr_transfer_complete(struct atmel_aes_dev *dd)
-{
-	struct aead_request *req = aead_request_cast(dd->areq);
-	struct atmel_aes_ccm_reqctx *rctx = aead_request_ctx(req);
-	struct crypto_aead *aead = crypto_aead_reqtfm(req);
-	size_t authsize = crypto_aead_authsize(aead);
-
-	if (rctx->ctr.base.mode & AES_FLAGS_ENCRYPT) {
-		memcpy(req->iv, rctx->ctr.iv, AES_BLOCK_SIZE);
-		scatterwalk_map_and_copy(rctx->odata, sg_next(rctx->ctr.rdst),
-			req->cryptlen, authsize, 1);
-
-		return atmel_aes_complete(dd, 0);
-	} else
-		return atmel_aes_ccm_auth(dd, req->cryptlen - authsize);
-}
-
-static int atmel_aes_ccm_init_crypt(struct aead_request *req, u32 *tag)
-{
-	struct atmel_aes_ccm_reqctx *rctx = aead_request_ctx(req);
-	struct scatterlist *sg;
-	u8 *iv = req->iv;
-	int err;
-
-	err = atmel_aes_ccm_check_iv(iv);
-	if (err)
-		return err;
-
-	 /* Note: rfc 3610 and NIST 800-38C require counter of
-	 * zero to encrypt auth tag.
-	 */
-	memset(iv + 15 - iv[0], 0, iv[0] + 1);
-
-	sg_init_table(rctx->src, 3);
-	sg_set_buf(rctx->src, tag, AES_BLOCK_SIZE);
-	sg = scatterwalk_ffwd(rctx->src + 1, req->src, req->assoclen);
-	if (sg != rctx->src + 1)
-		sg_chain(rctx->src, 2, sg);
-
-	if (req->src != req->dst) {
-		sg_init_table(rctx->dst, 3);
-		sg_set_buf(rctx->dst, tag, AES_BLOCK_SIZE);
-		sg = scatterwalk_ffwd(rctx->dst + 1, req->dst, req->assoclen);
-		if (sg != rctx->dst + 1)
-			sg_chain(rctx->dst, 2, sg);
-	}
-
-	rctx->sglen = AES_BLOCK_SIZE;
-
-	/* format associated data and compute into mac */
-	if (req->assoclen) {
-		size_t ilen = atmel_aes_ccm_format_adata((u8*)rctx->idata,
-			req->assoclen);
-		rctx->sglen += req->assoclen + ilen;
-
-		sg_init_table(rctx->sg, 3);
-		sg_set_buf(rctx->sg + 1, rctx->idata, ilen);
-		sg_chain(rctx->sg, 3, req->src);
-	} else
-		sg_init_table(rctx->sg, 1);
-
-	sg_set_buf(rctx->sg, rctx->odata, AES_BLOCK_SIZE);
-	return 0;
-}
-
-static int atmel_aes_ccm_start(struct atmel_aes_dev *dd)
-{
-	struct aead_request *req = aead_request_cast(dd->areq);
-	struct atmel_aes_ccm_reqctx *rctx = aead_request_ctx(req);
-
-	if (rctx->ctr.base.mode & AES_FLAGS_ENCRYPT)
-		return atmel_aes_ccm_auth(dd, req->cryptlen);
-	else
-		return atmel_aes_ctr_start(dd);
-}
-
-static int atmel_aes_ccm_crypt(struct aead_request *req,
-			       unsigned long mode, size_t cryptlen)
-{
-	struct atmel_aes_ccm_reqctx *rctx = aead_request_ctx(req);
-
-	rctx->ctr.base.mode = mode;
-
-	rctx->ctr.rsrc = rctx->src;
-	rctx->ctr.rdst = req->src == req->dst ? rctx->src : rctx->dst;
-	rctx->ctr.cryptlen = cryptlen + AES_BLOCK_SIZE;
-
-	return atmel_aes_handle_queue(&req->base);
-}
-
-static int atmel_aes_ccm_encrypt(struct aead_request *req)
-{
-	struct atmel_aes_ccm_reqctx *rctx = aead_request_ctx(req);
-	int err;
-
-	err = atmel_aes_ccm_init_crypt(req, rctx->odata);
-	if (err)
-		return err;
-
-	return atmel_aes_ccm_crypt(req, AES_FLAGS_CTR | AES_FLAGS_ENCRYPT,
-		req->cryptlen);
-}
-
-static int atmel_aes_ccm_decrypt(struct aead_request *req)
-{
-	struct atmel_aes_ccm_reqctx *rctx = aead_request_ctx(req);
-	struct crypto_aead *aead = crypto_aead_reqtfm(req);
-
-	size_t authsize = crypto_aead_authsize(aead);
-	size_t cryptlen = req->cryptlen - authsize;
-
-	int err;
-
-	err = atmel_aes_ccm_init_crypt(req, rctx->auth_tag);
-	if (err)
-		return err;
-
-	scatterwalk_map_and_copy(rctx->auth_tag, sg_next(rctx->src), cryptlen,
-				 authsize, 0);
-
-	return atmel_aes_ccm_crypt(req, AES_FLAGS_CTR, cryptlen);
-}
-
-static int atmel_aes_ccm_init(struct crypto_aead *tfm)
-{
-	struct atmel_aes_base_ctx *ctx = crypto_aead_ctx(tfm);
-
-	ctx->start = atmel_aes_ccm_start;
-	ctx->block_size = AES_BLOCK_SIZE;
-	ctx->is_aead = true;
-
-	crypto_aead_set_reqsize(tfm, sizeof(struct atmel_aes_ccm_reqctx));
-
-	return 0;
-}
 /* gcm aead functions */
 
 static int atmel_aes_gcm_ghash(struct atmel_aes_dev *dd,
 			       const u32 *data, size_t datalen,
-			       const u32 *ghash_in, u32 *ghash_out,
+			       const __be32 *ghash_in, __be32 *ghash_out,
 			       atmel_aes_fn_t resume);
 static int atmel_aes_gcm_ghash_init(struct atmel_aes_dev *dd);
 static int atmel_aes_gcm_ghash_finalize(struct atmel_aes_dev *dd);
@@ -2484,7 +1574,7 @@ static int atmel_aes_gcm_finalize(struct atmel_aes_dev *dd);
 
 static int atmel_aes_gcm_ghash(struct atmel_aes_dev *dd,
 			       const u32 *data, size_t datalen,
-			       const u32 *ghash_in, u32 *ghash_out,
+			       const __be32 *ghash_in, __be32 *ghash_out,
 			       atmel_aes_fn_t resume)
 {
 	struct aead_request *req = aead_request_cast(dd->areq);
@@ -2568,7 +1658,7 @@ static int atmel_aes_gcm_start(struct atmel_aes_dev *dd)
 
 	memcpy(data, iv, ivsize);
 	memset(data + ivsize, 0, padlen + sizeof(u64));
-	((u64 *)(data + datalen))[-1] = cpu_to_be64(ivsize * 8);
+	((__be64 *)(data + datalen))[-1] = cpu_to_be64(ivsize * 8);
 
 	return atmel_aes_gcm_ghash(dd, (const u32 *)data, datalen,
 				   NULL, rctx->j0, atmel_aes_gcm_process);
@@ -2601,12 +1691,12 @@ static int atmel_aes_gcm_length(struct atmel_aes_dev *dd)
 {
 	struct aead_request *req = aead_request_cast(dd->areq);
 	struct atmel_aes_gcm_reqctx *rctx = aead_request_ctx(req);
-	u32 j0_lsw, *j0 = rctx->j0;
+	__be32 j0_lsw, *j0 = rctx->j0;
 	size_t padlen;
 
 	/* Write incr32(J0) into IV. */
 	j0_lsw = j0[3];
-	j0[3] = cpu_to_be32(be32_to_cpu(j0[3]) + 1);
+	be32_add_cpu(&j0[3], 1);
 	atmel_aes_write_block(dd, AES_IVR(0), j0);
 	j0[3] = j0_lsw;
 
@@ -2767,10 +1857,8 @@ static int atmel_aes_gcm_setkey(struct crypto_aead *tfm, const u8 *key,
 
 	if (keylen != AES_KEYSIZE_256 &&
 	    keylen != AES_KEYSIZE_192 &&
-	    keylen != AES_KEYSIZE_128) {
-		crypto_aead_set_flags(tfm, CRYPTO_TFM_RES_BAD_KEY_LEN);
+	    keylen != AES_KEYSIZE_128)
 		return -EINVAL;
-	}
 
 	memcpy(ctx->key, key, keylen);
 	ctx->keylen = keylen;
@@ -2781,21 +1869,7 @@ static int atmel_aes_gcm_setkey(struct crypto_aead *tfm, const u8 *key,
 static int atmel_aes_gcm_setauthsize(struct crypto_aead *tfm,
 				     unsigned int authsize)
 {
-	/* Same as crypto_gcm_authsize() from crypto/gcm.c */
-	switch (authsize) {
-	case 4:
-	case 8:
-	case 12:
-	case 13:
-	case 14:
-	case 15:
-	case 16:
-		break;
-	default:
-		return -EINVAL;
-	}
-
-	return 0;
+	return crypto_gcm_check_authsize(authsize);
 }
 
 static int atmel_aes_gcm_encrypt(struct aead_request *req)
@@ -2810,18 +1884,946 @@ static int atmel_aes_gcm_decrypt(struct aead_request *req)
 
 static int atmel_aes_gcm_init(struct crypto_aead *tfm)
 {
-	struct atmel_aes_base_ctx *ctx = crypto_aead_ctx(tfm);
-
-	ctx->start = atmel_aes_gcm_start;
-	ctx->block_size = AES_BLOCK_SIZE;
-	ctx->is_aead = true;
+	struct atmel_aes_ctx *ctx = crypto_aead_ctx(tfm);
 
 	crypto_aead_set_reqsize(tfm, sizeof(struct atmel_aes_gcm_reqctx));
+	ctx->base.start = atmel_aes_gcm_start;
+	ctx->base.is_aead = true;
 
 	return 0;
 }
 
-#ifdef CONFIG_CRYPTO_DEV_ATMEL_AUTHENC
+static struct aead_alg aes_gcm_alg = {
+	.setkey		= atmel_aes_gcm_setkey,
+	.setauthsize	= atmel_aes_gcm_setauthsize,
+	.encrypt	= atmel_aes_gcm_encrypt,
+	.decrypt	= atmel_aes_gcm_decrypt,
+	.init		= atmel_aes_gcm_init,
+	.ivsize		= GCM_AES_IV_SIZE,
+	.maxauthsize	= AES_BLOCK_SIZE,
+	.chunksize	= AES_BLOCK_SIZE,
+
+	.base = {
+		.cra_name		= "gcm(aes)",
+		.cra_driver_name	= "atmel-gcm-aes",
+		.cra_blocksize		= 1,
+		.cra_ctxsize		= sizeof(struct atmel_aes_ctx),
+	},
+};
+
+
+/* xts functions */
+
+static inline struct atmel_aes_xts_ctx *
+atmel_aes_xts_ctx_cast(struct atmel_aes_base_ctx *ctx)
+{
+	return container_of(ctx, struct atmel_aes_xts_ctx, base);
+}
+
+static int atmel_aes_xts_process_data(struct atmel_aes_dev *dd);
+
+static int atmel_aes_xts_start(struct atmel_aes_dev *dd)
+{
+	struct atmel_aes_xts_ctx *ctx = atmel_aes_xts_ctx_cast(dd->ctx);
+	struct skcipher_request *req = skcipher_request_cast(dd->areq);
+	struct atmel_aes_reqctx *rctx = skcipher_request_ctx(req);
+	unsigned long flags;
+
+	atmel_aes_set_mode(dd, rctx);
+
+	atmel_aes_hw_init(dd);
+
+	/* Compute the tweak value from req->info with ecb(aes). */
+	flags = dd->flags;
+	dd->flags &= ~AES_FLAGS_MODE_MASK;
+	dd->flags |= (AES_FLAGS_ECB | AES_FLAGS_ENCRYPT);
+	atmel_aes_write_ctrl_key(dd, false, NULL,
+				 ctx->key2, ctx->base.keylen);
+	dd->flags = flags;
+
+	atmel_aes_write_block(dd, AES_IDATAR(0), req->iv);
+	return atmel_aes_wait_for_data_ready(dd, atmel_aes_xts_process_data);
+}
+
+static int atmel_aes_xts_process_data(struct atmel_aes_dev *dd)
+{
+	struct skcipher_request *req = skcipher_request_cast(dd->areq);
+	bool use_dma = (req->cryptlen >= ATMEL_AES_DMA_THRESHOLD);
+	u32 tweak[AES_BLOCK_SIZE / sizeof(u32)];
+	static const __le32 one[AES_BLOCK_SIZE / sizeof(u32)] = {cpu_to_le32(1), };
+	u8 *tweak_bytes = (u8 *)tweak;
+	int i;
+
+	/* Read the computed ciphered tweak value. */
+	atmel_aes_read_block(dd, AES_ODATAR(0), tweak);
+	/*
+	 * Hardware quirk:
+	 * the order of the ciphered tweak bytes need to be reversed before
+	 * writing them into the ODATARx registers.
+	 */
+	for (i = 0; i < AES_BLOCK_SIZE/2; ++i) {
+		u8 tmp = tweak_bytes[AES_BLOCK_SIZE - 1 - i];
+
+		tweak_bytes[AES_BLOCK_SIZE - 1 - i] = tweak_bytes[i];
+		tweak_bytes[i] = tmp;
+	}
+
+	/* Process the data. */
+	atmel_aes_write_ctrl(dd, use_dma, NULL);
+	atmel_aes_write_block(dd, AES_TWR(0), tweak);
+	atmel_aes_write_block(dd, AES_ALPHAR(0), one);
+	if (use_dma)
+		return atmel_aes_dma_start(dd, req->src, req->dst,
+					   req->cryptlen,
+					   atmel_aes_transfer_complete);
+
+	return atmel_aes_cpu_start(dd, req->src, req->dst, req->cryptlen,
+				   atmel_aes_transfer_complete);
+}
+
+static int atmel_aes_xts_setkey(struct crypto_skcipher *tfm, const u8 *key,
+				unsigned int keylen)
+{
+	struct atmel_aes_xts_ctx *ctx = crypto_skcipher_ctx(tfm);
+	int err;
+
+	err = xts_check_key(crypto_skcipher_tfm(tfm), key, keylen);
+	if (err)
+		return err;
+
+	memcpy(ctx->base.key, key, keylen/2);
+	memcpy(ctx->key2, key + keylen/2, keylen/2);
+	ctx->base.keylen = keylen/2;
+
+	return 0;
+}
+
+static int atmel_aes_xts_encrypt(struct skcipher_request *req)
+{
+	return atmel_aes_crypt(req, AES_FLAGS_XTS | AES_FLAGS_ENCRYPT);
+}
+
+static int atmel_aes_xts_decrypt(struct skcipher_request *req)
+{
+	return atmel_aes_crypt(req, AES_FLAGS_XTS);
+}
+
+static int atmel_aes_xts_init_tfm(struct crypto_skcipher *tfm)
+{
+	struct atmel_aes_xts_ctx *ctx = crypto_skcipher_ctx(tfm);
+
+	crypto_skcipher_set_reqsize(tfm, sizeof(struct atmel_aes_reqctx));
+	ctx->base.start = atmel_aes_xts_start;
+	ctx->base.block_size = crypto_skcipher_blocksize(tfm);
+	ctx->base.is_aead = false;
+
+	return 0;
+}
+
+static struct skcipher_alg aes_xts_alg = {
+	.base.cra_name		= "xts(aes)",
+	.base.cra_driver_name	= "atmel-xts-aes",
+	.base.cra_blocksize	= AES_BLOCK_SIZE,
+	.base.cra_ctxsize	= sizeof(struct atmel_aes_xts_ctx),
+
+	.min_keysize		= 2 * AES_MIN_KEY_SIZE,
+	.max_keysize		= 2 * AES_MAX_KEY_SIZE,
+	.ivsize			= AES_BLOCK_SIZE,
+	.setkey			= atmel_aes_xts_setkey,
+	.encrypt		= atmel_aes_xts_encrypt,
+	.decrypt		= atmel_aes_xts_decrypt,
+	.init			= atmel_aes_xts_init_tfm,
+};
+
+static int atmel_aes_cbcmac_do_start(struct atmel_aes_dev *dd,
+	struct scatterlist *src, u32 cryptlen, u32 *iv, atmel_aes_fn_t resume)
+{
+	bool use_dma = (cryptlen >= ATMEL_AES_DMA_THRESHOLD);
+
+	dd->force_sync = atmel_aes.sync_mode ||
+		(cryptlen <= ATMEL_AES_SYNC_THRESHOLD);
+
+	dd->flags = (dd->flags & AES_FLAGS_PERSISTENT) |
+		AES_FLAGS_CBCMAC | AES_FLAGS_ENCRYPT;
+
+	atmel_aes_hw_init(dd);
+	atmel_aes_write_ctrl(dd, use_dma, iv);
+
+	return use_dma ?
+		atmel_aes_dma_start(dd, src, NULL, cryptlen, resume) :
+		atmel_aes_cpu_start(dd, src, NULL, cryptlen, resume);
+}
+
+static int atmel_aes_cbcmac_transfer_complete(struct atmel_aes_dev *dd)
+{
+	struct ahash_request *req = ahash_request_cast(dd->areq);
+	struct atmel_aes_mac_reqctx *rctx = ahash_request_ctx(req);
+
+	atmel_aes_read_block(dd, AES_ODATAR(0), rctx->base.lastc);
+
+	if (!rctx->is_final) {
+		size_t reqlen = dd->total - rctx->residue_len;
+		size_t remlen = req->nbytes - reqlen;
+
+		rctx->residue_len = sg_pcopy_to_buffer(req->src,
+			sg_nents(req->src), rctx->residue, remlen, reqlen);
+	} else if (req->result)
+		memcpy(req->result, rctx->base.lastc, AES_BLOCK_SIZE);
+
+	return atmel_aes_complete(dd, 0);
+}
+
+static int atmel_aes_cbcmac_start(struct atmel_aes_dev *dd)
+{
+	struct ahash_request *req = ahash_request_cast(dd->areq);
+	struct atmel_aes_mac_reqctx *rctx = ahash_request_ctx(req);
+
+	struct scatterlist *sg = req->src;
+	size_t datalen = rctx->residue_len + req->nbytes;
+
+	if (!rctx->is_final) {
+		datalen &= ~(AES_BLOCK_SIZE - 1);
+	} else if (!rctx->is_finup)
+		datalen = rctx->residue_len;
+
+	if (rctx->residue_len) {
+		sg = rctx->sg;
+		if (datalen > rctx->residue_len) {
+			sg_init_table(sg, 2);
+			sg_chain(sg, 2, req->src);
+		} else
+			sg_init_table(sg, 1);
+
+		sg_set_buf(sg, rctx->residue, rctx->residue_len);
+	}
+
+	return atmel_aes_cbcmac_do_start(dd, sg, datalen, rctx->base.lastc,
+		atmel_aes_cbcmac_transfer_complete);
+}
+
+static int atmel_aes_cbcmac_init_tfm(struct crypto_ahash *tfm)
+{
+	struct atmel_aes_base_ctx *ctx = crypto_tfm_ctx(crypto_ahash_tfm(tfm));
+
+	crypto_ahash_set_reqsize(tfm, sizeof(struct atmel_aes_mac_reqctx));
+	ctx->start = atmel_aes_cbcmac_start;
+	ctx->block_size = AES_BLOCK_SIZE;
+	ctx->is_aead = false;
+
+	return 0;
+}
+
+static int atmel_aes_cbcmac_init(struct ahash_request *req)
+{
+	struct atmel_aes_mac_reqctx *rctx = ahash_request_ctx(req);
+
+	memset(rctx, 0, sizeof(struct atmel_aes_mac_reqctx));
+
+	rctx->base.mode = AES_FLAGS_CBCMAC | AES_FLAGS_ENCRYPT;
+
+	return 0;
+}
+
+static int atmel_aes_cbcmac_update(struct ahash_request *req)
+{
+	struct atmel_aes_mac_reqctx *rctx = ahash_request_ctx(req);
+	size_t datalen = rctx->residue_len + req->nbytes;
+
+	if (datalen <= AES_BLOCK_SIZE) {
+		sg_copy_to_buffer(req->src, sg_nents(req->src),
+			(u8*)rctx->residue + rctx->residue_len,
+			req->nbytes);
+		rctx->residue_len = datalen;
+		return 0;
+	}
+
+	return atmel_aes_handle_queue(&req->base);
+}
+
+static int atmel_aes_cbcmac_final(struct ahash_request *req)
+{
+	struct atmel_aes_mac_reqctx *rctx = ahash_request_ctx(req);
+
+	rctx->is_final = true;
+
+	if (rctx->residue_len)
+		return atmel_aes_handle_queue(&req->base);
+
+	if (req->result)
+		memcpy(req->result, rctx->base.lastc, AES_BLOCK_SIZE);
+
+	return 0;
+}
+
+static int atmel_aes_cbcmac_finup(struct ahash_request *req)
+{
+	struct atmel_aes_mac_reqctx *rctx = ahash_request_ctx(req);
+
+	rctx->is_final = true;
+	rctx->is_finup = true;
+
+	if (rctx->residue_len || req->nbytes)
+		return atmel_aes_handle_queue(&req->base);
+
+	if (req->result)
+		memcpy(req->result, rctx->base.lastc, AES_BLOCK_SIZE);
+
+	return 0;
+}
+
+static int atmel_aes_cbcmac_digest(struct ahash_request *req)
+{
+	struct crypto_ahash *tfm = crypto_ahash_reqtfm(req);
+
+	return tfm->init(req) ?: tfm->finup(req);
+}
+
+static int atmel_aes_cbcmac_export(struct ahash_request *req, void *out)
+{
+	const struct atmel_aes_mac_reqctx *rctx = ahash_request_ctx(req);
+
+	memcpy(out, rctx, sizeof(*rctx));
+	return 0;
+}
+
+static int atmel_aes_cbcmac_import(struct ahash_request *req, const void *in)
+{
+	struct atmel_aes_mac_reqctx *rctx = ahash_request_ctx(req);
+
+	memcpy(rctx, in, sizeof(*rctx));
+	return 0;
+}
+
+static int atmel_aes_cbcmac_setkey(struct crypto_ahash *tfm, const u8 *key,
+			   unsigned int keylen)
+{
+	struct atmel_aes_base_ctx *ctx = crypto_ahash_ctx(tfm);
+
+	if (keylen != AES_KEYSIZE_128 &&
+	    keylen != AES_KEYSIZE_192 &&
+	    keylen != AES_KEYSIZE_256)
+		return -EINVAL;
+
+	memcpy(ctx->key, key, keylen);
+	ctx->keylen = keylen;
+
+	return 0;
+}
+
+static void atmel_aes_cmac_kd(u32 *k1t, const u32 *lt)
+{
+    int i;
+    u8 *k1 = (u8*)k1t;
+    const u8 *l = (const u8*)lt;
+    u8 c = l[0], carry = c >> 7, cnext;
+
+    /* Shift block to left, including carry */
+    for (i = 0; i < AES_BLOCK_SIZE - 1; i++, c = cnext)
+        k1[i] = (c << 1) | ((cnext = l[i + 1]) >> 7);
+
+    /* If MSB set fixup with R */
+    k1[i] = (c << 1) ^ ((0 - carry) & 0x87);
+}
+
+static int atmel_aes_cmac_transfer_complete_final(struct atmel_aes_dev *dd)
+{
+	struct ahash_request *req = ahash_request_cast(dd->areq);
+	struct atmel_aes_mac_reqctx *rctx = ahash_request_ctx(req);
+
+	atmel_aes_read_block(dd, AES_ODATAR(0), rctx->base.lastc);
+
+	if (req->result)
+		memcpy(req->result, rctx->base.lastc, AES_BLOCK_SIZE);
+
+	return atmel_aes_complete(dd, 0);
+}
+
+static int atmel_aes_cmac_do_final(struct atmel_aes_dev *dd, bool do_init)
+{
+	struct ahash_request *req = ahash_request_cast(dd->areq);
+	struct atmel_aes_mac_reqctx *rctx = ahash_request_ctx(req);
+	struct atmel_aes_cmac_ctx *ctx = (struct atmel_aes_cmac_ctx *)dd->ctx;
+
+	size_t datalen = rctx->residue_len;
+	u8 *data = (u8*)rctx->residue;
+
+	if (datalen == AES_BLOCK_SIZE)
+		crypto_xor(data, (u8*)ctx->k1, AES_BLOCK_SIZE);
+	else {
+		data[datalen++] = 0x80;
+		if (datalen < AES_BLOCK_SIZE)
+		    memset(data + datalen, 0, AES_BLOCK_SIZE - datalen);
+		crypto_xor(data, (u8*)ctx->k2, AES_BLOCK_SIZE);
+	}
+
+	if (do_init) {
+		atmel_aes_set_mode(dd, &rctx->base);
+		atmel_aes_hw_init(dd);
+		atmel_aes_write_ctrl(dd, false, rctx->base.lastc);
+	}
+
+	dd->force_sync = true;
+
+	atmel_aes_write_block(dd, AES_IDATAR(0), (u32*)data);
+
+	return atmel_aes_wait_for_data_ready(dd,
+		atmel_aes_cmac_transfer_complete_final);
+}
+
+static int atmel_aes_cmac_transfer_complete(struct atmel_aes_dev *dd)
+{
+	struct ahash_request *req = ahash_request_cast(dd->areq);
+	struct atmel_aes_mac_reqctx *rctx = ahash_request_ctx(req);
+
+	size_t reqlen = dd->total - rctx->residue_len;
+	size_t remlen = req->nbytes - reqlen;
+
+	rctx->residue_len = sg_pcopy_to_buffer(req->src, sg_nents(req->src),
+		rctx->residue, remlen, reqlen);
+
+	if (rctx->is_final)
+		return atmel_aes_cmac_do_final(dd, false);
+
+	atmel_aes_read_block(dd, AES_ODATAR(0), rctx->base.lastc);
+	return atmel_aes_complete(dd, 0);
+}
+
+static int atmel_aes_cmac_start(struct atmel_aes_dev *dd);
+
+static int atmel_aes_cmac_transfer_complete_keys(struct atmel_aes_dev *dd)
+{
+	struct atmel_aes_cmac_ctx *ctx = (struct atmel_aes_cmac_ctx *)dd->ctx;
+
+	atmel_aes_read_block(dd, AES_ODATAR(0), ctx->bl);
+
+	atmel_aes_cmac_kd(ctx->k1, ctx->bl);
+	atmel_aes_cmac_kd(ctx->k2, ctx->k1);
+	ctx->has_key = true;
+
+	memset(ctx->bl, 0, AES_BLOCK_SIZE);
+
+	return atmel_aes_cmac_start(dd);
+}
+
+static int atmel_aes_cmac_keys_start(struct atmel_aes_dev *dd)
+{
+	struct atmel_aes_cmac_ctx *ctx = (struct atmel_aes_cmac_ctx *)dd->ctx;
+
+	dd->force_sync = true;
+
+	dd->flags &= ~AES_FLAGS_MODE_MASK;
+	dd->flags |= (AES_FLAGS_ECB | AES_FLAGS_ENCRYPT);
+
+	atmel_aes_hw_init(dd);
+	atmel_aes_write_ctrl(dd, false, NULL);
+
+	atmel_aes_write_block(dd, AES_IDATAR(0), ctx->bl);
+
+	return atmel_aes_wait_for_data_ready(dd,
+		atmel_aes_cmac_transfer_complete_keys);
+}
+
+static int atmel_aes_cmac_start(struct atmel_aes_dev *dd)
+{
+	struct ahash_request *req = ahash_request_cast(dd->areq);
+	struct atmel_aes_mac_reqctx *rctx = ahash_request_ctx(req);
+	struct atmel_aes_cmac_ctx *ctx = (struct atmel_aes_cmac_ctx *)dd->ctx;
+
+	struct scatterlist *sg = req->src;
+	size_t datalen;
+
+	if (!ctx->has_key)
+		return atmel_aes_cmac_keys_start(dd);
+
+	if (rctx->is_final && !rctx->is_finup)
+		return atmel_aes_cmac_do_final(dd, true);
+
+	if (rctx->residue_len) {
+		sg = rctx->sg;
+		sg_set_buf(sg, rctx->residue, rctx->residue_len);
+		sg_chain(sg, 2, req->src);
+	}
+
+	datalen = ALIGN((rctx->residue_len + req->nbytes), AES_BLOCK_SIZE) -
+		AES_BLOCK_SIZE;
+
+	return atmel_aes_cbcmac_do_start(dd, sg, datalen, rctx->base.lastc,
+		atmel_aes_cmac_transfer_complete);
+}
+
+static int atmel_aes_cmac_init_tfm(struct crypto_ahash *tfm)
+{
+	struct atmel_aes_base_ctx *ctx = crypto_tfm_ctx(crypto_ahash_tfm(tfm));
+
+	crypto_ahash_set_reqsize(tfm, sizeof(struct atmel_aes_mac_reqctx));
+	ctx->start = atmel_aes_cmac_start;
+	ctx->block_size = AES_BLOCK_SIZE;
+	ctx->is_aead = false;
+
+	return 0;
+}
+
+static int atmel_aes_cmac_final(struct ahash_request *req)
+{
+	struct atmel_aes_mac_reqctx *rctx = ahash_request_ctx(req);
+
+	rctx->is_final = true;
+
+	return atmel_aes_handle_queue(&req->base);
+}
+
+static int atmel_aes_cmac_finup(struct ahash_request *req)
+{
+	struct atmel_aes_mac_reqctx *rctx = ahash_request_ctx(req);
+	size_t datalen = rctx->residue_len + req->nbytes;
+
+	if (datalen <= AES_BLOCK_SIZE) {
+		sg_copy_to_buffer(req->src, sg_nents(req->src),
+			(u8*)rctx->residue + rctx->residue_len,
+			req->nbytes);
+		rctx->residue_len = datalen;
+	} else
+		rctx->is_finup = true;
+
+	rctx->is_final = true;
+
+	return atmel_aes_handle_queue(&req->base);
+}
+
+static int atmel_aes_cmac_setkey(struct crypto_ahash *tfm, const u8 *key,
+			   unsigned int keylen)
+{
+	struct atmel_aes_cmac_ctx *ctx = crypto_ahash_ctx(tfm);
+
+	ctx->has_key = false;
+	memset(ctx->bl, 0, AES_BLOCK_SIZE);
+	memset(ctx->k1, 0, AES_BLOCK_SIZE);
+	memset(ctx->k2, 0, AES_BLOCK_SIZE);
+
+	return atmel_aes_cbcmac_setkey(tfm, key, keylen);;
+}
+
+
+static struct ahash_alg ahash_aes_algs[] = {
+{
+	.halg.base.cra_name		= "cbcmac(aes)",
+	.halg.base.cra_driver_name	= "atmel-cbcmac-aes",
+	.halg.base.cra_blocksize	= 1,
+	.halg.base.cra_ctxsize		= sizeof(struct atmel_aes_ctx),
+
+	.halg.digestsize		= AES_BLOCK_SIZE,
+	.halg.statesize			= sizeof(struct atmel_aes_mac_reqctx),
+
+	.init_tfm			= atmel_aes_cbcmac_init_tfm,
+	.init				= atmel_aes_cbcmac_init,
+	.update				= atmel_aes_cbcmac_update,
+	.final				= atmel_aes_cbcmac_final,
+	.finup				= atmel_aes_cbcmac_finup,
+	.digest				= atmel_aes_cbcmac_digest,
+	.export				= atmel_aes_cbcmac_export,
+	.import				= atmel_aes_cbcmac_import,
+	.setkey				= atmel_aes_cbcmac_setkey,
+},
+{
+	.halg.base.cra_name		= "cmac(aes)",
+	.halg.base.cra_driver_name	= "atmel-cmac-aes",
+	.halg.base.cra_blocksize	= AES_BLOCK_SIZE,
+	.halg.base.cra_ctxsize		= sizeof(struct atmel_aes_cmac_ctx),
+
+	.halg.digestsize		= AES_BLOCK_SIZE,
+	.halg.statesize			= sizeof(struct atmel_aes_mac_reqctx),
+
+	.init_tfm			= atmel_aes_cmac_init_tfm,
+	.init				= atmel_aes_cbcmac_init,
+	.update				= atmel_aes_cbcmac_update,
+	.final				= atmel_aes_cmac_final,
+	.finup				= atmel_aes_cmac_finup,
+	.digest				= atmel_aes_cbcmac_digest,
+	.export				= atmel_aes_cbcmac_export,
+	.import				= atmel_aes_cbcmac_import,
+	.setkey				= atmel_aes_cmac_setkey,
+},
+};
+
+static int atmel_aes_ccm_set_msg_len(u8 *block, unsigned int msglen, int csize)
+{
+	__be32 data;
+
+	memset(block, 0, csize);
+	block += csize;
+
+	if (csize >= 4)
+		csize = 4;
+	else if (msglen > (1 << (8 * csize)))
+		return -EOVERFLOW;
+
+	data = cpu_to_be32(msglen);
+	memcpy(block - csize, (u8 *)&data + 4 - csize, csize);
+
+	return 0;
+}
+
+static int atmel_aes_ccm_format_input(u8 *info, struct aead_request *req,
+			unsigned int cryptlen)
+{
+	struct crypto_aead *aead = crypto_aead_reqtfm(req);
+	unsigned int lp = req->iv[0];
+	unsigned int l = lp + 1;
+	unsigned int m;
+
+	m = crypto_aead_authsize(aead);
+
+	memcpy(info, req->iv, AES_BLOCK_SIZE);
+
+	/* format control info per RFC 3610 and
+	 * NIST Special Publication 800-38C
+	 */
+	*info |= (8 * ((m - 2) / 2));
+	if (req->assoclen)
+		*info |= 64;
+
+	return atmel_aes_ccm_set_msg_len(info + 16 - l, cryptlen, l);
+}
+
+static size_t atmel_aes_ccm_format_adata(u8 *adata, unsigned int a)
+{
+	size_t len = 0;
+
+	/* add control info for associated data
+	 * RFC 3610 and NIST Special Publication 800-38C
+	 */
+	if (a < 65280) {
+		*(__be16 *)adata = cpu_to_be16(a);
+		len = 2;
+	} else  {
+		*(__be16 *)adata = cpu_to_be16(0xfffe);
+		*(__be32 *)&adata[2] = cpu_to_be32(a);
+		len = 6;
+	}
+
+	return len;
+}
+
+static inline int atmel_aes_ccm_check_iv(const u8 *iv)
+{
+	/* 2 <= L <= 8, so 1 <= L' <= 7. */
+	if (1 > iv[0] || iv[0] > 7)
+		return -EINVAL;
+
+	return 0;
+}
+
+static int atmel_aes_ccm_setauthsize(struct crypto_aead *tfm,
+	unsigned int authsize)
+{
+	switch (authsize) {
+	case 4:
+	case 6:
+	case 8:
+	case 10:
+	case 12:
+	case 14:
+	case 16:
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int atmel_aes_ccm_auth_transfer_complete2(struct atmel_aes_dev *dd)
+{
+	struct aead_request *req = aead_request_cast(dd->areq);
+	struct atmel_aes_ccm_reqctx *rctx = aead_request_ctx(req);
+
+	atmel_aes_read_block(dd, AES_ODATAR(0), rctx->odata);
+
+	if (rctx->ctr.base.mode & AES_FLAGS_ENCRYPT) {
+		return atmel_aes_ctr_start(dd);
+	} else {
+		struct crypto_aead *aead = crypto_aead_reqtfm(req);
+		int err = 0;
+
+		if (crypto_memneq(rctx->auth_tag, rctx->odata,
+			crypto_aead_authsize(aead)))
+			err = -EBADMSG;
+
+		return atmel_aes_complete(dd, err);
+	}
+}
+
+static int atmel_aes_ccm_auth_transfer_complete1(struct atmel_aes_dev *dd)
+{
+	struct aead_request *req = aead_request_cast(dd->areq);
+	struct atmel_aes_ccm_reqctx *rctx = aead_request_ctx(req);
+	struct scatterlist *sg;
+
+	if (rctx->ctr.cryptlen <= AES_BLOCK_SIZE)
+		return atmel_aes_ccm_auth_transfer_complete2(dd);
+
+	atmel_aes_read_block(dd, AES_ODATAR(0), rctx->odata);
+
+	sg = rctx->ctr.base.mode & AES_FLAGS_ENCRYPT ?
+		rctx->src : rctx->ctr.rdst;
+
+	return atmel_aes_cbcmac_do_start(dd, sg_next(sg),
+		rctx->ctr.cryptlen - AES_BLOCK_SIZE, rctx->odata,
+		atmel_aes_ccm_auth_transfer_complete2);
+}
+
+static int atmel_aes_ccm_auth(struct atmel_aes_dev *dd, size_t cryptlen)
+{
+	struct aead_request *req = aead_request_cast(dd->areq);
+	struct atmel_aes_ccm_reqctx *rctx = aead_request_ctx(req);
+	__be32 iv[AES_BLOCK_SIZE /sizeof(u32)];
+
+	/* format control data for input */
+	int err = atmel_aes_ccm_format_input((u8*)rctx->odata, req, cryptlen);
+	if (err)
+		return err;
+
+	memset(iv, 0, AES_BLOCK_SIZE);
+
+	return atmel_aes_cbcmac_do_start(dd, rctx->sg, rctx->sglen, iv,
+		atmel_aes_ccm_auth_transfer_complete1);
+}
+
+static int atmel_aes_ccm_ctr_transfer_complete(struct atmel_aes_dev *dd)
+{
+	struct aead_request *req = aead_request_cast(dd->areq);
+	struct atmel_aes_ccm_reqctx *rctx = aead_request_ctx(req);
+	struct crypto_aead *aead = crypto_aead_reqtfm(req);
+	size_t authsize = crypto_aead_authsize(aead);
+
+	if (rctx->ctr.base.mode & AES_FLAGS_ENCRYPT) {
+		memcpy(req->iv, rctx->ctr.iv, AES_BLOCK_SIZE);
+		scatterwalk_map_and_copy(rctx->odata, sg_next(rctx->ctr.rdst),
+			req->cryptlen, authsize, 1);
+
+		return atmel_aes_complete(dd, 0);
+	} else
+		return atmel_aes_ccm_auth(dd, req->cryptlen - authsize);
+}
+
+static int atmel_aes_ccm_init_crypt(struct aead_request *req, u32 *tag)
+{
+	struct atmel_aes_ccm_reqctx *rctx = aead_request_ctx(req);
+	struct scatterlist *sg;
+	u8 *iv = req->iv;
+	int err;
+
+	err = atmel_aes_ccm_check_iv(iv);
+	if (err)
+		return err;
+
+	 /* Note: rfc 3610 and NIST 800-38C require counter of
+	 * zero to encrypt auth tag.
+	 */
+	memset(iv + 15 - iv[0], 0, iv[0] + 1);
+
+	sg_init_table(rctx->src, 3);
+	sg_set_buf(rctx->src, tag, AES_BLOCK_SIZE);
+	sg = scatterwalk_ffwd(rctx->src + 1, req->src, req->assoclen);
+	if (sg != rctx->src + 1)
+		sg_chain(rctx->src, 2, sg);
+
+	if (req->src != req->dst) {
+		sg_init_table(rctx->dst, 3);
+		sg_set_buf(rctx->dst, tag, AES_BLOCK_SIZE);
+		sg = scatterwalk_ffwd(rctx->dst + 1, req->dst, req->assoclen);
+		if (sg != rctx->dst + 1)
+			sg_chain(rctx->dst, 2, sg);
+	}
+
+	rctx->sglen = AES_BLOCK_SIZE;
+
+	/* format associated data and compute into mac */
+	if (req->assoclen) {
+		size_t ilen = atmel_aes_ccm_format_adata((u8*)rctx->idata,
+			req->assoclen);
+		rctx->sglen += req->assoclen + ilen;
+
+		sg_init_table(rctx->sg, 3);
+		sg_set_buf(rctx->sg + 1, rctx->idata, ilen);
+		sg_chain(rctx->sg, 3, req->src);
+	} else
+		sg_init_table(rctx->sg, 1);
+
+	sg_set_buf(rctx->sg, rctx->odata, AES_BLOCK_SIZE);
+	return 0;
+}
+
+static int atmel_aes_ccm_start(struct atmel_aes_dev *dd)
+{
+	struct aead_request *req = aead_request_cast(dd->areq);
+	struct atmel_aes_ccm_reqctx *rctx = aead_request_ctx(req);
+
+	if (rctx->ctr.base.mode & AES_FLAGS_ENCRYPT)
+		return atmel_aes_ccm_auth(dd, req->cryptlen);
+	else
+		return atmel_aes_ctr_start(dd);
+}
+
+static int atmel_aes_ccm_crypt(struct aead_request *req,
+			       unsigned long mode, size_t cryptlen)
+{
+	struct atmel_aes_ccm_reqctx *rctx = aead_request_ctx(req);
+
+	rctx->ctr.base.mode = mode;
+
+	rctx->ctr.rsrc = rctx->src;
+	rctx->ctr.rdst = req->src == req->dst ? rctx->src : rctx->dst;
+	rctx->ctr.cryptlen = cryptlen + AES_BLOCK_SIZE;
+
+	return atmel_aes_handle_queue(&req->base);
+}
+
+static int atmel_aes_ccm_encrypt(struct aead_request *req)
+{
+	struct atmel_aes_ccm_reqctx *rctx = aead_request_ctx(req);
+	int err;
+
+	err = atmel_aes_ccm_init_crypt(req, rctx->odata);
+	if (err)
+		return err;
+
+	return atmel_aes_ccm_crypt(req, AES_FLAGS_CTR | AES_FLAGS_ENCRYPT,
+		req->cryptlen);
+}
+
+static int atmel_aes_ccm_decrypt(struct aead_request *req)
+{
+	struct atmel_aes_ccm_reqctx *rctx = aead_request_ctx(req);
+	struct crypto_aead *aead = crypto_aead_reqtfm(req);
+
+	size_t authsize = crypto_aead_authsize(aead);
+	size_t cryptlen = req->cryptlen - authsize;
+
+	int err;
+
+	err = atmel_aes_ccm_init_crypt(req, rctx->auth_tag);
+	if (err)
+		return err;
+
+	scatterwalk_map_and_copy(rctx->auth_tag, sg_next(rctx->src), cryptlen,
+				 authsize, 0);
+
+	return atmel_aes_ccm_crypt(req, AES_FLAGS_CTR, cryptlen);
+}
+
+static int atmel_aes_ccm_init(struct crypto_aead *tfm)
+{
+	struct atmel_aes_base_ctx *ctx = crypto_aead_ctx(tfm);
+
+	ctx->start = atmel_aes_ccm_start;
+	ctx->block_size = AES_BLOCK_SIZE;
+	ctx->is_aead = true;
+
+	crypto_aead_set_reqsize(tfm, sizeof(struct atmel_aes_ccm_reqctx));
+
+	return 0;
+}
+
+static struct aead_alg aes_ccm_alg =
+{
+	.setkey		= atmel_aes_gcm_setkey,
+	.setauthsize	= atmel_aes_ccm_setauthsize,
+	.encrypt	= atmel_aes_ccm_encrypt,
+	.decrypt	= atmel_aes_ccm_decrypt,
+	.init		= atmel_aes_ccm_init,
+	.ivsize		= AES_BLOCK_SIZE,
+	.chunksize	= AES_BLOCK_SIZE,
+	.maxauthsize	= AES_BLOCK_SIZE,
+
+	.base = {
+		.cra_name		= "ccm(aes)",
+		.cra_driver_name	= "atmel-ccm-aes",
+		.cra_blocksize		= 1,
+		.cra_ctxsize		= sizeof(struct atmel_aes_ctx),
+	},
+};
+
+static void atmel_aes_cia_blk(struct atmel_aes_base_ctx *ctx, u8 *dst,
+	const u8 *src, unsigned long mode)
+{
+	struct atmel_aes_dev *dd;
+
+	spin_lock_bh(&atmel_aes.lock);
+
+	dd = atmel_aes.dd;
+
+	if (dd) {
+		dd->flags = AES_FLAGS_BUSY | mode;
+
+		atmel_aes_hw_init(dd);
+
+		atmel_aes_write_ctrl_key(dd, false, NULL, ctx->key,
+			ctx->keylen);
+
+		atmel_aes_write_block(dd, AES_IDATAR(0), (u32*)src);
+
+		while (!(atmel_aes_read(dd, AES_ISR) & AES_INT_DATARDY)) {}
+
+		atmel_aes_read_block(dd, AES_ODATAR(0), (u32*)dst);
+
+		atmel_aes_write(dd, AES_CR, AES_CR_SWRST);
+
+		dd->flags = 0;
+	}
+
+	spin_unlock_bh(&atmel_aes.lock);
+}
+
+static void atmel_aes_cia_encrypt(struct crypto_tfm *tfm, u8 *dst,
+	const u8 *src)
+{
+	atmel_aes_cia_blk(crypto_tfm_ctx(tfm), dst, src, 
+		AES_FLAGS_ECB | AES_FLAGS_ENCRYPT);
+}
+
+static void atmel_aes_cia_decrypt(struct crypto_tfm *tfm, u8 *dst,
+	const u8 *src)
+{
+	atmel_aes_cia_blk(crypto_tfm_ctx(tfm), dst, src, AES_FLAGS_ECB);
+}
+
+static int atmel_aes_cia_setkey(struct crypto_tfm *tfm, const u8 *in_key,
+		unsigned int key_len)
+{
+	struct atmel_aes_base_ctx * ctx =
+		(struct atmel_aes_base_ctx*) crypto_tfm_ctx(tfm);
+
+	if (key_len != AES_KEYSIZE_128 &&
+	    key_len != AES_KEYSIZE_192 &&
+	    key_len != AES_KEYSIZE_256)
+		return -EINVAL;
+
+	memcpy(ctx->key, in_key, key_len);
+	ctx->keylen = key_len;
+
+	return 0;
+}
+
+static struct crypto_alg aes_alg = {
+	.cra_name		= "aes",
+	.cra_driver_name	= "atmel-aes",
+	.cra_priority		= ATMEL_AES_PRIORITY,
+	.cra_flags		= CRYPTO_ALG_TYPE_CIPHER,
+	.cra_blocksize		= AES_BLOCK_SIZE,
+	.cra_ctxsize		= sizeof(struct atmel_aes_ctx),
+	.cra_alignmask		= 3,
+	.cra_module		= THIS_MODULE,
+	.cra_u.cipher = {
+		.cia_min_keysize	= AES_MIN_KEY_SIZE,
+		.cia_max_keysize	= AES_MAX_KEY_SIZE,
+		.cia_setkey		= atmel_aes_cia_setkey,
+		.cia_encrypt		= atmel_aes_cia_encrypt,
+		.cia_decrypt		= atmel_aes_cia_decrypt,
+	}
+};
+
+#if IS_ENABLED(CONFIG_CRYPTO_DEV_ATMEL_AUTHENC)
 /* authenc aead functions */
 
 static int atmel_aes_authenc_start(struct atmel_aes_dev *dd);
@@ -2886,7 +2888,7 @@ static int atmel_aes_authenc_transfer(struct atmel_aes_dev *dd, int err,
 	struct atmel_aes_authenc_reqctx *rctx = aead_request_ctx(req);
 	bool enc = atmel_aes_is_encrypt(dd);
 	struct scatterlist *src, *dst;
-	u32 iv[AES_BLOCK_SIZE / sizeof(u32)];
+	__be32 iv[AES_BLOCK_SIZE / sizeof(u32)];
 	u32 emr;
 
 	if (is_async)
@@ -2968,7 +2970,6 @@ static int atmel_aes_authenc_setkey(struct crypto_aead *tfm, const u8 *key,
 {
 	struct atmel_aes_authenc_ctx *ctx = crypto_aead_ctx(tfm);
 	struct crypto_authenc_keys keys;
-	u32 flags;
 	int err;
 
 	if (crypto_authenc_extractkeys(&keys, key, keylen) != 0)
@@ -2978,11 +2979,9 @@ static int atmel_aes_authenc_setkey(struct crypto_aead *tfm, const u8 *key,
 		goto badkey;
 
 	/* Save auth key. */
-	flags = crypto_aead_get_flags(tfm);
 	err = atmel_sha_authenc_setkey(ctx->auth,
 				       keys.authkey, keys.authkeylen,
-				       &flags);
-	crypto_aead_set_flags(tfm, flags & CRYPTO_TFM_RES_MASK);
+				       crypto_aead_get_flags(tfm));
 	if (err) {
 		memzero_explicit(&keys, sizeof(keys));
 		return err;
@@ -2996,7 +2995,6 @@ static int atmel_aes_authenc_setkey(struct crypto_aead *tfm, const u8 *key,
 	return 0;
 
 badkey:
-	crypto_aead_set_flags(tfm, CRYPTO_TFM_RES_BAD_KEY_LEN);
 	memzero_explicit(&keys, sizeof(keys));
 	return -EINVAL;
 }
@@ -3011,12 +3009,11 @@ static int atmel_aes_authenc_init_tfm(struct crypto_aead *tfm,
 	if (IS_ERR(ctx->auth))
 		return PTR_ERR(ctx->auth);
 
+	crypto_aead_set_reqsize(tfm, (sizeof(struct atmel_aes_authenc_reqctx) +
+				      auth_reqsize));
 	ctx->base.start = atmel_aes_authenc_start;
 	ctx->base.block_size = AES_BLOCK_SIZE;
 	ctx->base.is_aead = true;
-
-	crypto_aead_set_reqsize(tfm, (sizeof(struct atmel_aes_authenc_reqctx) +
-				      auth_reqsize));
 
 	return 0;
 }
@@ -3088,52 +3085,7 @@ static int atmel_aes_authenc_cbc_aes_decrypt(struct aead_request *req)
 	return atmel_aes_authenc_crypt(req, AES_FLAGS_CBC);
 }
 
-#endif /* CONFIG_CRYPTO_DEV_ATMEL_AUTHENC */
-
-static struct aead_alg aead_aes_algs[] = {
-{
-	.setkey		= atmel_aes_gcm_setkey,
-	.setauthsize	= atmel_aes_ccm_setauthsize,
-	.encrypt	= atmel_aes_ccm_encrypt,
-	.decrypt	= atmel_aes_ccm_decrypt,
-	.init		= atmel_aes_ccm_init,
-	.ivsize		= AES_BLOCK_SIZE,
-	.chunksize	= AES_BLOCK_SIZE,
-	.maxauthsize	= AES_BLOCK_SIZE,
-
-	.base = {
-		.cra_name		= "ccm(aes)",
-		.cra_driver_name	= "atmel-ccm-aes",
-		.cra_priority		= ATMEL_AES_PRIORITY,
-		.cra_flags		= ATMEL_CRYPTO_ALG_FLAGS_ASYNC,
-		.cra_blocksize		= 1,
-		.cra_ctxsize		= sizeof(struct atmel_aes_ctx),
-		.cra_alignmask		= 0,
-		.cra_module		= THIS_MODULE,
-	},
-},
-{
-	.setkey		= atmel_aes_gcm_setkey,
-	.setauthsize	= atmel_aes_gcm_setauthsize,
-	.encrypt	= atmel_aes_gcm_encrypt,
-	.decrypt	= atmel_aes_gcm_decrypt,
-	.init		= atmel_aes_gcm_init,
-	.ivsize		= GCM_AES_IV_SIZE,
-	.chunksize	= AES_BLOCK_SIZE,
-	.maxauthsize	= AES_BLOCK_SIZE,
-
-	.base = {
-		.cra_name		= "gcm(aes)",
-		.cra_driver_name	= "atmel-gcm-aes",
-		.cra_priority		= ATMEL_AES_PRIORITY,
-		.cra_flags		= ATMEL_CRYPTO_ALG_FLAGS_ASYNC,
-		.cra_blocksize		= 1,
-		.cra_ctxsize		= sizeof(struct atmel_aes_ctx),
-		.cra_alignmask		= 0,
-		.cra_module		= THIS_MODULE,
-	},
-},
-#ifdef CONFIG_CRYPTO_DEV_ATMEL_AUTHENC
+static struct aead_alg aes_authenc_algs[] = {
 {
 	.setkey		= atmel_aes_authenc_setkey,
 	.encrypt	= atmel_aes_authenc_cbc_aes_encrypt,
@@ -3146,12 +3098,8 @@ static struct aead_alg aead_aes_algs[] = {
 	.base = {
 		.cra_name		= "authenc(hmac(sha1),cbc(aes))",
 		.cra_driver_name	= "atmel-authenc-hmac-sha1-cbc-aes",
-		.cra_priority		= ATMEL_AES_PRIORITY,
-		.cra_flags		= ATMEL_CRYPTO_ALG_FLAGS_ASYNC,
 		.cra_blocksize		= AES_BLOCK_SIZE,
 		.cra_ctxsize		= sizeof(struct atmel_aes_authenc_ctx),
-		.cra_alignmask		= 0,
-		.cra_module		= THIS_MODULE,
 	},
 },
 {
@@ -3166,12 +3114,8 @@ static struct aead_alg aead_aes_algs[] = {
 	.base = {
 		.cra_name		= "authenc(hmac(sha224),cbc(aes))",
 		.cra_driver_name	= "atmel-authenc-hmac-sha224-cbc-aes",
-		.cra_priority		= ATMEL_AES_PRIORITY,
-		.cra_flags		= ATMEL_CRYPTO_ALG_FLAGS_ASYNC,
 		.cra_blocksize		= AES_BLOCK_SIZE,
 		.cra_ctxsize		= sizeof(struct atmel_aes_authenc_ctx),
-		.cra_alignmask		= 0,
-		.cra_module		= THIS_MODULE,
 	},
 },
 {
@@ -3186,12 +3130,8 @@ static struct aead_alg aead_aes_algs[] = {
 	.base = {
 		.cra_name		= "authenc(hmac(sha256),cbc(aes))",
 		.cra_driver_name	= "atmel-authenc-hmac-sha256-cbc-aes",
-		.cra_priority		= ATMEL_AES_PRIORITY,
-		.cra_flags		= ATMEL_CRYPTO_ALG_FLAGS_ASYNC,
 		.cra_blocksize		= AES_BLOCK_SIZE,
 		.cra_ctxsize		= sizeof(struct atmel_aes_authenc_ctx),
-		.cra_alignmask		= 0,
-		.cra_module		= THIS_MODULE,
 	},
 },
 {
@@ -3206,12 +3146,8 @@ static struct aead_alg aead_aes_algs[] = {
 	.base = {
 		.cra_name		= "authenc(hmac(sha384),cbc(aes))",
 		.cra_driver_name	= "atmel-authenc-hmac-sha384-cbc-aes",
-		.cra_priority		= ATMEL_AES_PRIORITY,
-		.cra_flags		= ATMEL_CRYPTO_ALG_FLAGS_ASYNC,
 		.cra_blocksize		= AES_BLOCK_SIZE,
 		.cra_ctxsize		= sizeof(struct atmel_aes_authenc_ctx),
-		.cra_alignmask		= 0,
-		.cra_module		= THIS_MODULE,
 	},
 },
 {
@@ -3226,97 +3162,12 @@ static struct aead_alg aead_aes_algs[] = {
 	.base = {
 		.cra_name		= "authenc(hmac(sha512),cbc(aes))",
 		.cra_driver_name	= "atmel-authenc-hmac-sha512-cbc-aes",
-		.cra_priority		= ATMEL_AES_PRIORITY,
-		.cra_flags		= ATMEL_CRYPTO_ALG_FLAGS_ASYNC,
 		.cra_blocksize		= AES_BLOCK_SIZE,
 		.cra_ctxsize		= sizeof(struct atmel_aes_authenc_ctx),
-		.cra_alignmask		= 0,
-		.cra_module		= THIS_MODULE,
 	},
 },
-#endif
 };
-
-static void atmel_aes_cia_blk(struct atmel_aes_base_ctx *ctx, u8 *dst,
-	const u8 *src, unsigned long mode)
-{
-	struct atmel_aes_dev *dd;
-
-	spin_lock_bh(&atmel_aes.lock);
-
-	dd = atmel_aes.dd;
-
-	if (dd) {
-		dd->flags = AES_FLAGS_BUSY | mode;
-
-		atmel_aes_hw_init(dd);
-
-		atmel_aes_write_ctrl_key(dd, false, NULL, ctx->key,
-			ctx->keylen);
-
-		atmel_aes_write_block(dd, AES_IDATAR(0), (u32*)src);
-
-		while (!(atmel_aes_read(dd, AES_ISR) & AES_INT_DATARDY)) {}
-
-		atmel_aes_read_block(dd, AES_ODATAR(0), (u32*)dst);
-
-		atmel_aes_write(dd, AES_CR, AES_CR_SWRST);
-
-		dd->flags = 0;
-	}
-
-	spin_unlock_bh(&atmel_aes.lock);
-}
-
-static void atmel_aes_cia_encrypt(struct crypto_tfm *tfm, u8 *dst,
-	const u8 *src)
-{
-	atmel_aes_cia_blk(crypto_tfm_ctx(tfm), dst, src, AES_FLAGS_ECB |
-		AES_FLAGS_ENCRYPT);
-}
-
-static void atmel_aes_cia_decrypt(struct crypto_tfm *tfm, u8 *dst,
-	const u8 *src)
-{
-	atmel_aes_cia_blk(crypto_tfm_ctx(tfm), dst, src, AES_FLAGS_ECB);
-}
-
-static int atmel_aes_cia_setkey(struct crypto_tfm *tfm, const u8 *in_key,
-		unsigned int key_len)
-{
-	struct atmel_aes_base_ctx * ctx =
-		(struct atmel_aes_base_ctx*) crypto_tfm_ctx(tfm);
-
-	if (key_len != AES_KEYSIZE_128 &&
-	    key_len != AES_KEYSIZE_192 &&
-	    key_len != AES_KEYSIZE_256) {
-		tfm->crt_flags |= CRYPTO_TFM_RES_BAD_KEY_LEN;
-		return -EINVAL;
-	}
-
-	memcpy(ctx->key, in_key, key_len);
-	ctx->keylen = key_len;
-
-	return 0;
-}
-
-static struct crypto_alg aes_alg = {
-	.cra_name		= "aes",
-	.cra_driver_name	= "atmel-aes",
-	.cra_priority		= ATMEL_AES_PRIORITY,
-	.cra_flags		= CRYPTO_ALG_TYPE_CIPHER,
-	.cra_blocksize		= AES_BLOCK_SIZE,
-	.cra_ctxsize		= sizeof(struct atmel_aes_ctx),
-	.cra_alignmask		= 3,
-	.cra_module		= THIS_MODULE,
-	.cra_u.cipher = {
-		.cia_min_keysize	= AES_MIN_KEY_SIZE,
-		.cia_max_keysize	= AES_MAX_KEY_SIZE,
-		.cia_setkey		= atmel_aes_cia_setkey,
-		.cia_encrypt		= atmel_aes_cia_encrypt,
-		.cia_decrypt		= atmel_aes_cia_decrypt,
-	}
-};
+#endif /* CONFIG_CRYPTO_DEV_ATMEL_AUTHENC */
 
 /* Probe functions */
 
@@ -3339,47 +3190,30 @@ static void atmel_aes_buff_cleanup(struct atmel_aes_dev *dd)
 	free_page((unsigned long)dd->buf);
 }
 
-static bool atmel_aes_filter(struct dma_chan *chan, void *slave)
+static int atmel_aes_dma_init(struct atmel_aes_dev *dd)
 {
-	struct at_dma_slave	*sl = slave;
-
-	if (sl && sl->dma_dev == chan->device->dev) {
-		chan->private = sl;
-		return true;
-	} else {
-		return false;
-	}
-}
-
-static int atmel_aes_dma_init(struct atmel_aes_dev *dd,
-			      struct crypto_platform_data *pdata)
-{
-	struct at_dma_slave *slave;
-	dma_cap_mask_t mask;
-
-	dma_cap_zero(mask);
-	dma_cap_set(DMA_SLAVE, mask);
+	int ret;
 
 	/* Try to grab 2 DMA channels */
-	slave = &pdata->dma_slave->rxdata;
-	dd->src.chan = dma_request_slave_channel_compat(mask, atmel_aes_filter,
-							slave, dd->dev, "tx");
-	if (!dd->src.chan)
+	dd->src.chan = dma_request_chan(dd->dev, "tx");
+	if (IS_ERR(dd->src.chan)) {
+		ret = PTR_ERR(dd->src.chan);
 		goto err_dma_in;
+	}
 
-	slave = &pdata->dma_slave->txdata;
-	dd->dst.chan = dma_request_slave_channel_compat(mask, atmel_aes_filter,
-							slave, dd->dev, "rx");
-	if (!dd->dst.chan)
+	dd->dst.chan = dma_request_chan(dd->dev, "rx");
+	if (IS_ERR(dd->dst.chan)) {
+		ret = PTR_ERR(dd->dst.chan);
 		goto err_dma_out;
+	}
 
 	return 0;
 
 err_dma_out:
 	dma_release_channel(dd->src.chan);
 err_dma_in:
-	dev_warn(dd->dev, "no DMA channel available\n");
-	return -ENODEV;
+	dev_err(dd->dev, "no DMA channel available\n");
+	return ret;
 }
 
 static void atmel_aes_dma_cleanup(struct atmel_aes_dev *dd)
@@ -3401,16 +3235,16 @@ static void atmel_aes_done_task(unsigned long data)
 
 static irqreturn_t atmel_aes_irq(int irq, void *dev_id)
 {
-	struct atmel_aes_dev *dd = dev_id;
+	struct atmel_aes_dev *aes_dd = dev_id;
 	u32 reg;
 
-	reg = atmel_aes_read(dd, AES_ISR);
-	if (reg & atmel_aes_read(dd, AES_IMR)) {
-		atmel_aes_write(dd, AES_IDR, reg);
-		if (AES_FLAGS_BUSY & dd->flags)
-			tasklet_schedule(&dd->done_task);
+	reg = atmel_aes_read(aes_dd, AES_ISR);
+	if (reg & atmel_aes_read(aes_dd, AES_IMR)) {
+		atmel_aes_write(aes_dd, AES_IDR, reg);
+		if (AES_FLAGS_BUSY & aes_dd->flags)
+			tasklet_schedule(&aes_dd->done_task);
 		else
-			dev_err(dd->dev, "AES interrupt when no active requests.\n");
+			dev_err(aes_dd->dev, "AES interrupt when no active requests.\n");
 		return IRQ_HANDLED;
 	}
 
@@ -3419,87 +3253,137 @@ static irqreturn_t atmel_aes_irq(int irq, void *dev_id)
 
 static void atmel_aes_unregister_algs(struct atmel_aes_dev *dd)
 {
-	int len_skciphers = ARRAY_SIZE(skcipher_aes_algs) - 2 +
-		dd->caps.has_cfb64 + dd->caps.has_xts;
-
-	int len_aeads = 1 + dd->caps.has_gcm;
-
-#ifdef CONFIG_CRYPTO_DEV_ATMEL_AUTHENC
+#if IS_ENABLED(CONFIG_CRYPTO_DEV_ATMEL_AUTHENC)
 	if (dd->caps.has_authenc)
-		len_aeads += 5;
+		crypto_unregister_aeads(aead_aes_algs, ARRAY_SIZE(aes_authenc_algs));
 #endif
+
+	if (dd->caps.has_xts)
+		crypto_unregister_skcipher(&aes_xts_alg);
+
+	if (dd->caps.has_gcm)
+		crypto_unregister_aead(&aes_gcm_alg);
+
+	if (dd->caps.has_cfb64)
+		crypto_unregister_skcipher(&aes_cfb64_alg);
+
+	crypto_unregister_skciphers(aes_algs, ARRAY_SIZE(aes_algs));
 
 	if (atmel_aes.sync_mode)
 		crypto_unregister_alg(&aes_alg);
 
-	crypto_unregister_aeads(aead_aes_algs, len_aeads);
+	crypto_unregister_aead(&aes_ccm_alg);
+
 	crypto_unregister_ahashes(ahash_aes_algs, ARRAY_SIZE(ahash_aes_algs));
-	crypto_unregister_skciphers(skcipher_aes_algs, len_skciphers);
+}
+
+static void atmel_aes_crypto_alg_init(struct crypto_alg *alg)
+{
+	alg->cra_flags = atmel_aes.sync_mode ?
+		(CRYPTO_ALG_KERN_DRIVER_ONLY) : 
+		(CRYPTO_ALG_ASYNC | CRYPTO_ALG_KERN_DRIVER_ONLY);
+	alg->cra_alignmask = 0;
+	alg->cra_priority = ATMEL_AES_PRIORITY;
+	alg->cra_module = THIS_MODULE;
 }
 
 static int atmel_aes_register_algs(struct atmel_aes_dev *dd)
 {
 	int err, i;
 
-	int len_skciphers = ARRAY_SIZE(skcipher_aes_algs) - 2 +
-		dd->caps.has_cfb64 + dd->caps.has_xts;
+	for (i = 0; i < ARRAY_SIZE(aes_algs); i++) {
+		atmel_aes_crypto_alg_init(&aes_algs[i].base);
+	}
 
-	int len_aeads = 1 + dd->caps.has_gcm;
+	err = crypto_register_skciphers(aes_algs, ARRAY_SIZE(aes_algs));
+	if (err)
+		goto err_aes_algs;
 
-#ifdef CONFIG_CRYPTO_DEV_ATMEL_AUTHENC
-	if (dd->caps.has_authenc)
-		len_aeads += 5;
+	if (dd->caps.has_cfb64) {
+		atmel_aes_crypto_alg_init(&aes_cfb64_alg.base);
+
+		err = crypto_register_skcipher(&aes_cfb64_alg);
+		if (err)
+			goto err_aes_cfb64_alg;
+	}
+
+	if (dd->caps.has_gcm) {
+		atmel_aes_crypto_alg_init(&aes_gcm_alg.base);
+
+		err = crypto_register_aead(&aes_gcm_alg);
+		if (err)
+			goto err_aes_gcm_alg;
+	}
+
+	if (dd->caps.has_xts) {
+		atmel_aes_crypto_alg_init(&aes_xts_alg.base);
+
+		err = crypto_register_skcipher(&aes_xts_alg);
+		if (err)
+			goto err_aes_xts_alg;
+	}
+
+#if IS_ENABLED(CONFIG_CRYPTO_DEV_ATMEL_AUTHENC)
+	if (dd->caps.has_authenc) {
+		for (i = 0; i < ARRAY_SIZE(aes_authenc_algs); i++) {
+			atmel_aes_crypto_alg_init(&aes_authenc_algs[i].base);
+		}
+
+		err = crypto_register_aeads(aead_aes_algs, ARRAY_SIZE(aes_authenc_algs));
+		if (err)
+			goto err_aes_authenc_alg;
+	}
 #endif
 
-	for (i = 0; i < len_skciphers; ++i) {
-		skcipher_aes_algs[i].base.cra_flags = atmel_aes.sync_mode ?
-			ATMEL_CRYPTO_ALG_FLAGS_SYNC :
-			ATMEL_CRYPTO_ALG_FLAGS_ASYNC;
-	}
+	for (i = 0; i < ARRAY_SIZE(ahash_aes_algs); i++)
+		atmel_aes_crypto_alg_init(&ahash_aes_algs[i].halg.base);
 
-	err = crypto_register_skciphers(skcipher_aes_algs, len_skciphers);
+	err = crypto_register_ahashes(ahash_aes_algs, ARRAY_SIZE(ahash_aes_algs));
 	if (err)
-		goto err_aes_skciphers;
+		goto err_aes_ahashes_alg;
 
-	for (i = 0; i < ARRAY_SIZE(ahash_aes_algs); ++i) {
-		ahash_aes_algs[i].halg.base.cra_flags = atmel_aes.sync_mode ?
-			ATMEL_CRYPTO_ALG_FLAGS_SYNC :
-			ATMEL_CRYPTO_ALG_FLAGS_ASYNC;
-	}
+	atmel_aes_crypto_alg_init(&aes_ccm_alg.base);
 
-	err = crypto_register_ahashes(ahash_aes_algs,
-		ARRAY_SIZE(ahash_aes_algs));
+	err = crypto_register_aead(&aes_ccm_alg);
 	if (err)
-		goto err_aes_ahashes;
-
-	for (i = 0; i < len_aeads; ++i) {
-		aead_aes_algs[i].base.cra_flags = atmel_aes.sync_mode ?
-			ATMEL_CRYPTO_ALG_FLAGS_SYNC :
-			ATMEL_CRYPTO_ALG_FLAGS_ASYNC;
-	}
-
-	err = crypto_register_aeads(aead_aes_algs, len_aeads);
-	if (err)
-		goto err_aes_aeads;
+		goto err_aes_ccm_alg;
 
 	if (atmel_aes.sync_mode) {
 		err = crypto_register_alg(&aes_alg);
 		if (err)
-			goto err_aes_block;
+			goto err_aes_block_alg;
 	}
 
 	return 0;
 
-err_aes_block:
-	crypto_unregister_aeads(aead_aes_algs, len_aeads);
+err_aes_block_alg:
+	crypto_unregister_aead(&aes_ccm_alg);
 
-err_aes_aeads:
+err_aes_ccm_alg:
 	crypto_unregister_ahashes(ahash_aes_algs, ARRAY_SIZE(ahash_aes_algs));
 
-err_aes_ahashes:
-	crypto_unregister_skciphers(skcipher_aes_algs, len_skciphers);
+err_aes_ahashes_alg:
+#if IS_ENABLED(CONFIG_CRYPTO_DEV_ATMEL_AUTHENC)
+	if (dd->caps.has_authenc)
+		crypto_unregister_aeads(aead_aes_algs, ARRAY_SIZE(aes_authenc_algs));
 
-err_aes_skciphers:
+err_aes_authenc_alg:
+#endif
+	if (dd->caps.has_xts)
+		crypto_unregister_skcipher(&aes_xts_alg);
+
+err_aes_xts_alg:
+	if (dd->caps.has_gcm)
+		crypto_unregister_aead(&aes_gcm_alg);
+
+err_aes_gcm_alg:
+	if (dd->caps.has_cfb64)
+		crypto_unregister_skcipher(&aes_cfb64_alg);
+
+err_aes_cfb64_alg:
+	crypto_unregister_skciphers(aes_algs, ARRAY_SIZE(aes_algs));
+
+err_aes_algs:
 	return err;
 }
 
@@ -3507,7 +3391,6 @@ static void atmel_aes_get_cap(struct atmel_aes_dev *dd)
 {
 	dd->caps.has_dualbuff = 0;
 	dd->caps.has_cfb64 = 0;
-	dd->caps.has_ctr32 = 0;
 	dd->caps.has_gcm = 0;
 	dd->caps.has_xts = 0;
 	dd->caps.has_authenc = 0;
@@ -3518,7 +3401,6 @@ static void atmel_aes_get_cap(struct atmel_aes_dev *dd)
 	case 0x500:
 		dd->caps.has_dualbuff = 1;
 		dd->caps.has_cfb64 = 1;
-		dd->caps.has_ctr32 = 1;
 		dd->caps.has_gcm = 1;
 		dd->caps.has_xts = 1;
 		dd->caps.has_authenc = 1;
@@ -3527,7 +3409,6 @@ static void atmel_aes_get_cap(struct atmel_aes_dev *dd)
 	case 0x200:
 		dd->caps.has_dualbuff = 1;
 		dd->caps.has_cfb64 = 1;
-		dd->caps.has_ctr32 = 1;
 		dd->caps.has_gcm = 1;
 		dd->caps.max_burst_size = 4;
 		break;
@@ -3551,79 +3432,25 @@ static const struct of_device_id atmel_aes_dt_ids[] = {
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, atmel_aes_dt_ids);
-
-static struct crypto_platform_data *atmel_aes_of_init(struct platform_device *pdev)
-{
-	struct device_node *np = pdev->dev.of_node;
-	struct crypto_platform_data *pdata;
-
-	if (!np) {
-		dev_err(&pdev->dev, "device node not found\n");
-		return ERR_PTR(-EINVAL);
-	}
-
-	pdata = devm_kzalloc(&pdev->dev, sizeof(*pdata), GFP_KERNEL);
-	if (!pdata)
-		return ERR_PTR(-ENOMEM);
-
-	pdata->dma_slave = devm_kzalloc(&pdev->dev,
-					sizeof(*(pdata->dma_slave)),
-					GFP_KERNEL);
-	if (!pdata->dma_slave) {
-		devm_kfree(&pdev->dev, pdata);
-		return ERR_PTR(-ENOMEM);
-	}
-
-	return pdata;
-}
-#else
-static inline struct crypto_platform_data *atmel_aes_of_init(struct platform_device *pdev)
-{
-	return ERR_PTR(-EINVAL);
-}
 #endif
-
-static inline void atmel_aes_dev_register(struct atmel_aes_dev *dd)
-{
-	spin_lock_bh(&atmel_aes.lock);
-	atmel_aes.dd = dd;
-	atmel_aes.sync_mode = fips_enabled && fips_wifi_enabled;
-	spin_unlock_bh(&atmel_aes.lock);
-}
 
 static int atmel_aes_probe(struct platform_device *pdev)
 {
-	struct atmel_aes_dev *dd;
-	struct crypto_platform_data *pdata;
+	struct atmel_aes_dev *aes_dd;
 	struct device *dev = &pdev->dev;
 	struct resource *aes_res;
 	int err;
 
-	pdata = pdev->dev.platform_data;
-	if (!pdata) {
-		pdata = atmel_aes_of_init(pdev);
-		if (IS_ERR(pdata)) {
-			err = PTR_ERR(pdata);
-			goto aes_dd_err;
-		}
-	}
+	aes_dd = devm_kzalloc(&pdev->dev, sizeof(*aes_dd), GFP_KERNEL);
+	if (!aes_dd)
+		return -ENOMEM;
 
-	if (!pdata->dma_slave) {
-		err = -ENXIO;
-		goto aes_dd_err;
-	}
+	aes_dd->dev = dev;
 
-	dd = devm_kzalloc(&pdev->dev, sizeof(*dd), GFP_KERNEL);
-	if (dd == NULL) {
-		err = -ENOMEM;
-		goto aes_dd_err;
-	}
+	platform_set_drvdata(pdev, aes_dd);
 
-	dd->dev = dev;
-
-	platform_set_drvdata(pdev, dd);
-
-	tasklet_init(&dd->done_task, atmel_aes_done_task, (unsigned long)dd);
+	tasklet_init(&aes_dd->done_task, atmel_aes_done_task,
+					(unsigned long)aes_dd);
 
 	crypto_init_queue(&atmel_aes.queue, ATMEL_AES_QUEUE_LENGTH);
 
@@ -3632,103 +3459,107 @@ static int atmel_aes_probe(struct platform_device *pdev)
 	if (!aes_res) {
 		dev_err(dev, "no MEM resource info\n");
 		err = -ENODEV;
-		goto res_err;
+		goto err_tasklet_kill;
 	}
-	dd->phys_base = aes_res->start;
+	aes_dd->phys_base = aes_res->start;
 
 	/* Get the IRQ */
-	dd->irq = platform_get_irq(pdev,  0);
-	if (dd->irq < 0) {
-		dev_err(dev, "no IRQ resource info\n");
-		err = dd->irq;
-		goto res_err;
+	aes_dd->irq = platform_get_irq(pdev,  0);
+	if (aes_dd->irq < 0) {
+		err = aes_dd->irq;
+		goto err_tasklet_kill;
 	}
 
-	err = devm_request_irq(&pdev->dev, dd->irq, atmel_aes_irq,
-			       IRQF_SHARED, "atmel-aes", dd);
+	err = devm_request_irq(&pdev->dev, aes_dd->irq, atmel_aes_irq,
+			       IRQF_SHARED, "atmel-aes", aes_dd);
 	if (err) {
 		dev_err(dev, "unable to request aes irq.\n");
-		goto res_err;
+		goto err_tasklet_kill;
 	}
 
 	/* Initializing the clock */
-	dd->iclk = devm_clk_get(&pdev->dev, "aes_clk");
-	if (IS_ERR(dd->iclk)) {
+	aes_dd->iclk = devm_clk_get(&pdev->dev, "aes_clk");
+	if (IS_ERR(aes_dd->iclk)) {
 		dev_err(dev, "clock initialization failed.\n");
-		err = PTR_ERR(dd->iclk);
-		goto res_err;
+		err = PTR_ERR(aes_dd->iclk);
+		goto err_tasklet_kill;
 	}
 
-	dd->io_base = devm_ioremap_resource(&pdev->dev, aes_res);
-	if (IS_ERR(dd->io_base)) {
+	aes_dd->io_base = devm_ioremap_resource(&pdev->dev, aes_res);
+	if (IS_ERR(aes_dd->io_base)) {
 		dev_err(dev, "can't ioremap\n");
-		err = PTR_ERR(dd->io_base);
-		goto res_err;
+		err = PTR_ERR(aes_dd->io_base);
+		goto err_tasklet_kill;
 	}
 
-	err = clk_prepare_enable(dd->iclk);
+	err = clk_prepare_enable(aes_dd->iclk);
 	if (err)
-		goto res_err;
+		goto err_tasklet_kill;
 
-	err = atmel_aes_hw_version_init(dd);
+	err = atmel_aes_hw_version_init(aes_dd);
 	if (err)
-		goto iclk_unprepare;
+		goto err_iclk_unprepare;
 
-	atmel_aes_get_cap(dd);
+	atmel_aes_get_cap(aes_dd);
 
-#ifdef CONFIG_CRYPTO_DEV_ATMEL_AUTHENC
-	if (dd->caps.has_authenc && !atmel_sha_authenc_is_ready()) {
+#if IS_ENABLED(CONFIG_CRYPTO_DEV_ATMEL_AUTHENC)
+	if (aes_dd->caps.has_authenc && !atmel_sha_authenc_is_ready()) {
 		err = -EPROBE_DEFER;
-		goto iclk_unprepare;
+		goto err_iclk_unprepare;
 	}
 #endif
 
-	err = atmel_aes_buff_init(dd);
+	err = atmel_aes_buff_init(aes_dd);
 	if (err)
-		goto err_aes_buff;
+		goto err_iclk_unprepare;
 
-	err = atmel_aes_dma_init(dd, pdata);
+	err = atmel_aes_dma_init(aes_dd);
 	if (err)
-		goto err_aes_dma;
+		goto err_buff_cleanup;
 
-	atmel_aes_dev_register(dd);
+	spin_lock_bh(&atmel_aes.lock);
+	atmel_aes.dd = aes_dd;
+	atmel_aes.sync_mode = fips_enabled && fips_wifi_enabled;
+	spin_unlock_bh(&atmel_aes.lock);
 
-	err = atmel_aes_register_algs(dd);
+	err = atmel_aes_register_algs(aes_dd);
 	if (err)
 		goto err_algs;
 
 	dev_info(dev, "Atmel AES - Using %s, %s for DMA transfers\n",
-			dma_chan_name(dd->src.chan),
-			dma_chan_name(dd->dst.chan));
+			dma_chan_name(aes_dd->src.chan),
+			dma_chan_name(aes_dd->dst.chan));
 
 	return 0;
 
 err_algs:
-	atmel_aes_dev_register(NULL);
+	spin_lock_bh(&atmel_aes.lock);
+	atmel_aes.dd = NULL;
+	spin_unlock_bh(&atmel_aes.lock);
 
-	atmel_aes_dma_cleanup(dd);
-err_aes_dma:
-	atmel_aes_buff_cleanup(dd);
-err_aes_buff:
-iclk_unprepare:
-	clk_disable_unprepare(dd->iclk);
-res_err:
-	tasklet_kill(&dd->done_task);
-aes_dd_err:
-	if (err != -EPROBE_DEFER)
-		dev_err(dev, "initialization failed.\n");
+	atmel_aes_dma_cleanup(aes_dd);
+err_buff_cleanup:
+	atmel_aes_buff_cleanup(aes_dd);
+err_iclk_unprepare:
+	clk_disable_unprepare(aes_dd->iclk);
+err_tasklet_kill:
+	tasklet_kill(&aes_dd->done_task);
 
 	return err;
 }
 
 static int atmel_aes_remove(struct platform_device *pdev)
 {
+	struct atmel_aes_dev *aes_dd;
 	struct crypto_async_request *areq;
-	struct atmel_aes_dev *dd = platform_get_drvdata(pdev);
-	if (!dd)
+	
+	aes_dd = platform_get_drvdata(pdev);
+	if (!aes_dd)
 		return -ENODEV;
 
-	atmel_aes_dev_register(NULL);
+	spin_lock_bh(&atmel_aes.lock);
+	atmel_aes.dd = NULL;
+	spin_unlock_bh(&atmel_aes.lock);
 
 	do {
 		areq = crypto_dequeue_request(&atmel_aes.queue);
@@ -3736,22 +3567,22 @@ static int atmel_aes_remove(struct platform_device *pdev)
 			areq->complete(areq, -ENODEV);
 	} while (areq);
 
-	while (dd->flags & AES_FLAGS_BUSY)
+	while (aes_dd->flags & AES_FLAGS_BUSY)
 		mdelay(1);
 
-	atmel_aes_unregister_algs(dd);
+	atmel_aes_unregister_algs(aes_dd);
 
-	tasklet_kill(&dd->done_task);
+	tasklet_kill(&aes_dd->done_task);
 
-	atmel_aes_dma_cleanup(dd);
-	atmel_aes_buff_cleanup(dd);
+	atmel_aes_dma_cleanup(aes_dd);
+	atmel_aes_buff_cleanup(aes_dd);
 
-	clk_disable_unprepare(dd->iclk);
+	clk_disable_unprepare(aes_dd->iclk);
 
 	return 0;
 }
 
-#ifdef CONFIG_PM
+#if IS_ENABLED(CONFIG_PM)
 static int atmel_aes_suspend(struct device *dev)
 {
 	struct atmel_aes_dev *dd = dev_get_drvdata(dev);

@@ -115,10 +115,6 @@
 	status = "okay";
 };
 
-&usart1_clk {
-	atmel,clk-output-range = <0 132000000>;
-};
-
 /* On BB40 this port is labeled UART0 */
 &usart1 {
 	pinctrl-names = "default";

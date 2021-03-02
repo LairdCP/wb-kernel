@@ -119,8 +119,11 @@ static void at91_stop_hc(struct platform_device *pdev)
 
 	dev_dbg(&pdev->dev, "stop\n");
 
+	/*
+	 * Put the USB host controller into reset.
+	 */
 	usb_hcd_platform_shutdown(pdev);
-
+	
 	msleep(1);
 
 	/*
@@ -152,7 +155,7 @@ static struct regmap *at91_dt_syscon_sfr(void)
 /* always called with process context; sleeping is OK */
 
 
-/**
+/*
  * usb_hcd_at91_probe - initialize AT91-based HCDs
  * Context: !in_interrupt()
  *
@@ -243,9 +246,8 @@ static int usb_hcd_at91_probe(const struct hc_driver *driver,
 
 /* may be called with controller, bus, and devices active */
 
-/**
+/*
  * usb_hcd_at91_remove - shutdown processing for AT91-based HCDs
- * @dev: USB Host Controller being removed
  * Context: !in_interrupt()
  *
  * Reverses the effect of usb_hcd_at91_probe(), first invoking

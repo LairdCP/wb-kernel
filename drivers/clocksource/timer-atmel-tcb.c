@@ -146,6 +146,7 @@ static unsigned long notrace tc_delay_timer_read32(void)
 struct tc_clkevt_device {
 	struct clock_event_device	clkevt;
 	struct clk			*clk;
+	u32				rate;
 	void __iomem			*regs;
 };
 
@@ -155,7 +156,6 @@ static struct tc_clkevt_device *to_tc_clkevt(struct clock_event_device *clkevt)
 }
 
 static u32 timer_clock;
-static u32 timer_rate;
 
 static int tc_shutdown(struct clock_event_device *d)
 {
@@ -205,7 +205,7 @@ static int tc_set_periodic(struct clock_event_device *d)
 	/* count up to RC, then irq and restart */
 	writel(timer_clock | ATMEL_TC_WAVE | ATMEL_TC_WAVESEL_UP_AUTO,
 		     regs + ATMEL_TC_REG(2, CMR));
-	writel((timer_rate + HZ / 2) / HZ, tcaddr + ATMEL_TC_REG(2, RC));
+	writel((tcd->rate + HZ / 2) / HZ, tcaddr + ATMEL_TC_REG(2, RC));
 
 	/* Enable clock and interrupts on RC compare */
 	writel(ATMEL_TC_CPCS, regs + ATMEL_TC_REG(2, IER));
@@ -255,7 +255,6 @@ static irqreturn_t ch2_irq(int irq, void *handle)
 
 static int __init setup_clkevents(struct atmel_tc *tc, int divisor_idx)
 {
-	u32 rate;
 	int ret;
 	struct clk *t2_clk = tc->clk[2];
 	int irq = tc->irq[2];
@@ -271,7 +270,7 @@ static int __init setup_clkevents(struct atmel_tc *tc, int divisor_idx)
 
 	if (bits == 32) {
 		timer_clock = divisor_idx;
-		rate = clk_get_rate(t2_clk) / atmel_tcb_divisors[divisor_idx];
+		clkevt.rate = clk_get_rate(t2_clk) / atmel_tcb_divisors[divisor_idx];
 	} else {
 		ret = clk_prepare_enable(tc->slow_clk);
 		if (ret) {
@@ -279,13 +278,12 @@ static int __init setup_clkevents(struct atmel_tc *tc, int divisor_idx)
 			return ret;
 		}
 
-		rate = clk_get_rate(tc->slow_clk);
+		clkevt.rate = clk_get_rate(tc->slow_clk);
 		timer_clock = ATMEL_TC_TIMER_CLOCK5;
 	}
 
 	clk_disable(t2_clk);
 
-	timer_rate = rate;
 	clkevt.clkevt.cpumask = cpumask_of(0);
 
 	ret = request_irq(irq, ch2_irq, IRQF_TIMER, "tc_clkevt", &clkevt);
@@ -296,7 +294,7 @@ static int __init setup_clkevents(struct atmel_tc *tc, int divisor_idx)
 		return ret;
 	}
 
-	clockevents_config_and_register(&clkevt.clkevt, rate, 1, BIT(bits) - 1);
+	clockevents_config_and_register(&clkevt.clkevt, clkevt.rate, 1, BIT(bits) - 1);
 
 	return ret;
 }

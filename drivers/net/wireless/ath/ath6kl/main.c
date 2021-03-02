@@ -390,7 +390,7 @@ void ath6kl_connect_ap_mode_bss(struct ath6kl_vif *vif, u16 channel)
 		if (!ik->valid || ik->key_type != WAPI_CRYPT)
 			break;
 		/* for WAPI, we need to set the delayed group key, continue: */
-		/* fall through */
+		fallthrough;
 	case WPA_PSK_AUTH:
 	case WPA2_PSK_AUTH:
 	case (WPA_PSK_AUTH | WPA2_PSK_AUTH):
@@ -430,6 +430,9 @@ void ath6kl_connect_ap_mode_sta(struct ath6kl_vif *vif, u16 aid, u8 *mac_addr,
 	struct station_info *sinfo;
 
 	ath6kl_dbg(ATH6KL_DBG_TRC, "new station %pM aid=%d\n", mac_addr, aid);
+
+	if (aid < 1 || aid > AP_MAX_NUM_STA)
+		return;
 
 	if (assoc_req_len > sizeof(struct ieee80211_hdr_3addr)) {
 		struct ieee80211_mgmt *mgmt =
@@ -586,7 +589,7 @@ static int ath6kl_commit_ch_switch(struct ath6kl_vif *vif, u16 channel)
 		 */
 		if (vif->rsn_capab &&
 		    test_bit(ATH6KL_FW_CAPABILITY_RSN_CAP_OVERRIDE,
-			     ar->fw_capabilities))
+			     ar->fw_capabilities)) {
 			if (ar->target_type == TARGET_TYPE_AR6004) {
 				ath6kl_wmi_set_rsn_cap_cmd(ar->wmi, vif->fw_vif_idx, vif->rsn_capab);
 			} else {
@@ -595,6 +598,7 @@ static int ath6kl_commit_ch_switch(struct ath6kl_vif *vif, u16 channel)
 									  (const u8 *) &vif->rsn_capab,
 									  sizeof(vif->rsn_capab));
 			}
+		}
 
 		return ath6kl_wmi_ap_profile_commit(ar->wmi, vif->fw_vif_idx,
 						    &vif->profile);
