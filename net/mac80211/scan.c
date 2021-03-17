@@ -251,8 +251,15 @@ ieee80211_bss_info_update(struct ieee80211_local *local,
 	    scan_sdata->vif.bss_conf.assoc &&
 	    ieee80211_have_rx_timestamp(rx_status)) {
 		bss_meta.parent_tsf =
+#ifdef CONFIG_ANDROID
+	        /** Android's Location service is expecting timestamp to be
+		    * local time (in microsecond) since boot;
+		    * and not the TSF found in the beacon. */
+		    ktime_to_us(ktime_get_boottime());
+#else
 			ieee80211_calculate_rx_timestamp(local, rx_status,
 							 len + FCS_LEN, 24);
+#endif
 		ether_addr_copy(bss_meta.parent_bssid,
 				scan_sdata->vif.bss_conf.bssid);
 	}
