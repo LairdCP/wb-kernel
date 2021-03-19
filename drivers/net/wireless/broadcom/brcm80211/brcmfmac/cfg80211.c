@@ -2844,8 +2844,10 @@ static s32 brcmf_inform_single_bss(struct brcmf_cfg80211_info *cfg,
 				       CFG80211_BSS_FTYPE_UNKNOWN,
 				       (const u8 *)bi->BSSID,
 #ifdef CONFIG_ANDROID
-#warning Building for Android bug (Laird) 13615
-				  (u64)(0x7FFFFFFFFFFFFFFFLL), notify_capability,
+                       /** Android's Location service is expecting timestamp to be
+                       * local time (in microsecond) since boot;
+                       * and not the TSF found in the beacon. */
+                       ktime_to_us(ktime_get_boottime()), notify_capability,
 #else
 				       0, notify_capability,
 #endif

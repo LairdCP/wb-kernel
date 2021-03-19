@@ -760,7 +760,16 @@ ath6kl_add_bss_if_needed(struct ath6kl_vif *vif,
 		memcpy(ie + 2 + vif->ssid_len, beacon_ie, beacon_ie_len);
 		bss = cfg80211_inform_bss(ar->wiphy, chan,
 					  CFG80211_BSS_FTYPE_UNKNOWN,
-					  bssid, 0, cap_val, 100,
+					  bssid,
+#ifdef CONFIG_ANDROID
+                      /** Android's Location service is expecting timestamp to be
+                      * local time (in microsecond) since boot;
+                      * and not the TSF found in the beacon. */
+                      ktime_to_us(ktime_get_boottime()),
+#else
+                      0,
+#endif
+                      cap_val, 100,
 					  ie, 2 + vif->ssid_len + beacon_ie_len,
 					  0, GFP_KERNEL);
 		if (bss)
