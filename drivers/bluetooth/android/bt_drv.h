@@ -568,7 +568,7 @@ struct proc_private_data {
 	/** Private structure */
 	struct _bt_private *pbt;
 	/** File operations */
-	const struct file_operations *fops;
+	const struct proc_ops *fops;
 };
 
 /** Device proc structure */
@@ -600,7 +600,7 @@ typedef struct _bt_private {
 	/** Init user configure file wait queue */
 	wait_queue_head_t init_user_conf_wait_q __ATTRIB_ALIGN__;
 	/** Firmware request start time */
-	struct timeval req_fw_time;
+	struct timespec64 req_fw_time;
 	/** Hotplug device */
 	struct device *hotplug_device;
 	/** thread to service interrupts */
@@ -1000,17 +1000,5 @@ typedef struct _BT_HCI_CMD {
 	/** Data */
 	u8 data[6];
 } __ATTRIB_PACK__ BT_HCI_CMD;
-
-static inline void
-get_monotonic_time(struct timeval *tv)
-{
-	struct timespec ts;
-
-	getrawmonotonic(&ts);
-	if (tv) {
-		tv->tv_sec = ts.tv_sec;
-		tv->tv_usec = ts.tv_nsec / 1000;
-	}
-}
 
 #endif /* _BT_DRV_H_ */

@@ -693,7 +693,7 @@ sd_request_fw_dpc(const struct firmware *fw_firmware, void *context)
 	bt_private *priv = (bt_private *)context;
 	struct sdio_mmc_card *card = NULL;
 	struct m_dev *m_dev_bt = NULL;
-	struct timeval tstamp;
+	struct timespec64 tstamp;
 	int index;
 
 	ENTER();
@@ -710,7 +710,7 @@ sd_request_fw_dpc(const struct firmware *fw_firmware, void *context)
 	card = (struct sdio_mmc_card *)priv->bt_dev.card;
 
 	if (!fw_firmware) {
-		get_monotonic_time(&tstamp);
+		ktime_get_raw_ts64(&tstamp);
 		if (tstamp.tv_sec >
 		    (priv->req_fw_time.tv_sec + REQUEST_FW_TIMEOUT)) {
 			PRINTM(ERROR,
@@ -1800,7 +1800,7 @@ sbi_download_fw(bt_private *priv)
 		goto exit;
 	}
 
-	get_monotonic_time(&priv->req_fw_time);
+	ktime_get_raw_ts64(&priv->req_fw_time);
 	/* Download the main firmware via the helper firmware */
 	if (sd_download_firmware_w_helper(priv)) {
 		PRINTM(INFO, "BT: FW download failed!\n");

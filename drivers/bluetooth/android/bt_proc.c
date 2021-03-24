@@ -502,18 +502,18 @@ proc_open(struct inode *inode, struct file *file)
 }
 
 /** Proc read ops */
-static const struct file_operations proc_read_ops = {
-	.read = proc_read,
-	.open = proc_open,
-	.release = proc_close
+static const struct proc_ops proc_read_ops = {
+	.proc_read = proc_read,
+	.proc_open = proc_open,
+	.proc_release = proc_close
 };
 
 /** Proc Read-Write ops */
-static const struct file_operations proc_rw_ops = {
-	.read = proc_read,
-	.write = proc_write,
-	.open = proc_open,
-	.release = proc_close
+static const struct proc_ops proc_rw_ops = {
+	.proc_read = proc_read,
+	.proc_write = proc_write,
+	.proc_open = proc_open,
+	.proc_release = proc_close
 };
 
 static struct proc_private_data proc_files[] = {
@@ -650,12 +650,11 @@ bt_histogram_proc_open(struct inode *inode, struct file *file)
 }
 
 /** Histogram proc fops */
-static const struct file_operations histogram_proc_fops = {
-	.owner = THIS_MODULE,
-	.open = bt_histogram_proc_open,
-	.read = seq_read,
-	.llseek = seq_lseek,
-	.release = single_release,
+static const struct proc_ops histogram_proc_fops = {
+	.proc_open = bt_histogram_proc_open,
+	.proc_read = seq_read,
+	.proc_lseek = seq_lseek,
+	.proc_release = single_release,
 };
 
 /**

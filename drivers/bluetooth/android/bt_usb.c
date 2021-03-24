@@ -1129,7 +1129,7 @@ usb_request_fw_dpc(const struct firmware *fw_firmware, void *context)
 	bt_private *priv = (bt_private *)context;
 	struct usb_card_rec *card = NULL;
 	struct m_dev *m_dev_bt = NULL;
-	struct timeval tstamp;
+	struct timespec64 tstamp;
 	int index;
 
 	ENTER();
@@ -1145,7 +1145,7 @@ usb_request_fw_dpc(const struct firmware *fw_firmware, void *context)
 	card = (struct usb_card_rec *)priv->bt_dev.card;
 
 	if (!fw_firmware) {
-		get_monotonic_time(&tstamp);
+		ktime_get_raw_ts64(&tstamp);
 		if (tstamp.tv_sec >
 		    (priv->req_fw_time.tv_sec + REQUEST_FW_TIMEOUT)) {
 			PRINTM(ERROR, "BT: No FW image found. Skipping d/w\n");
@@ -2401,7 +2401,7 @@ sbi_download_fw(bt_private *priv)
 
 	if (TRUE && (card->boot_state != USB_FW_READY)) {
 		PRINTM(MSG, "FW is not Active, Needs to be downloaded\n");
-		get_monotonic_time(&priv->req_fw_time);
+		ktime_get_raw_ts64(&priv->req_fw_time);
 		/* Download the main firmware */
 		if (usb_download_firmware_w_helper(priv)) {
 			PRINTM(INFO, "BT: FW download failed!\n");
