@@ -308,7 +308,7 @@
 	#address-cells = <1>;
 	#size-cells = <0>;
 
-	phy-mode = "rgmii";
+	phy-mode = "rgmii-id";
 };
 
 &macb1 {
