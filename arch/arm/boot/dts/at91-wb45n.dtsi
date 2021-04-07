@@ -110,7 +110,7 @@
 
 	nand: nand@3 {
 		pinctrl-names = "default";
-		pinctrl-0 = <&pinctrl_nand_cs &pinctrl_nand_rb &pinctrl_nand_oe_we 
+		pinctrl-0 = <&pinctrl_nand_cs &pinctrl_nand_rb &pinctrl_nand_oe_we
 			&pinctrl_nand0_wp>;
 
 		reg = <0x3 0x0 0x800000>;
