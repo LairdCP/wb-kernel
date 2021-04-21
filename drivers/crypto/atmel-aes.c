@@ -1070,28 +1070,62 @@ static int atmel_aes_bc_transfer_complete(struct atmel_aes_dev *dd)
 {
 	struct skcipher_request *req = skcipher_request_cast(dd->areq);
 	struct atmel_aes_reqctx *rctx = skcipher_request_ctx(req);
+	struct atmel_aes_base_ctx *ctx = dd->ctx;
+	unsigned int lastlen, alignedlen, ivoff;
 
-	if (rctx->mode & AES_FLAGS_ENCRYPT) {
-		unsigned lbtail = req->cryptlen & (AES_BLOCK_SIZE - 1);
-		unsigned lboff = req->cryptlen - lbtail;
-
-		if (!lbtail)
+	switch (rctx->mode & AES_FLAGS_OPMODE_MASK) {
+	case AES_FLAGS_CBC:
+		if (rctx->mode & AES_FLAGS_ENCRYPT)
 			scatterwalk_map_and_copy(req->iv, req->dst,
-				lboff - AES_BLOCK_SIZE, AES_BLOCK_SIZE, 0);
+				req->cryptlen - AES_BLOCK_SIZE,
+				AES_BLOCK_SIZE, 0);
+		else if (req->src == req->dst)
+			memcpy(req->iv, rctx->lastc, AES_BLOCK_SIZE);
 		else
-			memcpy(req->iv, dd->buf + lboff, AES_BLOCK_SIZE);
-	} else if (req->src == req->dst)
-		memcpy(req->iv, rctx->lastc, AES_BLOCK_SIZE);
-	else {
-		unsigned lbtail = req->cryptlen & (AES_BLOCK_SIZE - 1);
+			scatterwalk_map_and_copy(req->iv, req->src,
+				req->cryptlen - AES_BLOCK_SIZE,
+				AES_BLOCK_SIZE, 0);
+		break;
 
-		if (lbtail)
-			memset(req->iv + lbtail, 0, AES_BLOCK_SIZE - lbtail);
+	case AES_FLAGS_CFB8:
+	case AES_FLAGS_CFB16:
+	case AES_FLAGS_CFB32:
+	case AES_FLAGS_CFB64:
+	case AES_FLAGS_CFB128:
+		alignedlen = ALIGN_DOWN(req->cryptlen, ctx->block_size);
+		if (!alignedlen)
+			break;
+
+		if (alignedlen < AES_BLOCK_SIZE) {
+			lastlen = alignedlen;
+			ivoff = AES_BLOCK_SIZE - lastlen;
+			memmove(req->iv, req->iv + lastlen, ivoff);
+		} else {
+			lastlen = AES_BLOCK_SIZE;
+			ivoff = 0;
+		}
+
+		if (rctx->mode & AES_FLAGS_ENCRYPT)
+			scatterwalk_map_and_copy(req->iv + ivoff, req->dst,
+				alignedlen - lastlen, lastlen, 0);
+		else if (req->src == req->dst)
+			memcpy(req->iv + ivoff, rctx->lastc, lastlen);
 		else
-			lbtail = AES_BLOCK_SIZE;
+			scatterwalk_map_and_copy(req->iv + ivoff, req->src,
+				alignedlen - lastlen, lastlen, 0);
+		break;
 
-		scatterwalk_map_and_copy(req->iv, req->src,
-			req->cryptlen - lbtail, lbtail, 0);
+	case AES_FLAGS_OFB:
+		lastlen = req->cryptlen & (AES_BLOCK_SIZE - 1);
+		if (!lastlen)
+			lastlen = AES_BLOCK_SIZE;
+		scatterwalk_map_and_copy(req->iv, req->dst,
+					req->cryptlen - lastlen, lastlen, 0);
+		crypto_xor(req->iv, (u8*)rctx->lastc, lastlen);
+		break;
+
+	default:
+		break;
 	}
 
 	return atmel_aes_complete(dd, 0);
@@ -1281,18 +1315,53 @@ static int atmel_aes_ctr_start(struct atmel_aes_dev *dd)
 static int atmel_aes_bc_crypt(struct skcipher_request *req, unsigned long mode)
 {
 	struct atmel_aes_reqctx *rctx = skcipher_request_ctx(req);
+	struct crypto_skcipher *tfm = crypto_skcipher_reqtfm(req);
+	struct atmel_aes_base_ctx *ctx = crypto_skcipher_ctx(tfm);
+	unsigned int lastlen, alignedlen;
+
+	if (!req->cryptlen)
+		return 0;
+
+	if (!IS_ALIGNED(req->cryptlen, crypto_skcipher_blocksize(tfm)))
+		return -EINVAL;
 
 	rctx->mode = mode;
 
-	if (!(mode & AES_FLAGS_ENCRYPT) && (req->src == req->dst)) {
-		unsigned lbtail = req->cryptlen & (AES_BLOCK_SIZE - 1);
-		if (lbtail)
-			memset(rctx->lastc + lbtail, 0, AES_BLOCK_SIZE - lbtail);
-		else
-			lbtail = AES_BLOCK_SIZE;
+	switch (mode & AES_FLAGS_OPMODE_MASK) {
+	case AES_FLAGS_CBC:
+		if (!(mode & AES_FLAGS_ENCRYPT) && (req->src == req->dst))
+			scatterwalk_map_and_copy(rctx->lastc, req->src,
+				req->cryptlen - AES_BLOCK_SIZE, AES_BLOCK_SIZE, 0);
+		break;
 
+	case AES_FLAGS_CFB8:
+	case AES_FLAGS_CFB16:
+	case AES_FLAGS_CFB32:
+	case AES_FLAGS_CFB64:
+	case AES_FLAGS_CFB128:
+		if (!(mode & AES_FLAGS_ENCRYPT) && (req->src == req->dst)) {
+			alignedlen = ALIGN_DOWN(req->cryptlen, ctx->block_size);
+			if (!alignedlen)
+				break;
+
+			lastlen = alignedlen < AES_BLOCK_SIZE ?
+				alignedlen : AES_BLOCK_SIZE;
+
+			scatterwalk_map_and_copy(rctx->lastc, req->src,
+				alignedlen - lastlen, lastlen, 0);
+		}
+		break;
+
+	case AES_FLAGS_OFB:
+		lastlen = req->cryptlen & (AES_BLOCK_SIZE - 1);
+		if (!lastlen)
+			lastlen = AES_BLOCK_SIZE;
 		scatterwalk_map_and_copy(rctx->lastc, req->src,
-			req->cryptlen - lbtail, lbtail, 0);
+			req->cryptlen - lastlen, lastlen, 0);
+		break;
+
+	default:
+		break;
 	}
 
 	return atmel_aes_handle_queue(&req->base);
@@ -1301,6 +1370,9 @@ static int atmel_aes_bc_crypt(struct skcipher_request *req, unsigned long mode)
 static int atmel_aes_crypt(struct skcipher_request *req, unsigned long mode)
 {
 	struct atmel_aes_reqctx *rctx = skcipher_request_ctx(req);
+
+	if (!req->cryptlen)
+		return 0;
 
 	rctx->mode = mode;
 
@@ -1432,12 +1504,13 @@ static int atmel_aes_cra_init(struct crypto_tfm *tfm)
 static int atmel_aes_bc_cra_init(struct crypto_tfm *tfm)
 {
 	struct atmel_aes_base_ctx *ctx = crypto_tfm_ctx(tfm);
+	struct crypto_skcipher *skcipher = __crypto_skcipher_cast(tfm);
 
 	ctx->start = atmel_aes_bc_start;
-	ctx->block_size = crypto_tfm_alg_blocksize(tfm);
+	ctx->block_size = crypto_skcipher_chunksize(skcipher);
 	ctx->is_aead = false;
 
-	crypto_skcipher_set_reqsize(__crypto_skcipher_cast(tfm),
+	crypto_skcipher_set_reqsize(skcipher,
 		sizeof(struct atmel_aes_reqctx));
 
 	return 0;
@@ -1608,6 +1681,7 @@ static struct skcipher_alg skcipher_aes_algs[] = {
 	.min_keysize	= AES_MIN_KEY_SIZE,
 	.max_keysize	= AES_MAX_KEY_SIZE,
 	.ivsize		= AES_BLOCK_SIZE,
+	.chunksize	= AES_BLOCK_SIZE,
 	.setkey		= atmel_aes_setkey,
 	.encrypt	= atmel_aes_ofb_encrypt,
 	.decrypt	= atmel_aes_ofb_decrypt,
@@ -1616,7 +1690,7 @@ static struct skcipher_alg skcipher_aes_algs[] = {
 		.cra_driver_name	= "atmel-ofb-aes",
 		.cra_priority		= ATMEL_AES_PRIORITY,
 		.cra_flags		= ATMEL_CRYPTO_ALG_FLAGS_ASYNC,
-		.cra_blocksize		= AES_BLOCK_SIZE,
+		.cra_blocksize		= 1,
 		.cra_ctxsize		= sizeof(struct atmel_aes_ctx),
 		.cra_alignmask		= 0,
 		.cra_module		= THIS_MODULE,
@@ -1627,6 +1701,7 @@ static struct skcipher_alg skcipher_aes_algs[] = {
 	.min_keysize	= AES_MIN_KEY_SIZE,
 	.max_keysize	= AES_MAX_KEY_SIZE,
 	.ivsize		= AES_BLOCK_SIZE,
+	.chunksize	= AES_BLOCK_SIZE,
 	.setkey		= atmel_aes_setkey,
 	.encrypt	= atmel_aes_cfb_encrypt,
 	.decrypt	= atmel_aes_cfb_decrypt,
@@ -1635,7 +1710,7 @@ static struct skcipher_alg skcipher_aes_algs[] = {
 		.cra_driver_name	= "atmel-cfb-aes",
 		.cra_priority		= ATMEL_AES_PRIORITY,
 		.cra_flags		= ATMEL_CRYPTO_ALG_FLAGS_ASYNC,
-		.cra_blocksize		= AES_BLOCK_SIZE,
+		.cra_blocksize		= 1,
 		.cra_ctxsize		= sizeof(struct atmel_aes_ctx),
 		.cra_alignmask		= 0,
 		.cra_module		= THIS_MODULE,
@@ -1646,6 +1721,7 @@ static struct skcipher_alg skcipher_aes_algs[] = {
 	.min_keysize	= AES_MIN_KEY_SIZE,
 	.max_keysize	= AES_MAX_KEY_SIZE,
 	.ivsize		= AES_BLOCK_SIZE,
+	.chunksize	= CFB32_BLOCK_SIZE,
 	.setkey		= atmel_aes_setkey,
 	.encrypt	= atmel_aes_cfb32_encrypt,
 	.decrypt	= atmel_aes_cfb32_decrypt,
@@ -1654,7 +1730,7 @@ static struct skcipher_alg skcipher_aes_algs[] = {
 		.cra_driver_name	= "atmel-cfb32-aes",
 		.cra_priority		= ATMEL_AES_PRIORITY,
 		.cra_flags		= ATMEL_CRYPTO_ALG_FLAGS_ASYNC,
-		.cra_blocksize		= CFB32_BLOCK_SIZE,
+		.cra_blocksize		= 1,
 		.cra_ctxsize		= sizeof(struct atmel_aes_ctx),
 		.cra_alignmask		= 0,
 		.cra_module		= THIS_MODULE,
@@ -1665,6 +1741,7 @@ static struct skcipher_alg skcipher_aes_algs[] = {
 	.min_keysize	= AES_MIN_KEY_SIZE,
 	.max_keysize	= AES_MAX_KEY_SIZE,
 	.ivsize		= AES_BLOCK_SIZE,
+	.chunksize	= CFB16_BLOCK_SIZE,
 	.setkey		= atmel_aes_setkey,
 	.encrypt	= atmel_aes_cfb16_encrypt,
 	.decrypt	= atmel_aes_cfb16_decrypt,
@@ -1673,7 +1750,7 @@ static struct skcipher_alg skcipher_aes_algs[] = {
 		.cra_driver_name	= "atmel-cfb16-aes",
 		.cra_priority		= ATMEL_AES_PRIORITY,
 		.cra_flags		= ATMEL_CRYPTO_ALG_FLAGS_ASYNC,
-		.cra_blocksize		= CFB16_BLOCK_SIZE,
+		.cra_blocksize		= 1,
 		.cra_ctxsize		= sizeof(struct atmel_aes_ctx),
 		.cra_alignmask		= 0,
 		.cra_module		= THIS_MODULE,
@@ -1684,6 +1761,7 @@ static struct skcipher_alg skcipher_aes_algs[] = {
 	.min_keysize	= AES_MIN_KEY_SIZE,
 	.max_keysize	= AES_MAX_KEY_SIZE,
 	.ivsize		= AES_BLOCK_SIZE,
+	.chunksize	= CFB8_BLOCK_SIZE,
 	.setkey		= atmel_aes_setkey,
 	.encrypt	= atmel_aes_cfb8_encrypt,
 	.decrypt	= atmel_aes_cfb8_decrypt,
@@ -1692,7 +1770,7 @@ static struct skcipher_alg skcipher_aes_algs[] = {
 		.cra_driver_name	= "atmel-cfb8-aes",
 		.cra_priority		= ATMEL_AES_PRIORITY,
 		.cra_flags		= ATMEL_CRYPTO_ALG_FLAGS_ASYNC,
-		.cra_blocksize		= CFB8_BLOCK_SIZE,
+		.cra_blocksize		= 1,
 		.cra_ctxsize		= sizeof(struct atmel_aes_ctx),
 		.cra_alignmask		= 0,
 		.cra_module		= THIS_MODULE,
