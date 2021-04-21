@@ -42,6 +42,7 @@
 /* TDES flags  */
 #define TDES_FLAGS_MODE_MASK		0x00ff
 #define TDES_FLAGS_ENCRYPT	BIT(0)
+#define TDES_FLAGS_OPMODE_MASK	0x00fe
 #define TDES_FLAGS_CBC		BIT(1)
 #define TDES_FLAGS_CFB		BIT(2)
 #define TDES_FLAGS_CFB8		BIT(3)
@@ -457,10 +458,16 @@ static int atmel_tdes_crypt_dma(struct atmel_tdes_dev *dd,
 	return -EINPROGRESS;
 }
 
+static inline size_t atmel_des_padlen(size_t len, size_t block_size)
+{
+	len &= block_size - 1;
+	return len ? block_size - len : 0;
+}
+
 static int atmel_tdes_crypt_start(struct atmel_tdes_dev *dd)
 {
 	int err, fast = 0, in, out;
-	size_t count;
+	size_t count, padlen;
 	dma_addr_t addr_in, addr_out;
 
 	if ((!dd->in_offset) && (!dd->out_offset)) {
@@ -507,19 +514,11 @@ static int atmel_tdes_crypt_start(struct atmel_tdes_dev *dd)
 
 		dd->flags &= ~TDES_FLAGS_FAST;
 		dd->total -= count;
-	}
 
-	if (dd->flags & (TDES_FLAGS_CBC | TDES_FLAGS_CFB | TDES_FLAGS_OFB)) {
-		struct skcipher_request *req = dd->req;
-
-		if (!dd->total && !(dd->flags & TDES_FLAGS_ENCRYPT) &&
-			(req->src == req->dst)) {
-			struct atmel_tdes_reqctx *rctx =
-				skcipher_request_ctx(req);
-
-			scatterwalk_map_and_copy(rctx->lastc, req->src,
-				req->cryptlen - DES_BLOCK_SIZE,
-				DES_BLOCK_SIZE, 0);
+		padlen = atmel_des_padlen(count, dd->ctx->block_size);
+		if (padlen) {
+			memset(dd->buf_in + count, 0, padlen);
+			count += padlen;
 		}
 	}
 
@@ -536,25 +535,77 @@ static int atmel_tdes_crypt_start(struct atmel_tdes_dev *dd)
 	return err;
 }
 
+static void
+atmel_tdes_set_iv_as_last_ciphertext_block(struct atmel_tdes_dev *dd)
+{
+	struct skcipher_request *req = dd->req;
+	struct atmel_tdes_reqctx *rctx = skcipher_request_ctx(req);
+	struct atmel_tdes_ctx *ctx = dd->ctx;
+	unsigned int lastlen, alignedlen, ivoff;
+
+	switch (rctx->mode & TDES_FLAGS_OPMODE_MASK) {
+	case TDES_FLAGS_CBC:
+		if (rctx->mode & TDES_FLAGS_ENCRYPT) {
+			scatterwalk_map_and_copy(req->iv, req->dst,
+				req->cryptlen - DES_BLOCK_SIZE,
+				DES_BLOCK_SIZE, 0);
+		} else {
+			if (req->src == req->dst)
+				memcpy(req->iv, rctx->lastc, DES_BLOCK_SIZE);
+			else
+				scatterwalk_map_and_copy(req->iv, req->src,
+					req->cryptlen - DES_BLOCK_SIZE,
+					DES_BLOCK_SIZE, 0);
+		}
+		break;
+
+	case TDES_FLAGS_CFB8:
+	case TDES_FLAGS_CFB16:
+	case TDES_FLAGS_CFB32:
+	case TDES_FLAGS_CFB64:
+		alignedlen = ALIGN_DOWN(req->cryptlen, ctx->block_size);
+		if (!alignedlen)
+			break;
+
+		if (alignedlen < DES_BLOCK_SIZE) {
+			lastlen = alignedlen;
+			ivoff = DES_BLOCK_SIZE - lastlen;
+			memmove(req->iv, req->iv + lastlen, ivoff);
+		} else {
+			lastlen = DES_BLOCK_SIZE;
+			ivoff = 0;
+		}
+
+		if (rctx->mode & TDES_FLAGS_ENCRYPT)
+			scatterwalk_map_and_copy(req->iv + ivoff, req->dst,
+				alignedlen - lastlen, lastlen, 0);
+		else if (req->src == req->dst)
+			memcpy(req->iv + ivoff, rctx->lastc, lastlen);
+		else
+			scatterwalk_map_and_copy(req->iv + ivoff, req->src,
+				alignedlen - lastlen, lastlen, 0);
+		break;
+
+	case TDES_FLAGS_OFB:
+		lastlen = req->cryptlen & (DES_BLOCK_SIZE - 1);
+		if (!lastlen)
+			lastlen = DES_BLOCK_SIZE;
+		scatterwalk_map_and_copy(req->iv, req->dst,
+			req->cryptlen - lastlen, lastlen, 0);
+		crypto_xor(req->iv, (u8*)rctx->lastc, lastlen);
+		break;
+
+	default:
+		break;
+	}
+}
+
 static void atmel_tdes_finish_req(struct atmel_tdes_dev *dd, int err)
 {
 	struct skcipher_request *req = dd->req;
 
-	if ((dd->flags & (TDES_FLAGS_CBC | TDES_FLAGS_CFB | TDES_FLAGS_OFB)) &&
-		req->iv) {
-		if (dd->flags & TDES_FLAGS_ENCRYPT) {
-			scatterwalk_map_and_copy(req->iv, req->dst,
-				req->cryptlen - DES_BLOCK_SIZE,
-				DES_BLOCK_SIZE, 0);
-		} else if (req->src == req->dst) {
-			struct atmel_tdes_reqctx *rctx = skcipher_request_ctx(req);
-			memcpy(req->iv, rctx->lastc, DES_BLOCK_SIZE);
-		} else {
-			scatterwalk_map_and_copy(req->iv, req->src,
-				req->cryptlen - DES_BLOCK_SIZE,
-				DES_BLOCK_SIZE, 0);
-		}
-	}
+	if (!err)
+		atmel_tdes_set_iv_as_last_ciphertext_block(dd);
 
 	req->base.complete(&req->base, err);
 }
@@ -657,37 +708,58 @@ static int atmel_tdes_crypt_dma_stop(struct atmel_tdes_dev *dd)
 
 static int atmel_tdes_crypt(struct skcipher_request *req, unsigned long mode)
 {
-	struct atmel_tdes_ctx *ctx = crypto_skcipher_ctx(
-			crypto_skcipher_reqtfm(req));
+	struct crypto_skcipher *skcipher = crypto_skcipher_reqtfm(req);
+	struct atmel_tdes_ctx *ctx = crypto_skcipher_ctx(skcipher);
 	struct atmel_tdes_reqctx *rctx = skcipher_request_ctx(req);
+	unsigned int lastlen, alignedlen;
 
-	if (mode & TDES_FLAGS_CFB8) {
-		if (!IS_ALIGNED(req->cryptlen, CFB8_BLOCK_SIZE)) {
-			pr_err("request size is not exact amount of CFB8 blocks\n");
-			return -EINVAL;
-		}
-		ctx->block_size = CFB8_BLOCK_SIZE;
-	} else if (mode & TDES_FLAGS_CFB16) {
-		if (!IS_ALIGNED(req->cryptlen, CFB16_BLOCK_SIZE)) {
-			pr_err("request size is not exact amount of CFB16 blocks\n");
-			return -EINVAL;
-		}
-		ctx->block_size = CFB16_BLOCK_SIZE;
-	} else if (mode & TDES_FLAGS_CFB32) {
-		if (!IS_ALIGNED(req->cryptlen, CFB32_BLOCK_SIZE)) {
-			pr_err("request size is not exact amount of CFB32 blocks\n");
-			return -EINVAL;
-		}
-		ctx->block_size = CFB32_BLOCK_SIZE;
-	} else {
-		if (!IS_ALIGNED(req->cryptlen, DES_BLOCK_SIZE)) {
-			pr_err("request size is not exact amount of DES blocks\n");
-			return -EINVAL;
-		}
-		ctx->block_size = DES_BLOCK_SIZE;
-	}
+	if (!req->cryptlen)
+		return 0;
+
+	if (!IS_ALIGNED(req->cryptlen, crypto_skcipher_blocksize(skcipher)))
+		return -EINVAL;
 
 	rctx->mode = mode;
+
+	switch (mode & TDES_FLAGS_OPMODE_MASK) {
+	case TDES_FLAGS_CBC:
+		if (!(mode & TDES_FLAGS_ENCRYPT) && req->src == req->dst) {
+			scatterwalk_map_and_copy(rctx->lastc, req->src,
+						req->cryptlen - DES_BLOCK_SIZE,
+						DES_BLOCK_SIZE, 0);
+		}
+		break;
+
+	case TDES_FLAGS_CFB8:
+	case TDES_FLAGS_CFB16:
+	case TDES_FLAGS_CFB32:
+	case TDES_FLAGS_CFB64:
+		if (!(mode & TDES_FLAGS_ENCRYPT) && (req->src == req->dst)) {
+			alignedlen = ALIGN_DOWN(req->cryptlen, ctx->block_size);
+			if (!alignedlen)
+				break;
+
+			lastlen = alignedlen < DES_BLOCK_SIZE ?
+				alignedlen : DES_BLOCK_SIZE;
+
+			scatterwalk_map_and_copy(rctx->lastc, req->src,
+				alignedlen - lastlen, lastlen, 0);
+		}
+		break;
+
+	case TDES_FLAGS_OFB:
+		lastlen = req->cryptlen & (DES_BLOCK_SIZE - 1);
+		if (!lastlen)
+			lastlen = DES_BLOCK_SIZE;
+		scatterwalk_map_and_copy(rctx->lastc, req->src,
+					req->cryptlen - lastlen, lastlen, 0);
+		break;
+
+	default:
+		break;
+	}
+
+	ctx->block_size = crypto_skcipher_chunksize(skcipher);
 
 	return atmel_tdes_handle_queue(req);
 }
