@@ -150,6 +150,13 @@
 		compatible = "atmel,24c32";
 		reg = <0x57>;
 		pagesize = <32>;
+
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		eth0_addr: eth-mac-addr@0 {
+			reg = <0x0 0x06>;
+		};
 	};
 
 	wm8904: wm8904@1a {
