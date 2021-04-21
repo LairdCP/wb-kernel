@@ -88,6 +88,9 @@
 };
 
 &macb0 {
+	pinctrl-names = "default";
+	pinctrl-0 =	<&pinctrl_macb0_rmii>;
+
 	#address-cells = <1>;
 	#size-cells = <0>;
 
@@ -114,8 +117,10 @@
 			&pinctrl_nand0_wp>;
 
 		reg = <0x3 0x0 0x800000>;
+
 		rb-gpios = <&pioD 5 GPIO_ACTIVE_HIGH>;
 		cs-gpios = <&pioD 4 GPIO_ACTIVE_HIGH>;
+
 		nand-bus-width = <8>;
 		nand-ecc-mode = "hw";
 		nand-ecc-strength = <4>;
