@@ -192,6 +192,7 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_usb_vbus>;
 
+	status = "okay";
 	num-ports = <2>;
 
 	atmel,vbus-gpio = <&pioB 12 GPIO_ACTIVE_HIGH>, <&pioA 31 GPIO_ACTIVE_HIGH>;
