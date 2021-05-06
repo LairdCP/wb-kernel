@@ -20,6 +20,8 @@
 #include <linux/module.h>
 #include <linux/netdevice.h>
 
+#define CRYPTO_TFM_RES_MASK		0xfff00000
+
 struct crypto_gcmp_ctx {
 	struct crypto_aead *child;
 	u64 pn64;
@@ -168,19 +170,16 @@ static void crypto_gcmp_free(struct aead_instance *inst)
 static int crypto_gcmp_create(struct crypto_template *tmpl,
 				 struct rtattr **tb)
 {
-	struct crypto_attr_type *algt;
 	struct aead_instance *inst;
 	struct crypto_aead_spawn *spawn;
 	struct aead_alg *alg;
 	const char *gcm_name;
 	int err;
+	u32 mask;
 
-	algt = crypto_get_attr_type(tb);
-	if (IS_ERR(algt))
-		return PTR_ERR(algt);
-
-	if ((algt->type ^ CRYPTO_ALG_TYPE_AEAD) & algt->mask)
-		return -EINVAL;
+	err = crypto_check_attr_type(tb, CRYPTO_ALG_TYPE_AEAD, &mask);
+	if (err)
+		return err;
 
 	gcm_name = crypto_attr_alg_name(tb[1]);
 	if (IS_ERR(gcm_name))
@@ -191,9 +190,8 @@ static int crypto_gcmp_create(struct crypto_template *tmpl,
 		return -ENOMEM;
 
 	spawn = aead_instance_ctx(inst);
-	crypto_set_aead_spawn(spawn, aead_crypto_instance(inst));
-	err = crypto_grab_aead(spawn, gcm_name, 0,
-			       crypto_requires_sync(algt->type, algt->mask));
+	err = crypto_grab_aead(spawn, aead_crypto_instance(inst),
+			       gcm_name, 0, mask);
 	if (err)
 		goto out_free_inst;
 

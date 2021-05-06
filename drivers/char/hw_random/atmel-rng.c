@@ -10,22 +10,29 @@
 #include <linux/module.h>
 #include <linux/errno.h>
 #include <linux/clk.h>
+#include <linux/io.h>
 #include <linux/of_device.h>
 #include <linux/hw_random.h>
 #include <crypto/rng.h>
 #include <crypto/internal/rng.h>
 
 #define TRNG_CR		0x00
+#define TRNG_MR		0x04
 #define TRNG_ISR	0x1c
 #define TRNG_ODATA	0x50
 
 #define TRNG_KEY	0x524e4700 /* RNG */
 
+#define TRNG_HALFR	BIT(0) /* generate RN every 168 cycles */
+
+struct atmel_trng_data {
+	bool has_half_rate;
+};
+
 struct atmel_trng {
 	struct clk *clk;
 	void __iomem *base;
 	struct hwrng rng;
-	unsigned long rng_cycle;
 	u32 last;
 };
 
@@ -127,27 +134,35 @@ static struct rng_alg atmel_trng_alg = {
 static int atmel_trng_probe(struct platform_device *pdev)
 {
 	struct atmel_trng *trng;
-	struct resource *res;
+	const struct atmel_trng_data *data;
 	int ret;
 
 	trng = devm_kzalloc(&pdev->dev, sizeof(*trng), GFP_KERNEL);
 	if (!trng)
 		return -ENOMEM;
 
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	trng->base = devm_ioremap_resource(&pdev->dev, res);
+	trng->base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(trng->base))
 		return PTR_ERR(trng->base);
 
 	trng->clk = devm_clk_get(&pdev->dev, NULL);
 	if (IS_ERR(trng->clk))
 		return PTR_ERR(trng->clk);
+	data = of_device_get_match_data(&pdev->dev);
+	if (!data)
+		return -ENODEV;
+
+	if (data->has_half_rate) {
+		unsigned long rate = clk_get_rate(trng->clk);
+
+		/* if peripheral clk is above 100MHz, set HALFR */
+		if (rate > 100000000)
+			writel(TRNG_HALFR, trng->base + TRNG_MR);
+	}
 
 	ret = clk_prepare_enable(trng->clk);
 	if (ret)
 		return ret;
-
-	trng->rng_cycle = 84000000 / clk_get_rate(trng->clk) + 1;
 
 	atmel_trng_enable(trng);
 
@@ -224,9 +239,24 @@ static int atmel_trng_resume(struct device *dev)
 static SIMPLE_DEV_PM_OPS(atmel_trng_pm_ops, atmel_trng_suspend,
 	atmel_trng_resume);
 
+static const struct atmel_trng_data at91sam9g45_config = {
+	.has_half_rate = false,
+};
+
+static const struct atmel_trng_data sam9x60_config = {
+	.has_half_rate = true,
+};
+
 static const struct of_device_id atmel_trng_dt_ids[] = {
-	{ .compatible = "atmel,at91sam9g45-trng" },
-	{ /* sentinel */ }
+	{
+		.compatible = "atmel,at91sam9g45-trng",
+		.data = &at91sam9g45_config,
+	}, {
+		.compatible = "microchip,sam9x60-trng",
+		.data = &sam9x60_config,
+	}, {
+		/* sentinel */
+	}
 };
 MODULE_DEVICE_TABLE(of, atmel_trng_dt_ids);
 

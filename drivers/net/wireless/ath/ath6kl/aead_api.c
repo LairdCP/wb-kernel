@@ -44,7 +44,7 @@ int aead_encrypt(struct crypto_aead *tfm, u8 *b_0, u8 *aad, size_t aad_len,
 	aead_request_set_ad(aead_req, sg[0].length);
 
 	crypto_aead_encrypt(aead_req);
-	kzfree(aead_req);
+	kfree_sensitive(aead_req);
 
 	return 0;
 }
@@ -79,7 +79,7 @@ int aead_decrypt(struct crypto_aead *tfm, u8 *b_0, u8 *aad, size_t aad_len,
 	aead_request_set_ad(aead_req, sg[0].length);
 
 	err = crypto_aead_decrypt(aead_req);
-	kzfree(aead_req);
+	kfree_sensitive(aead_req);
 
 	return err;
 }

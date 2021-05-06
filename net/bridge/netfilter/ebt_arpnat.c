@@ -194,19 +194,17 @@ static int arpnat_info_open(struct inode *inode, struct file* file)
 	return single_open(file, arpnat_info_show, NULL);
 }
 
-static struct file_operations arpnat_cache_fops = {
-	.owner   = THIS_MODULE,
-	.open    = arpnat_cache_open,
-	.read    = seq_read,
-	.llseek  = seq_lseek,
-	.release = single_release,
+static struct proc_ops arpnat_cache_proc_ops = {
+	.proc_open    = arpnat_cache_open,
+	.proc_read    = seq_read,
+	.proc_lseek   = seq_lseek,
+	.proc_release = single_release,
 };
-static struct file_operations arpnat_info_fops = {
-	.owner   = THIS_MODULE,
-	.open    = arpnat_info_open,
-	.read    = seq_read,
-	.llseek  = seq_lseek,
-	.release = single_release,
+static struct proc_ops arpnat_info_proc_ops = {
+	.proc_open    = arpnat_info_open,
+	.proc_read    = seq_read,
+	.proc_lseek   = seq_lseek,
+	.proc_release = single_release,
 };
 #endif
 
@@ -465,8 +463,8 @@ static int __init init(void)
 	if (!proc_arpnat_dir)
 		return -ENOMEM;
 
-	proc_create("info", 0, proc_arpnat_dir, &arpnat_info_fops);
-	proc_create("cache", 0, proc_arpnat_dir, &arpnat_cache_fops);
+	proc_create("info", 0, proc_arpnat_dir, &arpnat_info_proc_ops);
+	proc_create("cache", 0, proc_arpnat_dir, &arpnat_cache_proc_ops);
 #endif
 
 	return xt_register_target(&arpnat);
