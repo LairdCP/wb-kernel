@@ -3645,11 +3645,18 @@ static inline struct crypto_platform_data *atmel_aes_of_init(struct platform_dev
 }
 #endif
 
-static inline void atmel_aes_dev_register(struct atmel_aes_dev *dd)
+static inline void atmel_aes_dev_register(struct atmel_aes_dev *dd, bool sync_mode)
 {
 	spin_lock_bh(&atmel_aes.lock);
 	atmel_aes.dd = dd;
-	atmel_aes.sync_mode = fips_enabled && fips_wifi_enabled;
+	atmel_aes.sync_mode = sync_mode || (fips_enabled && fips_wifi_enabled);
+	spin_unlock_bh(&atmel_aes.lock);
+}
+
+static inline void atmel_aes_dev_unregister(void)
+{
+	spin_lock_bh(&atmel_aes.lock);
+	atmel_aes.dd = NULL;
 	spin_unlock_bh(&atmel_aes.lock);
 }
 
@@ -3753,7 +3760,7 @@ static int atmel_aes_probe(struct platform_device *pdev)
 	if (err)
 		goto err_aes_dma;
 
-	atmel_aes_dev_register(dd);
+	atmel_aes_dev_register(dd, of_property_read_bool(dev->of_node, "sync-exec"));
 
 	err = atmel_aes_register_algs(dd);
 	if (err)
@@ -3766,7 +3773,7 @@ static int atmel_aes_probe(struct platform_device *pdev)
 	return 0;
 
 err_algs:
-	atmel_aes_dev_register(NULL);
+	atmel_aes_dev_unregister();
 
 	atmel_aes_dma_cleanup(dd);
 err_aes_dma:
@@ -3790,7 +3797,7 @@ static int atmel_aes_remove(struct platform_device *pdev)
 	if (!dd)
 		return -ENODEV;
 
-	atmel_aes_dev_register(NULL);
+	atmel_aes_dev_unregister();
 
 	do {
 		areq = crypto_dequeue_request(&atmel_aes.queue);
