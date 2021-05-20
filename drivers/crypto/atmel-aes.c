@@ -3547,7 +3547,8 @@ static int atmel_aes_probe(struct platform_device *pdev)
 
 	spin_lock_bh(&atmel_aes.lock);
 	atmel_aes.dd = aes_dd;
-	atmel_aes.sync_mode = fips_enabled && fips_wifi_enabled;
+	atmel_aes.sync_mode = (fips_enabled && fips_wifi_enabled) ||
+		of_property_read_bool(dev->of_node, "sync-exec");
 	spin_unlock_bh(&atmel_aes.lock);
 
 	err = atmel_aes_register_algs(aes_dd);

@@ -41,6 +41,10 @@
 
 	ahb {
 		apb {
+			aes@f8038000 {
+				sync-exec;
+			};
+
 			sha@f8034000 {
 				status = "disabled";
 			};
