@@ -804,6 +804,12 @@ void ath6kl_cfg80211_connect_event(struct ath6kl_vif *vif, u16 channel,
 	u8 *assoc_resp_ie = assoc_info + beacon_ie_len + assoc_req_len +
 	    assoc_resp_ie_offset;
 
+#ifdef CONFIG_ATH6KL_LAIRD_FIPS
+	if (ar->fips_mode) {
+		laird_connect_event();
+	}
+#endif
+
 	assoc_req_len -= assoc_req_ie_offset;
 	assoc_resp_len -= assoc_resp_ie_offset;
 
