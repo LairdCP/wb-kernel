@@ -6,7 +6,11 @@
  * Defines for what uname() should return 
  */
 #ifndef UTS_SYSNAME
-#define UTS_SYSNAME "Linux"
+#ifndef CONFIG_CRYPTO_FIPS
+#define UTS_SYSNAME "Summit Linux"
+#else
+#define UTS_SYSNAME "Summit Linux 7.1"
+#endif
 #endif
 
 #ifndef UTS_NODENAME
