@@ -345,6 +345,30 @@ static int lairdReassemblyPurgeAll(void)
 	return 0;
 }
 
+// remove encrypted fragments on key change
+static int lairdReassemblyPurgeKeyChange(int keyidx)
+{
+	int index;
+
+	spin_lock_bh(&laird_defrag_spinlock);
+	for(index=0; index<LAIRD_SIMULT_REASSEMBLE_BUFS; index++) {
+		frag_entry_t *fd = &_rdata.frag[index];
+		struct laird_wlanhdr *wh;
+		u8 *iv;
+		if (!fd->skb)
+			continue;
+		wh = (void*)fd->skb->data;
+		if ((wh->fc[1] & FC1_PROTECTED) == 0)
+			continue;
+		iv = (u8*)wh + wlanhdrlen(wh);
+		if ((int)(iv[3] >> 6) != keyidx)
+			continue;
+		frag_entry_free(&_rdata.frag[index]);
+	}
+	spin_unlock_bh(&laird_defrag_spinlock);
+	return 0;
+}
+
 typedef u64 lrd_seq_t;
 typedef struct {
 	int refcount;
@@ -893,6 +917,7 @@ void laird_addkey(struct net_device *ndev, u8 key_index,
 {
 	lrd_key_index_t *ki;
 	lrd_key_t *pk;
+	int do_frag_purge = 1;
 
 	if (key_index >= 4)
 		return;
@@ -918,6 +943,7 @@ void laird_addkey(struct net_device *ndev, u8 key_index,
 		if (pcur && (0 == memcmp(pcur->key, key, 16))) {
 			; // key is unchanged -- ignore, replay attempt?
 			lrd_key_unref(pk);
+			do_frag_purge = 0;
 		} else {
 			lrd_key_unref(ki->pcur);
 			// create new key
@@ -933,6 +959,9 @@ void laird_addkey(struct net_device *ndev, u8 key_index,
 	}
 
 	spin_unlock_bh(&laird_key_spinlock);
+
+	if (do_frag_purge)
+		lairdReassemblyPurgeKeyChange(key_index);
 }
 
 void laird_delkey(struct net_device *ndev, u8 key_index)
