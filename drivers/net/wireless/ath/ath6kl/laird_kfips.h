@@ -24,6 +24,7 @@
 // helper functions to get to aead functions
 #define LAIRD_HDR_TYPE (ar->fips_mode ? WMI_DATA_HDR_DATA_TYPE_802_11 : 0)
 
+void laird_connect_event(void);
 int laird_data_rx(struct sk_buff **pskb);
 int laird_data_tx(struct sk_buff **pskb, struct net_device *dev);
 void laird_addkey(struct net_device *ndev, u8 key_index,
@@ -37,6 +38,9 @@ void laird_deinit(void);
 #else
 
 #define LAIRD_HDR_TYPE 0
+
+static inline
+void laird_connect_event(void) { return; }
 
 static inline
 int laird_data_rx(struct sk_buff **pskb) { return -ENODEV; }

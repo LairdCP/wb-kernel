@@ -978,3 +978,11 @@ void laird_deinit(void)
 	for (i = 0; i < 4; i++)
 		laird_delkey(NULL, i);
 }
+
+void laird_connect_event(void)
+{
+	int i;
+	lairdReassemblyPurgeAll();
+	for (i = 0; i < 4; i++)
+		laird_delkey(NULL, i);
+}
