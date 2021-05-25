@@ -74,6 +74,26 @@ struct laird_wlanhdr_qos {
 
 static int wlanhdrlen(struct laird_wlanhdr *hdr);
 
+typedef u64 frag_pn_t;
+
+// encryption pn from packet ((u64)-1 if not encrypted)
+static frag_pn_t frag_pn_from_skb(struct sk_buff *skb)
+{
+	struct laird_wlanhdr *wh = (void*)skb->data;
+	u8 *iv;
+	frag_pn_t pn;
+	if ( (wh->fc[1] & FC1_PROTECTED) == 0)
+		return (u64)(-1LL);
+	iv = (u8*)wh + wlanhdrlen(wh);
+	pn = iv[7];
+	pn = (pn << 8) | iv[6];
+	pn = (pn << 8) | iv[5];
+	pn = (pn << 8) | iv[4];
+	pn = (pn << 8) | iv[1];
+	pn = (pn << 8) | iv[0];
+	return pn;
+}
+
 #define LAIRD_SIMULT_REASSEMBLE_BUFS	16
 
 // sequence id for matching fragments
@@ -129,6 +149,7 @@ static seqid_t seqid_from_skb(struct sk_buff *skb)
 typedef struct {
 	struct sk_buff *skb;
 	seqid_t seqid;
+	frag_pn_t pn;
 } frag_entry_t;
 
 static struct {
@@ -195,6 +216,7 @@ static int lairdReassemblyNewFrag(frag_entry_t *frag, struct sk_buff *skb, seqid
 		// failed to store the skb
 		return -ENOMEM;
 	}
+	frag->pn = frag_pn_from_skb(skb);
 	// advance the fragment index
 	_rdata.index = index_next(_rdata.index);
 	// fragment is not done
@@ -232,6 +254,14 @@ static int lairdReassemblyAppendFrag(frag_entry_t *frag, struct sk_buff *from_sk
 	}
 	do_decrypt = from_hdr->fc[1] & FC1_PROTECTED;
 
+	if (do_decrypt) {
+		frag_pn_t pn2;
+		pn2 = frag_pn_from_skb(from_skb);
+		if (pn2 != frag->pn + 1)
+			// pn is not sequential
+			return -1;
+	}
+
 	/* Calculate the destination pointer for the copy */
 	destPtr = to_skb->data + to_skb->len;
 
@@ -255,6 +285,8 @@ static int lairdReassemblyAppendFrag(frag_entry_t *frag, struct sk_buff *from_sk
 
 	// update the fragment seqid and wlanhdr
 	frag->seqid = seqid;
+	if (do_decrypt)
+		frag->pn++;
 	to_hdr->seq[0] = from_hdr->seq[0];
 	to_hdr->seq[1] = from_hdr->seq[1];
 	to_hdr->fc[1]  = from_hdr->fc[1];
