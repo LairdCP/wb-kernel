@@ -511,7 +511,8 @@ static int ecr_set_aad(struct laird_wlanhdr *hdr, u8 *aad, u8 *b_0)
 	aad[2+21] = 0;
 	if (hdr->fc[0] & FC0_STYPE_QOS) {
 		struct laird_wlanhdr_qos *hdrq = (void*)hdr;
-		aad[2+22] = hdrq->qos[0] & (QOS0_TID|QOS0_AMSDU);
+		// note, for SPP A-MSDU support, aad includes QOS0_AMSDU
+		aad[2+22] = hdrq->qos[0] & QOS0_TID;
 		aad[2+23] = 0;
 		aadlen = 24;
 		iv += 2 + WLANHDR_QOS_PAD;
@@ -858,6 +859,22 @@ int laird_data_rx(struct sk_buff **skbin)
 				// only EAPOL are unencrypted and should not be AMSDU
 				return -EINVAL;
 			}
+			if (wlan_hdr->addr1[0] & 1) {
+				// basic AMSDU: must be to individual address
+				return -EINVAL;
+			}
+			if (0 != memcmp(wlan_hdr->addr2, wlan_hdr->addr3, 6)) {
+				// basic AMSDU: address3 must be bssid
+				return -EINVAL;
+			}
+			if ((fragNum > 0) || (wlan_hdr->fc[1] & FC1_MOREFRAGS)) {
+				// AMSDU: fragmentation is not allowed
+				return -EINVAL;
+			}
+			if (mlen < sizeof(struct ethhdr)) {
+				// AMSDU: too short
+				return -EINVAL;
+			}
 		}
 	}
 
@@ -865,20 +882,6 @@ int laird_data_rx(struct sk_buff **skbin)
 		if (laird_using_encrypt()) {
 			// transmit key is set, all receive should be encrypted
 			return -EINVAL;
-		}
-		if (fragNum == 0) {
-			struct _llc_snap_hdr *llc = (void *)pm;
-			u16 type;
-			if (mlen < sizeof(*llc)) {
-				return -EINVAL;
-			}
-			if (0 != memcmp(llc, llc_snap, sizeof(llc_snap))) {
-				return -EINVAL;
-			}
-			type = htons(llc->eth_type);
-			if (type != ETH_P_PAE) {
-				return -EINVAL;
-			}
 		}
 	} else {
 		res = laird_skb_decrypt(skb);
@@ -888,6 +891,44 @@ int laird_data_rx(struct sk_buff **skbin)
 		}
 		// remove the mic
 		skb_trim(skb, skb->len - 8);
+	}
+
+	if (is_amsdu) {
+		struct _llc_snap_hdr *llc = (void *)pm;
+		struct ethhdr *eh = (void *)pm;
+		if (mlen < sizeof(*llc) || mlen < sizeof(*eh)) {
+			// AMSDU: payload is too short
+			return -EINVAL;
+		}
+		if (0 == memcmp(llc, llc_snap, sizeof(llc_snap))) {
+			// AMSDU: payload has llc snap header? - amsdu bit flip?
+			return -EINVAL;
+		}
+		if ( !(eh->h_dest[0] & 1) &&
+			 !ether_addr_equal(eh->h_dest, wlan_hdr->addr1))
+		{
+			// AMSDU: from-ds: DA must be RA/addr1, or a multicast address
+			return -EINVAL;
+		}
+	} else if (fragNum == 0) {
+		struct _llc_snap_hdr *llc = (void *)pm;
+		u16 type;
+		if (mlen < sizeof(*llc)) {
+			return -EINVAL;
+		}
+		type = htons(llc->eth_type);
+		if (0 != memcmp(llc, llc_snap, sizeof(llc_snap))) {
+			// incorrect snap header -- check for flipped A-MSDU
+			if (ether_addr_equal(wlan_hdr->addr2, wlan_hdr->addr3)) {
+				// address3/sa is the bssid - might have been an A-MSDU
+				return -EINVAL;
+			}
+			type = 0; // invalid llc header -- not EAPOL
+		}
+		if (!do_decrypt && type != ETH_P_PAE) {
+			// only allow unencrypted EAPOL packets
+			return -EINVAL;
+		}
 	}
 
 	/* If this is part of a fragmented buffer, pass to reassembly */
