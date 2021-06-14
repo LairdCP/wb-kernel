@@ -119,6 +119,16 @@ struct rand_data {
 
 #include "jitterentropy.h"
 
+#include <linux/module.h>
+
+static bool fips_fail_jent_apt_insert = 0;
+module_param(fips_fail_jent_apt_insert, bool, 0444);
+MODULE_PARM_DESC(fips_fail_jent_apt_insert, "FIPS testing: force jent_apt_insert() health test to fail.");
+
+static bool fips_fail_jent_rct_insert = 0;
+module_param(fips_fail_jent_rct_insert, bool, 0444);
+MODULE_PARM_DESC(fips_fail_jent_rct_insert, "FIPS testing: force jent_rct_insert() health test to fail.");
+
 /***************************************************************************
  * Adaptive Proportion Test
  *
@@ -156,6 +166,8 @@ static void jent_apt_insert(struct rand_data *ec, unsigned int delta_masked)
 	if (delta_masked == ec->apt_base) {
 		ec->apt_count++;
 
+		if (fips_fail_jent_apt_insert)
+			ec->apt_count = JENT_APT_CUTOFF;
 		if (ec->apt_count >= JENT_APT_CUTOFF)
 			ec->health_failure = 1;
 	}
@@ -214,6 +226,8 @@ static void jent_rct_insert(struct rand_data *ec, int stuck)
 		 * we need to subtract one from the cutoff value as calculated
 		 * following SP800-90B.
 		 */
+		if (fips_fail_jent_rct_insert)
+			ec->rct_count = (31 * ec->osr);
 		if ((unsigned int)ec->rct_count >= (31 * ec->osr)) {
 			ec->rct_count = -1;
 			ec->health_failure = 1;
