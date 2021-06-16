@@ -121,12 +121,12 @@ struct rand_data {
 
 #include <linux/module.h>
 
-static uint fips_fail_jent_apt_insert = 0;
-module_param(fips_fail_jent_apt_insert, uint, 0444);
+static bool fips_fail_jent_apt_insert = 0;
+module_param(fips_fail_jent_apt_insert, bool, 0444);
 MODULE_PARM_DESC(fips_fail_jent_apt_insert, "FIPS testing: force jent_apt_insert() health test to fail.");
 
-static uint fips_fail_jent_rct_insert = 0;
-module_param(fips_fail_jent_rct_insert, uint, 0444);
+static bool fips_fail_jent_rct_insert = 0;
+module_param(fips_fail_jent_rct_insert, bool, 0444);
 MODULE_PARM_DESC(fips_fail_jent_rct_insert, "FIPS testing: force jent_rct_insert() health test to fail.");
 
 /***************************************************************************
