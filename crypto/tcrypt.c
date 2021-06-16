@@ -59,6 +59,7 @@
 static unsigned int sec;
 
 static char *alg = NULL;
+static u32 ignore_not_present;
 static u32 type;
 static u32 mask;
 static int mode;
@@ -1649,6 +1650,9 @@ static inline int tcrypt_test(const char *alg)
 {
 	int ret;
 
+	if (ignore_not_present && !crypto_has_alg(alg, 0, 0))
+		return 0;
+
 	pr_debug("testing %s\n", alg);
 
 	ret = alg_test(alg, alg, 0, 0);
@@ -3069,6 +3073,7 @@ static void __exit tcrypt_mod_fini(void) { }
 subsys_initcall(tcrypt_mod_init);
 module_exit(tcrypt_mod_fini);
 
+module_param(ignore_not_present, uint, 0);
 module_param(alg, charp, 0);
 module_param(type, uint, 0);
 module_param(mask, uint, 0);
