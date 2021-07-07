@@ -720,7 +720,7 @@ static int ksz9031_config_init(struct phy_device *phydev)
 				tx_data_skews, 4, &update);
 
 		if (update && phydev->interface != PHY_INTERFACE_MODE_RGMII)
-			phydev_warn(phydev,
+			dev_warn(&phydev->mdio.dev,
 				    "*-skew-ps values should be used only with phy-mode = \"rgmii\"\n");
 
 		/* Silicon Errata Sheet (DS80000691D or DS80000692D):
