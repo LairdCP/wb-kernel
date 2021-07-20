@@ -9,8 +9,8 @@
 #include "at91sam9g25.dtsi"
 
 / {
-	model = "Laird Workgroup Bridge 45N - Atmel AT91SAM9G25";
-	compatible = "laird,wb45n", "atmel,at91sam9g25", "atmel,at91sam9x5";
+	model = "Laird Workgroup Bridge 45N - Atmel AT91SAM (dt)";
+	compatible = "laird,wb45n", "laird,wbxx", "atmel,at91sam9x5", "atmel,at91sam9";
 
 	chosen {
 		stdout-path = "serial0:115200n8";
