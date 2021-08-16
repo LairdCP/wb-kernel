@@ -278,14 +278,6 @@
 	};
 };
 
-&uart0_clk {
-	atmel,clk-output-range = <0 133000000>;
-};
-
-&uart1_clk {
-	atmel,clk-output-range = <0 133000000>;
-};
-
 &mmc0 {
 	slot@0 {
 		reg = <0>;
