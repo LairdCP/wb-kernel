@@ -25,12 +25,16 @@
     status = "disabled";
 };
 
-/* 
+/*
  * LWB/LWB5/LWB5+ requires minimum 150ms after power-up until first access
  * Testing shows this isn't always sufficient
  */
 &reg_mmc0_en {
     startup-delay-us = <250000>;
+};
+
+&mmc0 {
+	keep-power-in-suspend;
 };
 
 &spi0 {

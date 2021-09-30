@@ -9,4 +9,16 @@
 /dts-v1/;
 
 #include "at91-wb50n.dtsi"
-#include "at91-rdvk_wb50n.dtsi"
+#include "at91-dvk_wb50n.dtsi"
+
+&mmc0 {
+	keep-power-in-suspend;
+};
+
+&i2c0 {
+	status = "disabled";
+};
+
+&spi1 {
+	status = "disabled";
+};
