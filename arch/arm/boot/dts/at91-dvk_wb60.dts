@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * at91-wb60.dts - Device Tree file for the WB60 board
+ * at91-dvk_wb60.dts - Device Tree file for the WB60 board
  *
  *  Copyright (C) 2019 Laird Connectivity,
  *		  2019 Boris Krasnovskiy <boris.krasnovskiy@lairdconnect.com>
@@ -10,21 +10,8 @@
 
 /dts-v1/;
 
+#include "at91-som60.dtsi"
 #include "at91-wb60.dtsi"
-
-/ {
-	model = "Laird WB60";
-	compatible = "laird,wb60", "laird,som60", "atmel,sama5d36", "atmel,sama5d3", "atmel,sama5";
-
-	ahb {
-		apb {
-			tdes@f803c000 {
-				// Disabled due shortage of DMA channels
-				status = "disabled";
-			};
-		};
-	};
-};
 
 &pinctrl {
 	board {
