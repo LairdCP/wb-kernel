@@ -314,7 +314,7 @@ struct atmel_mci {
 	void __iomem		*regs;
 
 	struct scatterlist	*sg;
-	unsigned int		sg_len;
+	struct sg_mapping_iter	miter;
 	unsigned int		pio_offset;
 	unsigned int		*buffer;
 	unsigned int		buf_size;
@@ -1068,8 +1068,13 @@ static u32 atmci_prepare_data(struct atmel_mci *host, struct mmc_data *data)
 
 	data->error = -EINPROGRESS;
 
-	host->sg = data->sg;
-	host->sg_len = data->sg_len;
+	sg_miter_start(&host->miter, data->sg, data->sg_len,
+		data->flags & MMC_DATA_READ ?
+			SG_MITER_TO_SG : SG_MITER_FROM_SG);
+
+	sg_miter_next(&host->miter);
+
+	host->sg = NULL;
 	host->data = data;
 	host->data_chan = NULL;
 
@@ -1121,7 +1126,7 @@ atmci_prepare_data_pdc(struct atmel_mci *host, struct mmc_data *data)
 		host->data_size < ATMCI_PDC_ERRATA_SIZE;
 
 	host->use_buffer = !host->caps.has_rwproof || write_errata;
-	
+
 	if (host->use_buffer && host->data_size > host->buf_size)
 		host->data_size = host->buf_size;
 
@@ -1257,6 +1262,8 @@ atmci_submit_data_dma(struct atmel_mci *host, struct mmc_data *data)
 
 static void atmci_stop_transfer(struct atmel_mci *host)
 {
+	sg_miter_stop(&host->miter);
+
 	dev_dbg(&host->pdev->dev,
 	        "(%s) set pending xfer complete\n", __func__);
 	atmci_set_pending(host, EVENT_XFER_COMPLETE);
@@ -2016,8 +2023,7 @@ unlock:
 
 static void atmci_read_data_pio(struct atmel_mci *host)
 {
-	struct scatterlist	*sg = host->sg;
-	void			*buf = sg_virt(sg);
+	struct sg_mapping_iter	*mit = &host->miter;
 	unsigned int		offset = host->pio_offset;
 	struct mmc_data		*data = host->data;
 	u32			value;
@@ -2026,36 +2032,28 @@ static void atmci_read_data_pio(struct atmel_mci *host)
 
 	do {
 		value = atmci_readl(host, ATMCI_RDR);
-		if (likely(offset + 4 <= sg->length)) {
-			put_unaligned(value, (u32 *)(buf + offset));
+		if (likely(offset + 4 <= mit->length)) {
+			put_unaligned(value, (u32 *)(mit->addr + offset));
 
 			offset += 4;
 			nbytes += 4;
 
-			if (offset == sg->length) {
-				flush_dcache_page(sg_page(sg));
-				host->sg = sg = sg_next(sg);
-				host->sg_len--;
-				if (!sg || !host->sg_len)
+			if (offset == mit->length) {
+				if (!sg_miter_next(mit))
 					goto done;
 
 				offset = 0;
-				buf = sg_virt(sg);
 			}
 		} else {
-			unsigned int remaining = sg->length - offset;
-			memcpy(buf + offset, &value, remaining);
+			unsigned int remaining = mit->length - offset;
+			memcpy(mit->addr + offset, &value, remaining);
 			nbytes += remaining;
 
-			flush_dcache_page(sg_page(sg));
-			host->sg = sg = sg_next(sg);
-			host->sg_len--;
-			if (!sg || !host->sg_len)
+			if (!sg_miter_next(mit))
 				goto done;
 
 			offset = 4 - remaining;
-			buf = sg_virt(sg);
-			memcpy(buf, (u8 *)&value + remaining, offset);
+			memcpy(mit->addr, (u8 *)&value + remaining, offset);
 			nbytes += offset;
 		}
 
@@ -2084,8 +2082,7 @@ done:
 
 static void atmci_write_data_pio(struct atmel_mci *host)
 {
-	struct scatterlist	*sg = host->sg;
-	void			*buf = sg_virt(sg);
+	struct sg_mapping_iter	*mit = &host->miter;
 	unsigned int		offset = host->pio_offset;
 	struct mmc_data		*data = host->data;
 	u32			value;
@@ -2093,38 +2090,32 @@ static void atmci_write_data_pio(struct atmel_mci *host)
 	unsigned int		nbytes = 0;
 
 	do {
-		if (likely(offset + 4 <= sg->length)) {
-			value = get_unaligned((u32 *)(buf + offset));
+		if (likely(offset + 4 <= mit->length)) {
+			value = get_unaligned((u32 *)(mit->addr + offset));
 			atmci_writel(host, ATMCI_TDR, value);
 
 			offset += 4;
 			nbytes += 4;
-			if (offset == sg->length) {
-				host->sg = sg = sg_next(sg);
-				host->sg_len--;
-				if (!sg || !host->sg_len)
+			if (offset == mit->length) {
+				if (!sg_miter_next(mit))
 					goto done;
 
 				offset = 0;
-				buf = sg_virt(sg);
 			}
 		} else {
-			unsigned int remaining = sg->length - offset;
+			unsigned int remaining = mit->length - offset;
 
 			value = 0;
-			memcpy(&value, buf + offset, remaining);
+			memcpy(&value, mit->addr + offset, remaining);
 			nbytes += remaining;
 
-			host->sg = sg = sg_next(sg);
-			host->sg_len--;
-			if (!sg || !host->sg_len) {
+			if (!sg_miter_next(mit)) {
 				atmci_writel(host, ATMCI_TDR, value);
 				goto done;
 			}
 
 			offset = 4 - remaining;
-			buf = sg_virt(sg);
-			memcpy((u8 *)&value + remaining, buf, offset);
+			memcpy((u8 *)&value + remaining, mit->addr, offset);
 			atmci_writel(host, ATMCI_TDR, value);
 			nbytes += offset;
 		}
