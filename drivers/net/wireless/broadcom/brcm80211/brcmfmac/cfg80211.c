@@ -8947,13 +8947,20 @@ static const struct wiphy_wowlan_support brcmf_wowlan_support = {
 };
 #endif
 
+// Laird - Do not enable wowlan by default
+//  Leave to userspace to configure if desired
+#define DISABLE_DEFAULT_WOWLAN_CONFG
+
 static void brcmf_wiphy_wowl_params(struct wiphy *wiphy, struct brcmf_if *ifp)
 {
 #ifdef CONFIG_PM
 	struct brcmf_cfg80211_info *cfg = wiphy_to_cfg(wiphy);
 	struct brcmf_pub *drvr = cfg->pub;
 	struct wiphy_wowlan_support *wowl;
+
+#ifndef DISABLE_DEFAULT_WOWLAN_CONFG
 	struct cfg80211_wowlan *brcmf_wowlan_config = NULL;
+#endif
 
 	wowl = kmemdup(&brcmf_wowlan_support, sizeof(brcmf_wowlan_support),
 		       GFP_KERNEL);
@@ -8977,6 +8984,7 @@ static void brcmf_wiphy_wowl_params(struct wiphy *wiphy, struct brcmf_if *ifp)
 
 	wiphy->wowlan = wowl;
 
+#ifndef DISABLE_DEFAULT_WOWLAN_CONFG
 	/* wowlan_config structure report for kernels */
 	brcmf_wowlan_config = kzalloc(sizeof(*brcmf_wowlan_config),
 				      GFP_KERNEL);
@@ -8997,6 +9005,8 @@ static void brcmf_wiphy_wowl_params(struct wiphy *wiphy, struct brcmf_if *ifp)
 		brcmf_err("Can not allocate memory for brcm_wowlan_config\n");
 	}
 	wiphy->wowlan_config = brcmf_wowlan_config;
+#endif
+
 #endif
 }
 
