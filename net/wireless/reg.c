@@ -1584,7 +1584,11 @@ static u32 map_regdom_flags(u32 rd_flags)
 	if (rd_flags & NL80211_RRF_NO_IR_ALL)
 		channel_flags |= IEEE80211_CHAN_NO_IR;
 	if (rd_flags & NL80211_RRF_DFS)
+#ifndef _REMOVE_LAIRD_MODS_
+		channel_flags |= (IEEE80211_CHAN_RADAR | IEEE80211_CHAN_NO_IR);
+#else
 		channel_flags |= IEEE80211_CHAN_RADAR;
+#endif
 	if (rd_flags & NL80211_RRF_NO_OFDM)
 		channel_flags |= IEEE80211_CHAN_NO_OFDM;
 	if (rd_flags & NL80211_RRF_NO_OUTDOOR)
