@@ -91,7 +91,7 @@ void brcmf_of_probe(struct device *dev, enum brcmf_bus_type bus_type,
 		of_node_put(root);
 	}
 
-	if ((!np) || !of_device_is_compatible(np, "brcm,bcm4329-fmac"))
+	if (!np || !of_device_is_compatible(np, "brcm,bcm4329-fmac"))
 		return;
 
 	err = brcmf_of_get_country_codes(dev, settings);

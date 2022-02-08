@@ -839,13 +839,13 @@ sd_download_firmware_w_helper(bt_private *priv)
 	PRINTM(MSG, "BT Request firmware: %s\n", cur_fw_name);
 	if (bt_req_fw_nowait) {
 #if LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 32)
-		ret = request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
+		ret = request_firmware_nowait(THIS_MODULE, FW_ACTION_UEVENT,
 					      cur_fw_name, priv->hotplug_device,
 					      GFP_KERNEL, priv,
 					      sd_request_fw_callback);
 #else
 #if LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 13)
-		ret = request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
+		ret = request_firmware_nowait(THIS_MODULE, FW_ACTION_UEVENT,
 					      cur_fw_name, priv->hotplug_device,
 					      priv, sd_request_fw_callback);
 #else

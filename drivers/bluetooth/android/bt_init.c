@@ -612,7 +612,7 @@ bt_cal_config(bt_private *priv, char *cal_file, char *mac)
 
 	ENTER();
 	if (bt_req_fw_nowait) {
-		ret = request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
+		ret = request_firmware_nowait(THIS_MODULE, FW_ACTION_UEVENT,
 					      cal_file, priv->hotplug_device,
 					      GFP_KERNEL, priv,
 					      bt_request_init_user_conf_callback);
@@ -663,7 +663,7 @@ bt_cal_config_ext(bt_private *priv, char *cal_file)
 
 	ENTER();
 	if (bt_req_fw_nowait) {
-		ret = request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
+		ret = request_firmware_nowait(THIS_MODULE, FW_ACTION_UEVENT,
 					      cal_file, priv->hotplug_device,
 					      GFP_KERNEL, priv,
 					      bt_request_init_user_conf_callback);

@@ -1281,7 +1281,7 @@ usb_download_firmware_w_helper(bt_private *priv)
 	PRINTM(MSG, "fw_name=%s\n", cur_fw_name);
 
 	if (bt_req_fw_nowait) {
-		ret = request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
+		ret = request_firmware_nowait(THIS_MODULE, FW_ACTION_UEVENT,
 					      cur_fw_name, priv->hotplug_device,
 					      GFP_KERNEL, priv,
 					      usb_request_fw_callback);

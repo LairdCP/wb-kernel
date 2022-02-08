@@ -3858,10 +3858,10 @@ static int reg_set_rd_driver(const struct ieee80211_regdomain *rd,
 		return -ENODEV;
 
 	if (!driver_request->intersect) {
-		#ifdef _REMOVE_LAIRD_MODS_
-		/* BZ16330 */
 		ASSERT_RTNL();
 		wiphy_lock(request_wiphy);
+		#ifdef _REMOVE_LAIRD_MODS_
+		/* BZ16330 */
 		if (request_wiphy->regd) {
 			wiphy_unlock(request_wiphy);
 			return -EALREADY;
@@ -3880,12 +3880,13 @@ static int reg_set_rd_driver(const struct ieee80211_regdomain *rd,
 		#endif
 
 		rcu_assign_pointer(request_wiphy->regd, regd);
-		wiphy_unlock(request_wiphy);
 		#ifndef _REMOVE_LAIRD_MODS_
 		/* BZ16330 */
 		if (tmp)
 			rcu_free_regdom(tmp);
 		#endif
+
+		wiphy_unlock(request_wiphy);
 
 		reset_regdomains(false, rd);
 		return 0;

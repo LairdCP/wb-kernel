@@ -241,12 +241,13 @@ int ath6kl_core_init(struct ath6kl *ar, enum ath6kl_htc_type htc_type)
 	wdev = ath6kl_interface_add(ar, "wlan%d", NET_NAME_ENUM,
 				    NL80211_IFTYPE_STATION, 0, INFRA_NETWORK);
 
+	wiphy_unlock(ar->wiphy);
+
 	if (!wdev) {
 		ath6kl_err("Failed to instantiate a network device\n");
 		ret = -ENOMEM;
-		wiphy_unregister(ar->wiphy);
-		wiphy_unlock(ar->wiphy);
 		rtnl_unlock();
+		wiphy_unregister(ar->wiphy);
 		goto err_rxbuf_cleanup;
 	}
 
@@ -265,7 +266,6 @@ int ath6kl_core_init(struct ath6kl *ar, enum ath6kl_htc_type htc_type)
 
 	ath6kl_cfg80211_off(ar);
 
-	wiphy_unlock(ar->wiphy);
 	rtnl_unlock();
 
 	return ret;
