@@ -162,8 +162,10 @@ static int brcmf_cfg80211_vndr_cmds_frameburst(struct wiphy *wiphy,
 		ret = brcmf_cfg80211_vndr_cmds_int_get(ifp,
 						       BRCMF_C_GET_FAKEFRAG,
 						       wiphy);
-	else
+	else {
 		brcmf_err("Invalid Input\n");
+		ret = -EINVAL;
+	}
 
 	return ret;
 }
