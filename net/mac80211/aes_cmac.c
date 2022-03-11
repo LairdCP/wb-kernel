@@ -84,7 +84,9 @@ void ieee80211_aes_cmac_256(struct crypto_shash *tfm, const u8 *aad,
 	struct crypto_ahash *tfma = (struct crypto_ahash *)tfm;
 	struct scatterlist sg[4];
 	AHASH_REQUEST_ON_STACK(ahreq, tfma);
+	const __le16 *fc;
 
+	fc = (const __le16 *)aad;
 	if (ieee80211_is_beacon(*fc)) {
 		sg_init_table(sg, 4);
 		sg_set_buf(sg, aad, AAD_LEN);
