@@ -1014,10 +1014,6 @@ ENTRY(at91_pm_suspend_in_sram)
 	mov	tmp1, #0
 	mcr	p15, 0, tmp1, c7, c10, 4
 
-	/* Flush tlb. */
-	mov	r4, #0
-	mcr	p15, 0, r4, c8, c7, 0
-
 	ldr	tmp1, [r0, #PM_DATA_PMC_MCKR_OFFSET]
 	str	tmp1, .mckr_offset
 	ldr	tmp1, [r0, #PM_DATA_PMC_VERSION]

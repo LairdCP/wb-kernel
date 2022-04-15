@@ -364,6 +364,7 @@ static int at91_suspend_finish(unsigned long val)
 	}
 
 	flush_cache_all();
+	local_flush_tlb_all();
 	outer_disable();
 
 	at91_suspend_sram_fn(&soc_pm.data);
