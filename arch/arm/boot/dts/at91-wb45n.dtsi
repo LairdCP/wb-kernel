@@ -199,7 +199,7 @@
 	num-ports = <2>;
 
 	atmel,vbus-gpio = <&pioB 12 GPIO_ACTIVE_HIGH>, <&pioA 31 GPIO_ACTIVE_HIGH>;
-	atmel,oc-gpio = <&pioB 13 GPIO_ACTIVE_LOW>, <0>;
+	atmel,oc-gpio = <&pioB 13 GPIO_ACTIVE_HIGH>, <0>;
 };
 
 &usb2 {
