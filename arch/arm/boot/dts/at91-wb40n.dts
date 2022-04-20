@@ -143,7 +143,7 @@
 	status = "okay";
 
 	atmel,vbus-gpio = <&pioC 0 GPIO_ACTIVE_LOW>;
-	atmel,oc-gpio = <&pioC 1 GPIO_ACTIVE_LOW>;
+	atmel,oc-gpio = <&pioC 1 GPIO_ACTIVE_HIGH>;
 
 	num-ports = <2>;
 };
