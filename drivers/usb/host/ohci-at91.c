@@ -29,6 +29,7 @@
 #include <soc/at91/atmel-sfr.h>
 
 #include "ohci.h"
+#include "../core/usb.h"
 
 #define valid_port(index)	((index) >= 0 && (index) < AT91_MAX_USBH_PORTS)
 #define at91_for_each_port(index)	\
@@ -351,7 +352,8 @@ static int ohci_at91_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue,
 		case USB_PORT_FEAT_POWER:
 			dev_dbg(hcd->self.controller, "SetPortFeat: POWER\n");
 			if (valid_port(wIndex)) {
-				ohci_at91_usb_set_power(pdata, wIndex, 1);
+				if (!pdata->overcurrent_status[wIndex])
+					ohci_at91_usb_set_power(pdata, wIndex, 1);
 				ret = 0;
 			}
 
@@ -376,17 +378,7 @@ static int ohci_at91_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue,
 
 			if (valid_port(wIndex)) {
 				pdata->overcurrent_changed[wIndex] = 0;
-				pdata->overcurrent_status[wIndex] = 0;
 			}
-
-			goto out;
-
-		case USB_PORT_FEAT_OVER_CURRENT:
-			dev_dbg(hcd->self.controller,
-				"ClearPortFeature: OVER_CURRENT\n");
-
-			if (valid_port(wIndex))
-				pdata->overcurrent_status[wIndex] = 0;
 
 			goto out;
 
@@ -472,6 +464,7 @@ static irqreturn_t ohci_hcd_at91_overcurrent_irq(int irq, void *data)
 {
 	struct platform_device *pdev = data;
 	struct at91_usbh_data *pdata = dev_get_platdata(&pdev->dev);
+	struct usb_hcd *hcd = platform_get_drvdata(pdev);
 	int val, port;
 
 	/* From the GPIO notifying the over-current situation, find
@@ -493,9 +486,11 @@ static irqreturn_t ohci_hcd_at91_overcurrent_irq(int irq, void *data)
 	   over-current. */
 	if (!val) {
 		ohci_at91_usb_set_power(pdata, port, 0);
-		pdata->overcurrent_status[port]  = 1;
 		pdata->overcurrent_changed[port] = 1;
 	}
+	pdata->overcurrent_status[port]  = !val;
+
+	usb_kick_hub_wq(hcd->self.root_hub);
 
 	dev_dbg(& pdev->dev, "overcurrent situation %s\n",
 		val ? "exited" : "notified");
