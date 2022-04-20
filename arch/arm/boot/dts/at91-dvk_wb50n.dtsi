@@ -165,7 +165,7 @@
 
 	num-ports = <3>;
 	atmel,vbus-gpio = <&pioA 2 GPIO_ACTIVE_LOW>;
-	atmel,oc-gpio = <&pioA 4 GPIO_ACTIVE_LOW>;
+	atmel,oc-gpio = <&pioA 4 GPIO_ACTIVE_HIGH>;
 
 	status = "okay";
 };
