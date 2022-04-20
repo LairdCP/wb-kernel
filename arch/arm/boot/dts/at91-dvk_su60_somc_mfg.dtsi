@@ -157,7 +157,7 @@
 &usb1 {
 	num-ports = <3>;
 	atmel,vbus-gpio = <0>, <&gpiom1 6 GPIO_ACTIVE_HIGH>, <&gpiom1 7 GPIO_ACTIVE_HIGH>;
-	atmel,oc-gpio = <0>, <&gpiom1 0 GPIO_ACTIVE_LOW>, <&gpiom1 1 GPIO_ACTIVE_LOW>;
+	atmel,oc-gpio = <0>, <&gpiom1 0 GPIO_ACTIVE_HIGH>, <&gpiom1 1 GPIO_ACTIVE_HIGH>;
 
 	status = "okay";
 };
