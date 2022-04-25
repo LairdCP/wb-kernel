@@ -586,10 +586,46 @@ static int ksz9021_load_values_from_of(struct phy_device *phydev,
 	return kszphy_extended_write(phydev, reg, newval);
 }
 
+static void ksz9021_config_rgmii_delay(struct phy_device *phydev)
+{
+	u16 clk_dly, rx_dly, tx_dly;
+
+	switch (phydev->interface) {
+	case PHY_INTERFACE_MODE_RGMII:
+		clk_dly = 0x7777;
+		rx_dly  = 0x7777;
+		tx_dly  = 0x7777;
+		break;
+	case PHY_INTERFACE_MODE_RGMII_ID:
+		clk_dly = 0xf0f0;
+		rx_dly  = 0;
+		tx_dly  = 0;
+		break;
+	case PHY_INTERFACE_MODE_RGMII_RXID:
+		clk_dly = 0xf077;
+		rx_dly  = 0;
+		tx_dly  = 0x7777;
+		break;
+	case PHY_INTERFACE_MODE_RGMII_TXID:
+		clk_dly = 0x77f0;
+		rx_dly  = 0x7777;
+		tx_dly  = 0;
+		break;
+	default:
+		return;
+	}
+
+	kszphy_extended_write(phydev, MII_KSZPHY_CLK_CONTROL_PAD_SKEW, clk_dly);
+	kszphy_extended_write(phydev, MII_KSZPHY_RX_DATA_PAD_SKEW, rx_dly);
+	kszphy_extended_write(phydev, MII_KSZPHY_TX_DATA_PAD_SKEW, tx_dly);
+}
+
 static int ksz9021_config_init(struct phy_device *phydev)
 {
 	const struct device_node *of_node;
 	const struct device *dev_walker;
+
+	ksz9021_config_rgmii_delay(phydev);
 
 	/* The Micrel driver has a deprecated option to place phy OF
 	 * properties in the MAC node. Walk up the tree of devices to
@@ -601,12 +637,6 @@ static int ksz9021_config_init(struct phy_device *phydev)
 		dev_walker = dev_walker->parent;
 
 	} while (!of_node && dev_walker);
-
-	if (of_property_read_bool(of_node, "ksz9021,rgmii_2.0_timing")) {
-		kszphy_extended_write(phydev, MII_KSZPHY_CLK_CONTROL_PAD_SKEW, 0xf0f0);
-		kszphy_extended_write(phydev, MII_KSZPHY_RX_DATA_PAD_SKEW, 0);
-		kszphy_extended_write(phydev, MII_KSZPHY_TX_DATA_PAD_SKEW, 0);
-	}
 
 	if (of_node) {
 		ksz9021_load_values_from_of(phydev, of_node,
