@@ -478,9 +478,10 @@ static irqreturn_t ohci_hcd_at91_overcurrent_irq(int irq, void *data)
 		ohci_at91_usb_set_power(pdata, port, 0);
 		pdata->overcurrent_changed[port] = 1;
 	}
-	pdata->overcurrent_status[port]  = !val;
+	pdata->overcurrent_status[port] = !val;
 
-	usb_kick_hub_wq(hcd->self.root_hub);
+	if (hcd)
+		usb_kick_hub_wq(hcd->self.root_hub);
 
 	dev_dbg(& pdev->dev, "overcurrent situation %s\n",
 		val ? "exited" : "notified");
