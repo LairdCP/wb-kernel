@@ -1,9 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * at91-wb40n.dts - Device Tree file for WB40N CPU module
  *
  *  Copyright (C) 2020 Laird Connectivity
- *
- * Licensed under GPLv2.
  *
  */
 
@@ -19,7 +18,7 @@
 		stdout-path = "serial0:115200n8";
 	};
 
-	memory {
+	memory@20000000 {
 		reg = <0x20000000 0x2000000>;
 	};
 
@@ -208,16 +207,16 @@
 };
 
 &ebi {
-	status = "okay";
-};
-
-&nand_controller {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_nand_cs &pinctrl_nand_rb>;
 
 	status = "okay";
+};
 
-	nand@3 {
+&nand_controller {
+	status = "okay";
+
+	nand: nand@3 {
 		reg = <0x3 0x0 0x800000>;
 
 		rb-gpios = <&pioC 13 GPIO_ACTIVE_HIGH>;
