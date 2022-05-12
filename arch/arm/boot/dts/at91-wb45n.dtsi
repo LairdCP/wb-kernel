@@ -102,7 +102,9 @@
 
 &ebi {
 	pinctrl-names = "default";
-	pinctrl-0 = <&pinctrl_ebi_addr_nand &pinctrl_ebi_data_0_7>;
+	pinctrl-0 = <&pinctrl_ebi_addr_nand &pinctrl_ebi_data_0_7
+		&pinctrl_nand_cs &pinctrl_nand_rb &pinctrl_nand_oe_we
+		&pinctrl_nand0_wp>;
 
 	status = "okay";
 };
@@ -111,10 +113,6 @@
 	status = "okay";
 
 	nand: nand@3 {
-		pinctrl-names = "default";
-		pinctrl-0 = <&pinctrl_nand_cs &pinctrl_nand_rb &pinctrl_nand_oe_we 
-			&pinctrl_nand0_wp>;
-
 		reg = <0x3 0x0 0x800000>;
 
 		rb-gpios = <&pioD 5 GPIO_ACTIVE_HIGH>;
