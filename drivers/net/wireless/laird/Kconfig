@@ -77,10 +77,44 @@ config LRDMWL_USB
 		module will be called lrdmwl_usb.
 
 config LRDMWL_FIPS
-	bool "FIPS support for 60 based SOMs"
+	bool "FIPS support for 60 Series based SOMs"
 	help
 		Enables FIPS operation for SOM60
 
 endif # LRDMWL
+
+config LRD_MWIFIEX
+	tristate "Laird Connectivity wireless support based for Marvell/NXP chipsets"
+	depends on CFG80211
+	help
+		Select to build the mwifiex driver
+
+		If you want to compile the driver as a module (= code which can be
+		inserted in and removed from the running kernel whenever you want),
+		say M here and read <file:Documentation/kbuild/modules.txt>.  The
+		modules will be called moal and mlan.
+
+if LRD_MWIFIEX
+
+config LRD_MWIFIEX_PCIE
+	bool "PCIE Bus"
+	depends on PCI
+	select FW_LOADER
+	help
+		PCIe Wi-Fi module
+
+config LRD_MWIFIEX_SDIO
+	bool "SDIO Bus"
+	depends on MMC
+	select FW_LOADER
+	help
+		SDIO Wi-Fi module
+
+config LRD_MWIFIEX_WIFI_DIRECT_SUPPORT
+	bool "Include support for Wi-Fi Direct"
+	help
+		Select to include support for Wi-Fi direct mode.
+
+endif # LRD_MWIFIEX
 
 endif # WLAN_VENDOR_LAIRD

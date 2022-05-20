@@ -164,3 +164,4 @@ sphinx_*/
 
 # lrdmwl
 drivers/net/wireless/laird/lrdmwl
+drivers/net/wireless/laird/mwifiex
