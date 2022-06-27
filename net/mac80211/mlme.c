@@ -2345,15 +2345,6 @@ static void ieee80211_set_disassoc(struct ieee80211_sub_if_data *sdata,
 
 	drv_mgd_complete_tx(sdata->local, sdata, &info);
 
-#ifndef _REMOVE_LAIRD_MODS_
-	/*
-	 * Some edge case scenarios result in deauth not making it out
-	 * Observed in adapter that does not implement flush routine
-	 * Adding short delay as work around until flush routine is implemented
-	 */
-	msleep(10);
-#endif
-
 	/* clear bssid only after building the needed mgmt frames */
 	eth_zero_addr(ifmgd->bssid);
 
