@@ -2416,7 +2416,7 @@ brcmf_set_key_mgmt(struct net_device *ndev, struct cfg80211_connect_params *sme)
 		err = brcmf_fil_bsscfg_int_get(netdev_priv(ndev), "okc_enable",
 					       &okc_enable);
 		if (err) {
-			bphy_err(drvr, "get okc_enable failed (%d)\n", err);
+			brcmf_dbg(INFO, "get okc_enable failed (%d)\n", err);
 		} else {
 			brcmf_dbg(INFO, "get okc_enable (%d)\n", okc_enable);
 			profile->is_okc = okc_enable;
@@ -2427,7 +2427,7 @@ brcmf_set_key_mgmt(struct net_device *ndev, struct cfg80211_connect_params *sme)
 		err = brcmf_fil_bsscfg_int_get(netdev_priv(ndev), "okc_enable",
 					       &okc_enable);
 		if (err) {
-			bphy_err(drvr, "get okc_enable failed (%d)\n", err);
+			brcmf_dbg(INFO, "get okc_enable failed (%d)\n", err);
 		} else {
 			brcmf_dbg(INFO, "get okc_enable (%d)\n", okc_enable);
 			profile->is_okc = okc_enable;
