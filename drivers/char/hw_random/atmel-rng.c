@@ -190,6 +190,7 @@ err_register_crypto:
 
 err_register:
 	clk_disable_unprepare(trng->clk);
+	atmel_trng_disable(trng);
 	return ret;
 }
 
