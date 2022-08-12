@@ -7741,7 +7741,13 @@ static void brcmf_get_bwcap(struct brcmf_if *ifp, u32 bw_cap[])
 				bw_cap[NL80211_BAND_6GHZ] = band;
 				return;
 			}
+// Laird - Disable warning for 6G bwcap as it isn't implemented on existing devices
+#if 0
 			WARN_ON(1);
+#else
+			brcmf_dbg(INFO, "6G bw_cap not available (%d)\n", err);
+			return;
+#endif
 		}
 		WARN_ON(1);
 		return;
