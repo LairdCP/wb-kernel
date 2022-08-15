@@ -149,7 +149,6 @@
 /* FLD_THR_CFG */
 #define DP83867_FLD_THR_CFG_ENERGY_LOST_THR_MASK	0x7
 
-
 #define DP83867_IO_IMPEDANCE_OHM_MAX	70
 #define DP83867_IO_IMPEDANCE_OHM_MIN	35
 #define DP83867_IO_IMPEDANCE_OHM_CAL	50
@@ -783,7 +782,7 @@ static int dp83867_config_init(struct phy_device *phydev)
 			val = phy_read_mmd(phydev, DP83867_DEVADDR,
 					   DP83867_IO_MUX_CFG);
 
-			val50 = val & DP83867_IO_MUX_CFG_IO_IMPEDANCE_CTRL;
+			val50 = val & DP83867_IO_MUX_CFG_IO_IMPEDANCE_MASK;
 
 			vale50 = dp83867_interp(DP83867_IO_IMPEDANCE_OHM_CAL);
 			valr = dp83867_interp(dp83867->io_impedance);
