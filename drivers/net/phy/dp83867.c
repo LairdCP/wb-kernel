@@ -793,7 +793,7 @@ static int dp83867_config_init(struct phy_device *phydev)
 			else if (valr > DP83867_IO_MUX_CFG_IO_IMPEDANCE_MIN)
 				valr = DP83867_IO_MUX_CFG_IO_IMPEDANCE_MIN;
 
-			val &= ~DP83867_IO_MUX_CFG_IO_IMPEDANCE_CTRL;
+			val &= ~DP83867_IO_MUX_CFG_IO_IMPEDANCE_MASK;
 			val |= valr;
 
 			phy_write_mmd(phydev, DP83867_DEVADDR,
