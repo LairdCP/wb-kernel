@@ -962,8 +962,14 @@ static int brcmf_cfg80211_request_ap_if(struct brcmf_if *ifp)
 	err = brcmf_fil_bsscfg_int_get(ifp, "interface_create",
 				       &iface_create_ver);
 	if (err) {
+// Laird: Allow older firmware to reach legacy interface logic
+#if 0
 		brcmf_err("fail to get supported version, err=%d\n", err);
 		return -EOPNOTSUPP;
+#else
+		brcmf_dbg(INFO, "fail to get supported version, err=%d\n", err);
+		goto legacy_create;
+#endif
 	}
 
 	switch (iface_create_ver) {
@@ -988,8 +994,9 @@ static int brcmf_cfg80211_request_ap_if(struct brcmf_if *ifp)
 		break;
 	}
 
+legacy_create:
 	if (err) {
-		brcmf_info("Does not support interface_create (%d)\n",
+		brcmf_dbg(INFO, "Does not support interface_create (%d)\n",
 			   err);
 		memset(&mbss_ssid_le, 0, sizeof(mbss_ssid_le));
 		bsscfgidx = brcmf_get_first_free_bsscfgidx(ifp->drvr);
