@@ -296,7 +296,7 @@ int brcmf_c_preinit_dcmds(struct brcmf_if *ifp)
 		 */
 		strreplace(clmver, '\n', ' ');
 
-		brcmf_dbg(INFO, "CLM version = %s\n", clmver);
+		brcmf_info("CLM version = %s\n", clmver);
 	}
 
 	/* set mpc */
