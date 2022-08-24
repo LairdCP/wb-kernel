@@ -60,10 +60,10 @@ struct dhcp_packet {
 	u8 file[128];    /* boot file name (ASCIZ) */
 } __packed;
 
-#define BROADCAST_FLAG 0x8000 /* "I need broadcast replies" */
+#define BROADCAST_FLAG	0x8000 /* "I need broadcast replies" */
 
-#define BOOTREQUEST             1
-#define BOOTREPLY               2
+#define BOOTPREQUEST	1
+#define BOOTPREPLY	2
 
 #define DHCP_MIN_SIZE (sizeof(struct udphdr) + sizeof(struct dhcp_packet))
 
@@ -74,6 +74,9 @@ struct mac2val
 
 	struct list_head node;
 };
+
+static u8 chaddr_orig[ETH_ALEN];
+static u32 chaddr_xid;
 
 static LIST_HEAD(arpnat_table);
 static spinlock_t arpnat_lock = __SPIN_LOCK_UNLOCKED(arpnat_lock);
@@ -304,6 +307,36 @@ static unsigned int ebt_target_arpnat(struct sk_buff *pskb, const struct xt_acti
 		} else if (eth_hdr(pskb)->h_proto == __constant_htons(ETH_P_IP)) {
 			struct iphdr *iph = ip_hdr(pskb);
 
+#if IS_ENABLED(CONFIG_BRIDGE_EBT_ARPNAT_DHCPRELAY_IMPERSONATE)
+			if (iph->protocol == IPPROTO_UDP && !(iph->frag_off & __constant_htons(IP_OFFSET))) {
+				struct udphdr *uh = (struct udphdr*)((u32*)iph + iph->ihl);
+				if (uh->dest == __constant_htons(68)) {
+					struct dhcp_packet *dhcp = (struct dhcp_packet*)((u8*)uh + sizeof(*uh));
+					u32 size = pskb->len - (iph->ihl << 2);
+
+					if (size >= DHCP_MIN_SIZE && dhcp->op == BOOTPREPLY && dhcp->xid == chaddr_xid &&
+						ether_addr_equal(dhcp->chaddr, in->dev_addr)) {
+						pr_devel("IN BOOTPREPLY: %pM[%pI4] -> %pM[%pI4] xid=%x\n",
+							dhcp->chaddr, &dhcp->yiaddr, eth_dmac, &iph->daddr, dhcp->xid);
+
+						/* Preserve host DHCP HWADDR of the requestor */
+						ether_addr_copy(dhcp->chaddr, chaddr_orig);
+						/* Change the DHCP HWADDR of the requestor to the HWADDR of the out device */
+						if (!is_multicast_ether_addr(eth_dmac))
+							ether_addr_copy(eth_dmac, chaddr_orig);
+
+						/* Recalculate checksums */
+						uh->check = 0;
+						pskb->csum = csum_partial(uh, size, 0);
+						uh->check = csum_tcpudp_magic(iph->saddr, iph->daddr, size, iph->protocol, pskb->csum);
+						if (uh->check == 0)
+							uh->check = 0xFFFF;
+
+						return info->target;
+					}
+				}
+			}
+#endif
 			if (!is_multicast_ether_addr(eth_dmac)) {
 				spin_lock_bh(&arpnat_lock);
 				entry = find_by_val(&arpnat_table, iph->daddr);
@@ -389,12 +422,20 @@ static unsigned int ebt_target_arpnat(struct sk_buff *pskb, const struct xt_acti
 					struct dhcp_packet *dhcp = (struct dhcp_packet*)((u8*)uh + sizeof(*uh));
 					u32 size = pskb->len - (iph->ihl << 2);
 
-					if (size >= DHCP_MIN_SIZE && dhcp->op == BOOTREQUEST) {
-						pr_devel("OUT BOOTPRELAY: %pM[%pI4] -> %pM[%pI4] xid=%x\n",
+					if (size >= DHCP_MIN_SIZE && dhcp->op == BOOTPREQUEST) {
+						pr_devel("OUT BOOTPREQUEST: %pM[%pI4] -> %pM[%pI4] xid=%x\n",
 							dhcp->chaddr, &dhcp->yiaddr, eth_dmac, &iph->daddr, dhcp->xid);
 
 						ether_addr_copy(eth_smac, out->dev_addr);
 
+#if IS_ENABLED(CONFIG_BRIDGE_EBT_ARPNAT_DHCPRELAY_IMPERSONATE)
+						/* Preserve transaction ID */
+						chaddr_xid = dhcp->xid;
+						/* Preserve host DHCP HWADDR of the requestor */
+						ether_addr_copy(chaddr_orig, dhcp->chaddr);
+						/* Change the DHCP HWADDR of the requestor to the HWADDR of the out device */
+						ether_addr_copy(dhcp->chaddr, out->dev_addr);
+#else
 						/* DHCP server sends unicast replies to the MAC in 'chaddr'
 						   as a result they will be never received
 						   To resolve the issue force broadcast replies
@@ -403,6 +444,7 @@ static unsigned int ebt_target_arpnat(struct sk_buff *pskb, const struct xt_acti
 							return info->target;
 
 						dhcp->flags |= __constant_htons(BROADCAST_FLAG);
+#endif
 
 						/* Recalculate checksums */
 						uh->check = 0;
