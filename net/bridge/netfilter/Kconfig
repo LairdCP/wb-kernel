@@ -231,6 +231,14 @@ config BRIDGE_EBT_ARPNAT_DHCPRELAY
 	help
 	  This option adds the DHCP relay to ARP NAT
 
+config BRIDGE_EBT_ARPNAT_DHCPRELAY_IMPERSONATE
+	bool "ebt: arpnat DHCP relay impersonate"
+	depends on BRIDGE_EBT_ARPNAT_DHCPRELAY
+	default y
+	help
+	  This option adds the DHCP relay to ARP NAT with client
+	  impersonation, this is needed to hide bridge existance
+
 #
 # watchers
 #
