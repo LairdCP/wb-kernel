@@ -301,3 +301,35 @@ late_initcall(dm_init_init);
 
 module_param(create, charp, 0);
 MODULE_PARM_DESC(create, "Create a mapped device in early boot");
+
+static char create_old[DM_MAX_STR_SIZE];
+
+static int __init dm_to_create(char *str)
+{
+	char *p;
+	int off;
+
+	/* Old string did not have <minor> element, so add an empty one */
+
+	if (strlen(str) >= DM_MAX_STR_SIZE - 1)
+		return 0;
+
+	p = strchr(str, ',');
+	if (!p)
+		return 0;
+
+	p = strchr(p, ',');
+	if (!p)
+		return 0;
+
+	off = ++p - str;
+	strncpy(create_old, str, off);
+	create_old[off] = ',';
+	strcpy(&create_old[off + 1], p);
+
+	create = create_old;
+
+	return 1;
+}
+
+__setup("dm=", dm_to_create);
