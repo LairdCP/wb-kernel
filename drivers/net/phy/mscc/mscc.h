@@ -133,7 +133,6 @@ enum rgmii_clock_delay {
 #define MSCC_PHY_PAGE_EXTENDED_4	  0x0004 /* Extended reg - page 4 */
 #define MSCC_PHY_PAGE_CSR_CNTL		  MSCC_PHY_PAGE_EXTENDED_4
 #define MSCC_PHY_PAGE_MACSEC		  MSCC_PHY_PAGE_EXTENDED_4
-#define MSCC_PHY_PAGE_GENERAL_PURP	  0x0010 /* General Purpose registers */
 /* Extended reg - GPIO; this is a bank of registers that are shared for all PHYs
  * in the same package.
  */
@@ -173,7 +172,7 @@ enum rgmii_clock_delay {
 
 /* General Purpose Registers */
 #define MSCC_PHY_CLKOUT_CNTL		  13
-#define MSCC_CLKOUT_EN			  0x8000
+#define MSCC_CLKOUT_EN				  0x8000
 #define MSCC_CLKOUT_FREQ_MASK		  0x6000
 #define MSCC_CLKOUT_FREQ_25_MHZ		  0x0000
 #define MSCC_CLKOUT_FREQ_50_MHZ		  0x2000
