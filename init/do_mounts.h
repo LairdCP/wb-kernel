@@ -41,13 +41,3 @@ bool __init initrd_load(void);
 static inline bool initrd_load(void) { return false; }
 
 #endif
-
-#ifdef CONFIG_BLK_DEV_DM
-
-void dm_run_setup(void);
-
-#else
-
-static inline void dm_run_setup(void) {}
-
-#endif
