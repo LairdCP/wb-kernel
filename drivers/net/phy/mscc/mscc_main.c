@@ -557,7 +557,7 @@ static int vsc85xx_rgmii_set_skews(struct phy_device *phydev, u32 rgmii_cntl,
 
 static int vsc85xx_default_config(struct phy_device *phydev)
 {
-	int rc = 0;
+	int rc;
 
 	phydev->mdix_ctrl = ETH_TP_MDI_AUTO;
 
@@ -566,16 +566,17 @@ static int vsc85xx_default_config(struct phy_device *phydev)
 					     VSC8502_RGMII_RX_DELAY_MASK,
 					     VSC8502_RGMII_TX_DELAY_MASK);
 		if (rc)
-			goto out;
+			return rc;
 
 		/* Laird */
-		rc = phy_modify_paged(phydev, MSCC_PHY_PAGE_GENERAL_PURP,
+		rc = phy_modify_paged(phydev, MSCC_PHY_PAGE_EXTENDED_GPIO,
 					MSCC_PHY_CLKOUT_CNTL, MSCC_CLKOUT_FREQ_MASK,
 					MSCC_CLKOUT_FREQ_125_MHZ);
+		if (rc)
+			return rc;
 	}
 
-out:
-	return rc;
+	return 0;
 }
 
 static int vsc85xx_get_tunable(struct phy_device *phydev,
