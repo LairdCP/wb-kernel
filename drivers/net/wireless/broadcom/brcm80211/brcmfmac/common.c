@@ -78,6 +78,10 @@ module_param_string(regdomain, brcmf_regdomain,
 		    BRCMF_REGDOMAIN_LEN, 0400);
 MODULE_PARM_DESC(regdomain, "Regulatory domain/country code");
 
+static int brcmf_idle_interval = BRCMF_IDLE_INTERVAL;
+module_param_named(idle_interval, brcmf_idle_interval, int, 0400);
+MODULE_PARM_DESC(idle_interval, "SDIO idle interval");
+
 static int brcmf_eap_restrict;
 module_param_named(eap_restrict, brcmf_eap_restrict, int, 0400);
 MODULE_PARM_DESC(eap_restrict, "Block non-802.1X frames until auth finished");
@@ -502,6 +506,7 @@ struct brcmf_mp_device *brcmf_get_module_param(struct device *dev,
 	settings->iapp = !!brcmf_iapp_enable;
 	settings->eap_restrict = !!brcmf_eap_restrict;
 	settings->default_pm = !!brcmf_max_pm ? PM_MAX : PM_FAST;
+	settings->idle_interval = brcmf_idle_interval;
 #ifdef DEBUG
 	settings->ignore_probe_fail = !!brcmf_ignore_probe_fail;
 #endif
