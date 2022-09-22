@@ -12,6 +12,8 @@
 #define BRCMF_FW_ALTPATH_LEN			256
 #define BRCMF_REGDOMAIN_LEN			10
 
+#define BRCMF_IDLE_INTERVAL			1
+
 /* Definitions for the module global and device specific settings are defined
  * here. Two structs are used for them. brcmf_mp_global_t and brcmf_mp_device.
  * The mp_global is instantiated once in a global struct and gets initialized
@@ -48,6 +50,7 @@ struct brcmf_mp_device {
 	int		fcmode;
 	bool		roamoff;
 	bool		iapp;
+	int		idle_interval;
 	bool		ignore_probe_fail;
 	struct brcmfmac_pd_cc *country_codes;
 	const char	*board_type;
