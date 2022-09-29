@@ -8068,10 +8068,10 @@ static void brcmf_update_he_cap(struct ieee80211_supported_band *band,
 				       IEEE80211_HE_MAC_CAP2_BCAST_TWT;
 
 	he_cap_elem->mac_cap_info[3] = IEEE80211_HE_MAC_CAP3_OMI_CONTROL |
-				       IEEE80211_HE_MAC_CAP3_MAX_AMPDU_LEN_EXP_VHT_1 |
+				       IEEE80211_HE_MAC_CAP3_MAX_AMPDU_LEN_EXP_EXT_1 |
 				       IEEE80211_HE_MAC_CAP3_FLEX_TWT_SCHED;
 
-	he_cap_elem->mac_cap_info[4] = IEEE80211_HE_MAC_CAP4_AMDSU_IN_AMPDU;
+	he_cap_elem->mac_cap_info[4] = IEEE80211_HE_MAC_CAP4_AMSDU_IN_AMPDU;
 
 
 	/* HE PHY Capabilities Information */
