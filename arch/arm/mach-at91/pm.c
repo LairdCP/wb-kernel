@@ -524,18 +524,16 @@ static void at91_ddr_standby(void)
 
 		saved_lpr1 = at91_ramc_read(1, AT91_DDRSDRC_LPR);
 		lpr1 = saved_lpr1 & ~AT91_DDRSDRC_LPCB;
-		lpr1 |= ((mdr & AT91_DDRSDRC_MD) == AT91_DDRSDRC_MD_LOW_POWER_DDR) ?
-			AT91_DDRSDRC_LPCB_POWER_DOWN : AT91_DDRSDRC_LPCB_SELF_REFRESH;
+		lpr1 |= AT91_DDRSDRC_LPCB_POWER_DOWN;
 	}
 
 	mdr = at91_ramc_read(0, AT91_DDRSDRC_MDR);
 
 	saved_lpr0 = at91_ramc_read(0, AT91_DDRSDRC_LPR);
 	lpr0 = saved_lpr0 & ~AT91_DDRSDRC_LPCB;
-	lpr0 |= ((mdr & AT91_DDRSDRC_MD) == AT91_DDRSDRC_MD_LOW_POWER_DDR) ?
-		AT91_DDRSDRC_LPCB_POWER_DOWN : AT91_DDRSDRC_LPCB_SELF_REFRESH;
+	lpr0 |= AT91_DDRSDRC_LPCB_POWER_DOWN;
 
-	/* self-refresh mode now */
+	/* power-down mode now */
 	at91_ramc_write(0, AT91_DDRSDRC_LPR, lpr0);
 	if (soc_pm.data.ramc[1])
 		at91_ramc_write(1, AT91_DDRSDRC_LPR, lpr1);
