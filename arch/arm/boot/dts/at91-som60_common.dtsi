@@ -48,6 +48,13 @@
 			sha@f8034000 {
 				status = "disabled";
 			};
+			at91_fuse: efuse@ffffe400 {
+				compatible = "atmel,sama5d3-fuse";
+				reg = <0xffffe400 0x200>;
+				/* For nvmem subnodes */
+				#address-cells = <1>;
+				#size-cells = <1>;
+			};
 		};
 	};
 };
@@ -252,6 +259,33 @@
 	atmel,idle-halt;
 
 	status = "okay";
+};
+
+&at91_fuse {
+	atmel;
+
+	status = "okay";
+
+	board_hw_id: hw-id@0 {
+		reg = <0x00 2>;
+	};
+
+	eth_mac0: mac-address@14 {
+		reg = <0x0E 6>;
+	};
+	eth_mac1: mac-address@8 {
+		reg = <0x08 6>;
+	};
+};
+
+&macb0 {
+	nvmem-cells = <&eth_mac0>;
+	nvmem-cell-names = "mac-address";
+};
+
+&macb1 {
+	nvmem-cells = <&eth_mac1>;
+	nvmem-cell-names = "mac-address";
 };
 
 &slow_xtal {
