@@ -37,6 +37,13 @@
 			sha@f8034000 {
 				status = "disabled";
 			};
+			at91_fuse: efuse@ffffe400 {
+				compatible = "atmel,sama5d3-fuse";
+				reg = <0xffffe400 0x200>;
+				/* For nvmem subnodes */
+				#address-cells = <1>;
+				#size-cells = <1>;
+			};
 		};
 	};
 };

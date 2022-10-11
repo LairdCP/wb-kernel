@@ -7,6 +7,8 @@ obj-$(CONFIG_NVMEM)		+= nvmem_core.o
 nvmem_core-y			:= core.o
 
 # Devices
+obj-$(CONFIG_NVMEM_AT91_FUSE)	+= nvmem-at91-fuse.o
+nvmem-at91-fuse-y		:= at91-fuse.o
 obj-$(CONFIG_NVMEM_BCM_OCOTP)	+= nvmem-bcm-ocotp.o
 nvmem-bcm-ocotp-y		:= bcm-ocotp.o
 obj-$(CONFIG_NVMEM_IMX_IIM)	+= nvmem-imx-iim.o
