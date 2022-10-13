@@ -44,6 +44,7 @@ extern struct brcmf_mp_global_t brcmf_mp_global;
  * @default_pm: default power management (PM) mode.
  * @ignore_probe_fail: Ignore probe failure.
  * @fw_ap_select: Allow FW to select AP.
+ * @disable_6ghz: Disable 6GHz operation
  * @trivial_ccode_map: Assume firmware uses ISO3166 country codes with rev 0
  * @country_codes: If available, pointer to struct for translating country codes
  * @bus: Bus specific platform data. Only SDIO at the mmoment.
@@ -59,6 +60,7 @@ struct brcmf_mp_device {
 	int		default_pm;
 	bool		ignore_probe_fail;
 	bool		fw_ap_select;
+	bool		disable_6ghz;
 	bool		trivial_ccode_map;
 	struct brcmfmac_pd_cc *country_codes;
 	const char	*board_type;
