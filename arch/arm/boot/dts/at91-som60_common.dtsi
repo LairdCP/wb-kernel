@@ -355,6 +355,7 @@
 		>;
 
 	atmel,adc-vref = <3300>;
+	atmel,adc-channels-used = <0x3f>;
 };
 
 &ebi {
