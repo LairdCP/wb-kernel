@@ -39,6 +39,7 @@
 			};
 			at91_fuse: efuse@ffffe400 {
 				compatible = "atmel,sama5d3-fuse";
+				clocks = <&pmc PMC_TYPE_CORE PMC_MAIN>, <&pmc PMC_TYPE_PERIPHERAL 48>;
 				reg = <0xffffe400 0x200>;
 				/* For nvmem subnodes */
 				#address-cells = <1>;
