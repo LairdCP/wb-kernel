@@ -127,7 +127,7 @@ static void __init sama5d3_pmc_setup(struct device_node *np)
 	if (IS_ERR(regmap))
 		return;
 
-	sama5d3_pmc = pmc_data_allocate(PMC_PLLACK + 1,
+	sama5d3_pmc = pmc_data_allocate(PMC_PLLACK + 2,
 					nck(sama5d3_systemck),
 					nck(sama5d3_periphck), 0, 3);
 	if (!sama5d3_pmc)
@@ -137,6 +137,8 @@ static void __init sama5d3_pmc_setup(struct device_node *np)
 					   50000000);
 	if (IS_ERR(hw))
 		goto err_free;
+
+	sama5d3_pmc->chws[PMC_MAIN] = hw;
 
 	bypass = of_property_read_bool(np, "atmel,osc-bypass");
 
