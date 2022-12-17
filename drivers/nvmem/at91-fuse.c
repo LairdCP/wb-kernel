@@ -22,6 +22,18 @@
 #include <linux/slab.h>
 #include <linux/delay.h>
 
+#ifdef CONFIG_SYSFS
+#include <linux/nvmem-consumer.h>
+#include <linux/fs.h>
+#include <linux/list.h>
+
+struct cell_meta {
+	struct list_head nvmem_cell_sysfs_list;
+	struct bin_attribute bin_attr_cell;
+	struct nvmem_cell *cell;
+};
+#endif
+
 static DEFINE_MUTEX(at91_fuse_mutex);
 
 struct at91_fuse_priv {
@@ -31,6 +43,9 @@ struct at91_fuse_priv {
 	void __iomem *base;
 	const struct at91_fuse_params *params;
 	struct nvmem_config *config;
+#ifdef CONFIG_SYSFS
+	struct list_head nvmem_cell_sysfs_head;
+#endif
 };
 
 /* Fuse control register (fcr, write-only) */
@@ -219,6 +234,175 @@ static const struct of_device_id at91_fuse_dt_ids[] = {
 };
 MODULE_DEVICE_TABLE(of, at91_fuse_dt_ids);
 
+#ifdef CONFIG_SYSFS
+static ssize_t cell_read(struct file *filp, struct kobject *kobj,
+			 struct bin_attribute *attr, char *buf,
+			 loff_t pos, size_t count)
+{
+	void *cell_buf;
+	struct cell_meta *cell_meta;
+	size_t cell_len;
+	size_t read_bytes;
+
+	if (attr->private)
+		cell_meta = attr->private;
+	else {
+		printk(KERN_ERR "%s couldn't get private struct\n", __FUNCTION__);
+		return 0;
+	}
+	if (!cell_meta->cell) {
+		printk(KERN_ERR "%s couldn't get private cell\n", __FUNCTION__);
+		return 0;
+	}
+
+	/* Stop the user from reading */
+	if (pos >= cell_meta->bin_attr_cell.size)
+		return 0;
+
+	if (pos + count > cell_meta->bin_attr_cell.size)
+		count = cell_meta->bin_attr_cell.size - pos;
+
+	cell_buf = nvmem_cell_read(cell_meta->cell, &cell_len);
+
+	if (IS_ERR(cell_buf)) {
+		printk(KERN_ERR "%s error %d\n", __FUNCTION__, (int) PTR_ERR(cell_buf));
+		return 0;
+	}
+	else {
+		read_bytes = min_t(size_t, count, cell_len);
+		memcpy(buf, cell_buf + pos, read_bytes);
+	}
+
+	kfree(cell_buf);
+
+	return read_bytes;
+}
+
+static ssize_t cell_write(struct file *filp, struct kobject *kobj,
+			  struct bin_attribute *attr, char *buf,
+			  loff_t pos, size_t count)
+{
+	void *cell_sized_buf;
+	struct cell_meta *cell_meta;
+	size_t cell_len;
+	int ret;
+
+	if (attr->private)
+		cell_meta = attr->private;
+	else {
+		printk(KERN_ERR "%s couldn't get private struct\n", __FUNCTION__);
+		return -EFAULT;
+	}
+	if (!cell_meta->cell) {
+		printk(KERN_ERR "%s couldn't get private cell\n", __FUNCTION__);
+		return -EFAULT;
+	}
+
+	cell_len = cell_meta->bin_attr_cell.size;
+
+	/* Stop the user from writing */
+	if (pos >= cell_len)
+		return -EFBIG;
+
+	if (pos + count > cell_len)
+		count = cell_len - pos;
+
+	if (pos != 0 || count != cell_len)
+	{
+		/* Assume that in underlying fuse HW, writing a 0 byte is a no-op */
+		cell_sized_buf = kzalloc(cell_len, GFP_KERNEL);
+		memcpy(cell_sized_buf + pos, buf, count);
+		ret = nvmem_cell_write(cell_meta->cell, cell_sized_buf, cell_len);
+		kfree(cell_sized_buf);
+	}
+	else
+		ret = nvmem_cell_write(cell_meta->cell, buf, cell_len);
+
+	if (ret < 0) {
+		printk(KERN_ERR "%s error %d\n", __FUNCTION__, ret);
+		return ret;
+	}
+
+	return count;
+}
+
+/*
+ * cell_attribute - nvram cell sysfs-node attributes
+ *
+ * NOTE Size and name will be changed according to underlying cell.
+ */
+static BIN_ATTR_RW(cell, 0);
+
+static int register_cells_sysfs(struct at91_fuse_priv *priv)
+{
+	struct device *dev = priv->dev;
+	struct nvmem_cell *cell;
+	const char *cell_name = NULL;
+	int ret;
+
+	struct cell_meta *cell_meta;
+
+	struct of_phandle_iterator it;
+	struct device_node *np;
+	int i = 0;
+	const __be32 *addr;
+	int len;
+
+	INIT_LIST_HEAD(&priv->nvmem_cell_sysfs_head);
+
+	of_for_each_phandle(&it, ret, dev->of_node, "nvmem-cells", NULL, 0) {
+		int bytes = 0;
+		np = it.node;
+
+		addr = of_get_property(np, "reg", &len);
+		if (!addr) {
+			printk(KERN_ERR "failed to get reg property\n");
+		}
+		else {
+			if (len < 2 * sizeof(u32)) {
+				printk(KERN_ERR "at91-fuse: invalid reg on %pOF\n", np);
+			}
+			else
+				bytes = be32_to_cpup(++addr);
+		}
+
+		of_node_put(np);
+
+		ret = of_property_read_string_index(dev->of_node, "nvmem-cell-names",
+								i++, &cell_name);
+		if (ret != 0)
+			continue;
+
+		cell = nvmem_cell_get(dev, cell_name);
+		if (IS_ERR(cell)) {
+			printk(KERN_ERR "nvmem_cell_get %s error %ld\n", cell_name, PTR_ERR(cell));
+			continue;
+		}
+
+		cell_meta = devm_kzalloc(dev, sizeof(struct cell_meta *), GFP_KERNEL);
+
+		/* Copy the declared attr structure to change some fields */
+		memcpy(&cell_meta->bin_attr_cell, &bin_attr_cell, sizeof(cell_meta->bin_attr_cell));
+
+		cell_meta->cell = cell;
+		cell_meta->bin_attr_cell.attr.name = cell_name;
+		cell_meta->bin_attr_cell.size = bytes;
+		cell_meta->bin_attr_cell.private = cell_meta;
+
+		ret = device_create_bin_file(dev, &cell_meta->bin_attr_cell);
+		if (ret) {
+			printk(KERN_ERR
+				"Failed to create sysfs file %s\n", cell_name);
+			return ret;
+		}
+
+		list_add(&cell_meta->nvmem_cell_sysfs_list, &priv->nvmem_cell_sysfs_head);
+	}
+
+	return 0;
+}
+#endif
+
 static int at91_fuse_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -229,6 +413,7 @@ static int at91_fuse_probe(struct platform_device *pdev)
 	if (!priv)
 		return -ENOMEM;
 
+	dev_set_drvdata(dev, priv);
 	priv->dev = dev;
 
 	priv->base = devm_platform_ioremap_resource(pdev, 0);
@@ -236,13 +421,12 @@ static int at91_fuse_probe(struct platform_device *pdev)
 		return PTR_ERR(priv->base);
 
 	priv->num_clks = devm_clk_bulk_get_all(dev, &priv->clks);
-	if (priv->num_clks < 0)
-	{
+	if (priv->num_clks < 0) {
 		printk(KERN_ERR "devm_clk_bulk_get_all failed with %d\n", priv->num_clks);
 		return priv->num_clks;
 	}
 
-	priv->params = of_device_get_match_data(&pdev->dev);
+	priv->params = of_device_get_match_data(dev);
 	at91_fuse_nvmem_config.size = 4 * priv->params->nregs;
 	at91_fuse_nvmem_config.dev = dev;
 	at91_fuse_nvmem_config.priv = priv;
@@ -250,11 +434,34 @@ static int at91_fuse_probe(struct platform_device *pdev)
 
 	nvmem = devm_nvmem_register(dev, &at91_fuse_nvmem_config);
 
+#ifdef CONFIG_SYSFS
+	register_cells_sysfs(priv);
+#endif
+
 	return PTR_ERR_OR_ZERO(nvmem);
+}
+
+static int at91_fuse_remove(struct platform_device *pdev)
+{
+#ifdef CONFIG_SYSFS
+	struct device *dev = &pdev->dev;
+	struct at91_fuse_priv *priv = dev_get_drvdata(dev);
+	struct list_head *ptr;
+	struct cell_meta *entry;
+
+	list_for_each(ptr, &priv->nvmem_cell_sysfs_head){
+		entry = list_entry(ptr, struct cell_meta, nvmem_cell_sysfs_list);
+		device_remove_bin_file(dev, &entry->bin_attr_cell);
+		nvmem_cell_put(entry->cell);
+	}
+#endif
+
+	return 0;
 }
 
 static struct platform_driver at91_fuse_driver = {
 	.probe	= at91_fuse_probe,
+	.remove = at91_fuse_remove,
 	.driver = {
 		.name           = "at91_fuse",
 		.of_match_table = at91_fuse_dt_ids,
