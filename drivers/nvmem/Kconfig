@@ -24,6 +24,7 @@ config NVMEM_SYSFS
 config NVMEM_AT91_FUSE
 	tristate "Microchip/Atmel AT91SAMA OTP Fuse Support"
 	depends on ARCH_AT91
+	default y
 	help
 	  This is a driver exposing the OTP fuse block of an Atmel/Microchip AT91 SOC.
 
