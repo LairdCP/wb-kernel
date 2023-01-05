@@ -2288,8 +2288,8 @@ brcmf_set_key_mgmt(struct net_device *ndev, struct cfg80211_connect_params *sme)
 			val = WPA_AUTH_UNSPECIFIED;
 			if (sme->want_1x)
 				profile->use_fwsup = BRCMF_PROFILE_FWSUP_1X;
-//			else
-//				profile->use_fwsup = BRCMF_PROFILE_FWSUP_ROAM;
+			else
+				profile->use_fwsup = BRCMF_PROFILE_FWSUP_ROAM;
 			break;
 		case WLAN_AKM_SUITE_PSK:
 			val = WPA_AUTH_PSK;
@@ -2305,15 +2305,15 @@ brcmf_set_key_mgmt(struct net_device *ndev, struct cfg80211_connect_params *sme)
 			val = WPA2_AUTH_UNSPECIFIED;
 			if (sme->want_1x)
 				profile->use_fwsup = BRCMF_PROFILE_FWSUP_1X;
-//			else
-//				profile->use_fwsup = BRCMF_PROFILE_FWSUP_ROAM;
+			else
+				profile->use_fwsup = BRCMF_PROFILE_FWSUP_ROAM;
 			break;
 		case WLAN_AKM_SUITE_8021X_SHA256:
 			val = WPA2_AUTH_1X_SHA256;
 			if (sme->want_1x)
 				profile->use_fwsup = BRCMF_PROFILE_FWSUP_1X;
-//			else
-//				profile->use_fwsup = BRCMF_PROFILE_FWSUP_ROAM;
+			else
+				profile->use_fwsup = BRCMF_PROFILE_FWSUP_ROAM;
 			break;
 		case WLAN_AKM_SUITE_PSK_SHA256:
 			val = WPA2_AUTH_PSK_SHA256;
@@ -2326,8 +2326,8 @@ brcmf_set_key_mgmt(struct net_device *ndev, struct cfg80211_connect_params *sme)
 			profile->is_ft = true;
 			if (sme->want_1x)
 				profile->use_fwsup = BRCMF_PROFILE_FWSUP_1X;
-//			else
-//				profile->use_fwsup = BRCMF_PROFILE_FWSUP_ROAM;
+			else
+				profile->use_fwsup = BRCMF_PROFILE_FWSUP_ROAM;
 			break;
 		case WLAN_AKM_SUITE_FT_PSK:
 			val = WPA2_AUTH_PSK | WPA2_AUTH_FT;
@@ -8551,17 +8551,10 @@ static int brcmf_setup_wiphy(struct wiphy *wiphy, struct brcmf_if *ifp)
 		wiphy_ext_feature_set(wiphy,
 				      NL80211_EXT_FEATURE_AP_PMKSA_CACHING);
 	}
-
-#if 0
-/*
- * Laird: NL80211_EXT_FEATURE_ROAM_OFFLOAD is a non-standard definition
- * that breaks userspace nl80211 API
- */
 	if (brcmf_feat_is_enabled(ifp, BRCMF_FEAT_FBT) ||
 	    brcmf_feat_is_enabled(ifp, BRCMF_FEAT_OKC))
 		wiphy_ext_feature_set(wiphy,
 					NL80211_EXT_FEATURE_ROAM_OFFLOAD);
-#endif
 	wiphy->mgmt_stypes = brcmf_txrx_stypes;
 	wiphy->max_remain_on_channel_duration = 5000;
 	if (brcmf_feat_is_enabled(ifp, BRCMF_FEAT_PNO)) {
