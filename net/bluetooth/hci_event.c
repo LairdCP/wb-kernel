@@ -2884,6 +2884,8 @@ unlock:
 static u8 hci_to_mgmt_reason(u8 err)
 {
 	switch (err) {
+	case HCI_ERROR_AUTH_FAILURE:
+		return MGMT_DEV_DISCONN_AUTH_FAILURE;
 	case HCI_ERROR_CONNECTION_TIMEOUT:
 		return MGMT_DEV_DISCONN_TIMEOUT;
 	case HCI_ERROR_REMOTE_USER_TERM:
