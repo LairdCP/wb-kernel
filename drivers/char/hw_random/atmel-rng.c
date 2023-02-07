@@ -8,17 +8,21 @@
 
 #include <linux/kernel.h>
 #include <linux/module.h>
-#include <linux/errno.h>
+#include <linux/mod_devicetable.h>
+#include <linux/slab.h>
+#include <linux/err.h>
 #include <linux/clk.h>
 #include <linux/io.h>
-#include <linux/of_device.h>
+#include <linux/iopoll.h>
 #include <linux/hw_random.h>
-#include <crypto/rng.h>
-#include <crypto/internal/rng.h>
+#include <linux/of_device.h>
+#include <linux/platform_device.h>
+#include <linux/pm_runtime.h>
 
 #define TRNG_CR		0x00
 #define TRNG_MR		0x04
 #define TRNG_ISR	0x1c
+#define TRNG_ISR_DATRDY	BIT(0)
 #define TRNG_ODATA	0x50
 
 #define TRNG_KEY	0x524e4700 /* RNG */
@@ -33,103 +37,83 @@ struct atmel_trng {
 	struct clk *clk;
 	void __iomem *base;
 	struct hwrng rng;
+	bool has_half_rate;
 	u32 last;
 };
 
-static struct atmel_trng * g_trng;
 static DEFINE_MUTEX(trng_mutex);
 
-static int atmel_trng_read_entropy(struct atmel_trng *trng, void *buf,
-	size_t max, bool wait)
+static bool atmel_trng_wait_ready(struct atmel_trng *trng, bool wait)
 {
-	u32 *data = buf, curr;
-	size_t len = 0;
+	int ready;
+
+	ready = readl(trng->base + TRNG_ISR) & TRNG_ISR_DATRDY;
+	if (!ready && wait)
+		readl_poll_timeout(trng->base + TRNG_ISR, ready,
+				   ready & TRNG_ISR_DATRDY, 1000, 20000);
+
+	return !!ready;
+}
+
+static int atmel_trng_read(struct hwrng *rng, void *buf, size_t max,
+			   bool wait)
+{
+	struct atmel_trng *trng = container_of(rng, struct atmel_trng, rng);
+	u32 *data = buf;
 	int ret;
 
-	mutex_lock(&trng_mutex);
-
-	if (!trng) {
-		ret = -ENODEV;
-		goto exit;
+	ret = pm_runtime_get_sync((struct device *)trng->rng.priv);
+	if (ret < 0) {
+		pm_runtime_put_sync((struct device *)trng->rng.priv);
+		return ret;
 	}
 
-	for (;;) {
-		if (!(readl(trng->base + TRNG_ISR) & 1)) {
-			if (!wait)
-				break;
+	ret = atmel_trng_wait_ready(trng, wait);
+	if (!ret)
+		goto out;
 
-			cpu_relax();
-			continue;
-		}
+	*data = readl(trng->base + TRNG_ODATA);
+	/*
+	 * ensure data ready is only set again AFTER the next data word is ready
+	 * in case it got set between checking ISR and reading ODATA, so we
+	 * don't risk re-reading the same word
+	 */
+	readl(trng->base + TRNG_ISR);
+	ret = 4;
 
-		curr = readl(trng->base + TRNG_ODATA);
-
-		/* Clear ready flag again in case it have changed */
-		readl(trng->base + TRNG_ISR);
-
-		if (curr == trng->last)
-			panic("atmel-rng: Duplicate output detected\n");
-
-		trng->last = curr;
-		*(data++) = curr;
-		len += sizeof(u32);
-
-		if (len >= max)
-			break;
-	}
-
-	ret = (int) len;
-
-exit:
-	mutex_unlock(&trng_mutex);
-
+out:
+	pm_runtime_mark_last_busy((struct device *)trng->rng.priv);
+	pm_runtime_put_sync_autosuspend((struct device *)trng->rng.priv);
 	return ret;
 }
 
-
-static int atmel_trng_read(struct hwrng *rng, void *buf, size_t max, bool wait)
+static int atmel_trng_init(struct atmel_trng *trng)
 {
-	return atmel_trng_read_entropy(g_trng, buf, max, wait);
-}
+	unsigned long rate;
+	int ret;
 
-static int atmel_trng_generate(struct crypto_rng *tfm,
-	const u8 *src, unsigned int slen, u8 *rdata, unsigned int dlen)
-{
-	int ret = atmel_trng_read_entropy(g_trng, rdata, dlen, true);
-	if (ret < 0)
+	ret = clk_prepare_enable(trng->clk);
+	if (ret)
 		return ret;
 
-	return ret == dlen ? 0 : -EFAULT;
-}
+	if (trng->has_half_rate) {
+		rate = clk_get_rate(trng->clk);
 
-static int atmel_trng_seed(struct crypto_rng *tfm,
-			   const u8 *seed, unsigned int slen)
-{
+		/* if peripheral clk is above 100MHz, set HALFR */
+		if (rate > 100000000)
+			writel(TRNG_HALFR, trng->base + TRNG_MR);
+	}
+
+	writel(TRNG_KEY | 1, trng->base + TRNG_CR);
+
 	return 0;
 }
 
-static void atmel_trng_enable(struct atmel_trng *trng)
-{
-	writel(TRNG_KEY | 1, trng->base + TRNG_CR);
-}
-
-static void atmel_trng_disable(struct atmel_trng *trng)
+static void atmel_trng_cleanup(struct atmel_trng *trng)
 {
 	writel(TRNG_KEY, trng->base + TRNG_CR);
+	clk_disable_unprepare(trng->clk);
 }
-
-static struct rng_alg atmel_trng_alg = {
-	.generate	= atmel_trng_generate,
-	.seed		= atmel_trng_seed,
-	.seedsize	= 0,
-	.base		= {
-		.cra_name		= "jitterentropy_rng",
-		.cra_driver_name	= "atmel-trng",
-		.cra_flags		= CRYPTO_ALG_TYPE_RNG,
-		.cra_priority		= 300,
-		.cra_module		= THIS_MODULE,
-	}
-};
 
 static int atmel_trng_probe(struct platform_device *pdev)
 {
@@ -152,44 +136,32 @@ static int atmel_trng_probe(struct platform_device *pdev)
 	if (!data)
 		return -ENODEV;
 
-	if (data->has_half_rate) {
-		unsigned long rate = clk_get_rate(trng->clk);
-
-		/* if peripheral clk is above 100MHz, set HALFR */
-		if (rate > 100000000)
-			writel(TRNG_HALFR, trng->base + TRNG_MR);
-	}
-
-	ret = clk_prepare_enable(trng->clk);
-	if (ret)
-		return ret;
-
-	atmel_trng_enable(trng);
-
-	g_trng = trng;
-
+	trng->has_half_rate = data->has_half_rate;
 	trng->rng.name = pdev->name;
 	trng->rng.read = atmel_trng_read;
+	trng->rng.priv = (unsigned long)&pdev->dev;
 	trng->rng.quality = 921;
-	trng->rng.priv = (unsigned long)trng;
-
-	ret = devm_hwrng_register(&pdev->dev, &trng->rng);
-	if (ret)
-		goto err_register;
-
-	ret = crypto_register_rng(&atmel_trng_alg);
-	if (ret)
-		goto err_register_crypto;
-
 	platform_set_drvdata(pdev, trng);
 
-	return 0;
+#ifndef CONFIG_PM
+	ret = atmel_trng_init(trng);
+	if (ret)
+		return ret;
+#endif
 
-err_register_crypto:
-	hwrng_unregister(&trng->rng);
+	pm_runtime_set_autosuspend_delay(&pdev->dev, 100);
+	pm_runtime_use_autosuspend(&pdev->dev);
+	pm_runtime_enable(&pdev->dev);
 
-err_register:
-	clk_disable_unprepare(trng->clk);
+	ret = devm_hwrng_register(&pdev->dev, &trng->rng);
+	if (ret) {
+		pm_runtime_disable(&pdev->dev);
+		pm_runtime_set_suspended(&pdev->dev);
+#ifndef CONFIG_PM
+		atmel_trng_cleanup(trng);
+#endif
+	}
+
 	return ret;
 }
 
@@ -197,47 +169,35 @@ static int atmel_trng_remove(struct platform_device *pdev)
 {
 	struct atmel_trng *trng = platform_get_drvdata(pdev);
 
-	mutex_lock(&trng_mutex);
-	g_trng = NULL;
-	mutex_unlock(&trng_mutex);
-
-	crypto_unregister_rng(&atmel_trng_alg);
-	hwrng_unregister(&trng->rng);
-
-	atmel_trng_disable(trng);
-	clk_disable_unprepare(trng->clk);
+	atmel_trng_cleanup(trng);
+	pm_runtime_disable(&pdev->dev);
+	pm_runtime_set_suspended(&pdev->dev);
 
 	return 0;
 }
 
-#ifdef CONFIG_PM
-static int atmel_trng_suspend(struct device *dev)
+static int __maybe_unused atmel_trng_runtime_suspend(struct device *dev)
 {
 	struct atmel_trng *trng = dev_get_drvdata(dev);
 
-	atmel_trng_disable(trng);
-	clk_disable_unprepare(trng->clk);
+	atmel_trng_cleanup(trng);
 
 	return 0;
 }
 
-static int atmel_trng_resume(struct device *dev)
+static int __maybe_unused atmel_trng_runtime_resume(struct device *dev)
 {
 	struct atmel_trng *trng = dev_get_drvdata(dev);
-	int ret;
 
-	ret = clk_prepare_enable(trng->clk);
-	if (ret)
-		return ret;
-
-	atmel_trng_enable(trng);
-
-	return 0;
+	return atmel_trng_init(trng);
 }
-#endif /* CONFIG_PM */
 
-static SIMPLE_DEV_PM_OPS(atmel_trng_pm_ops, atmel_trng_suspend,
-	atmel_trng_resume);
+static const struct dev_pm_ops __maybe_unused atmel_trng_pm_ops = {
+	SET_RUNTIME_PM_OPS(atmel_trng_runtime_suspend,
+			   atmel_trng_runtime_resume, NULL)
+	SET_SYSTEM_SLEEP_PM_OPS(pm_runtime_force_suspend,
+				pm_runtime_force_resume)
+};
 
 static const struct atmel_trng_data at91sam9g45_config = {
 	.has_half_rate = false,
@@ -265,24 +225,12 @@ static struct platform_driver atmel_trng_driver = {
 	.remove		= atmel_trng_remove,
 	.driver		= {
 		.name	= "atmel-trng",
-		.pm	= &atmel_trng_pm_ops,
+		.pm	= pm_ptr(&atmel_trng_pm_ops),
 		.of_match_table = atmel_trng_dt_ids,
 	},
 };
 
-static int __init atmel_trng_init(void)
-{
-	return platform_driver_register(&atmel_trng_driver);
-}
-
-static void __exit atmel_trng_exit(void)
-{
-	platform_driver_unregister(&atmel_trng_driver);
-}
-
-subsys_initcall(atmel_trng_init);
-module_exit(atmel_trng_exit);
-
+module_platform_driver(atmel_trng_driver);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Peter Korsgaard <jacmet@sunsite.dk>");

@@ -1790,7 +1790,6 @@ static int ath6kl_wmi_snr_threshold_event_rx(struct wmi *wmi, u8 *datap,
 
 static int ath6kl_wmi_aplist_event_rx(struct wmi *wmi, u8 *datap, int len)
 {
-	u16 ap_info_entry_size;
 	struct wmi_aplist_event *ev = (struct wmi_aplist_event *) datap;
 	struct wmi_ap_info_v1 *ap_info_v1;
 	u8 index;
@@ -1799,14 +1798,12 @@ static int ath6kl_wmi_aplist_event_rx(struct wmi *wmi, u8 *datap, int len)
 	    ev->ap_list_ver != APLIST_VER1)
 		return -EINVAL;
 
-	ap_info_entry_size = sizeof(struct wmi_ap_info_v1);
 	ap_info_v1 = (struct wmi_ap_info_v1 *) ev->ap_list;
 
 	ath6kl_dbg(ATH6KL_DBG_WMI,
 		   "number of APs in aplist event: %d\n", ev->num_ap);
 
-	if (len < (int) (sizeof(struct wmi_aplist_event) +
-			 (ev->num_ap - 1) * ap_info_entry_size))
+	if (len < struct_size(ev, ap_list, ev->num_ap))
 		return -EINVAL;
 
 	/* AP list version 1 contents */
@@ -2005,20 +2002,14 @@ static int ath6kl_wmi_startscan_cmd(struct wmi *wmi, u8 if_idx,
 {
 	struct sk_buff *skb;
 	struct wmi_start_scan_cmd *sc;
-	s8 size;
 	int ret;
 
 	if (num_chan > WMI_MAX_CHANNELS)
 		num_chan = 0;
 
-	size = sizeof(struct wmi_start_scan_cmd);
-	if (num_chan)
-		size += num_chan * sizeof(sc->ch_list[0]) - sizeof(sc->ch_list);
-
 	if ((scan_type != WMI_LONG_SCAN) && (scan_type != WMI_SHORT_SCAN))
 		return -EINVAL;
-
-	skb = ath6kl_wmi_get_new_buf(size);
+	skb = ath6kl_wmi_get_new_buf(struct_size(sc, ch_list, num_chan));
 	if (!skb)
 		return -ENOMEM;
 

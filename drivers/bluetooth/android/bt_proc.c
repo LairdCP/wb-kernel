@@ -385,7 +385,7 @@ proc_write(struct file *file,
 static void
 proc_on_close(struct inode *inode, struct file *file)
 {
-	struct proc_private_data *priv = PDE_DATA(inode);
+	struct proc_private_data *priv = pde_data(inode);
 	struct proc_data *pdata = file->private_data;
 	char *line;
 	int i;
@@ -437,7 +437,7 @@ proc_on_close(struct inode *inode, struct file *file)
 static int
 proc_open(struct inode *inode, struct file *file)
 {
-	struct proc_private_data *priv = PDE_DATA(inode);
+	struct proc_private_data *priv = pde_data(inode);
 	struct proc_data *pdata;
 	int i;
 	char *p;
@@ -646,7 +646,7 @@ bt_histogram_read(struct seq_file *sfp, void *data)
 static int
 bt_histogram_proc_open(struct inode *inode, struct file *file)
 {
-	return single_open(file, bt_histogram_read, PDE_DATA(inode));
+	return single_open(file, bt_histogram_read, pde_data(inode));
 }
 
 /** Histogram proc fops */

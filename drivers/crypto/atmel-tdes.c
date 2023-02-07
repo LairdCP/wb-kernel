@@ -1144,6 +1144,7 @@ static void atmel_tdes_get_cap(struct atmel_tdes_dev *dd)
 
 	/* keep only major version number */
 	switch (dd->hw_version & 0xf00) {
+	case 0x800:
 	case 0x700:
 		dd->caps.has_dma = 1;
 		dd->caps.has_cfb_3keys = 1;
@@ -1274,11 +1275,10 @@ err_tasklet_kill:
 
 static int atmel_tdes_remove(struct platform_device *pdev)
 {
-	struct atmel_tdes_dev *tdes_dd;
-
-	tdes_dd = platform_get_drvdata(pdev);
+	struct atmel_tdes_dev *tdes_dd = platform_get_drvdata(pdev);
 	if (!tdes_dd)
 		return -ENODEV;
+
 	spin_lock_bh(&atmel_tdes.lock);
 	atmel_tdes.dd = NULL;
 	spin_unlock_bh(&atmel_tdes.lock);
