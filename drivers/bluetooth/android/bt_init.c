@@ -21,6 +21,7 @@
  *
  */
 
+#include <linux/ctype.h>
 #include <linux/string.h>
 #include <linux/firmware.h>
 
@@ -28,12 +29,6 @@
 
 extern int bt_req_fw_nowait;
 
-#define isxdigit(c)	(('0' <= (c) && (c) <= '9') \
-			 || ('a' <= (c) && (c) <= 'f') \
-			 || ('A' <= (c) && (c) <= 'F'))
-
-#define isdigit(c)	(('0' <= (c) && (c) <= '9'))
-#define isspace(c)  (c <= ' ' && (c == ' ' || (c <= 13 && c >= 9)))
 /**
  *  @brief Returns hex value of a give character
  *

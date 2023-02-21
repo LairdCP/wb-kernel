@@ -63,8 +63,8 @@ int btbcm_setup_patchram(struct hci_dev *hdev);
 int btbcm_setup_apple(struct hci_dev *hdev);
 int btbcm_setup_cypress_patchram(struct hci_dev *hdev);
 
-int btbcm_initialize(struct hci_dev *hdev, bool *fw_load_done);
-int btbcm_finalize(struct hci_dev *hdev, bool *fw_load_done);
+int btbcm_initialize(struct hci_dev *hdev, bool *fw_load_done, bool use_autobaud_mode);
+int btbcm_finalize(struct hci_dev *hdev, bool *fw_load_done, bool use_autobaud_mode);
 
 #else
 
@@ -110,12 +110,12 @@ static inline int btbcm_setup_apple(struct hci_dev *hdev)
 	return 0;
 }
 
-static inline int btbcm_initialize(struct hci_dev *hdev, bool *fw_load_done)
+static inline int btbcm_initialize(struct hci_dev *hdev, bool *fw_load_done, bool use_autobaud_mode)
 {
 	return 0;
 }
 
-static inline int btbcm_finalize(struct hci_dev *hdev, bool *fw_load_done)
+static inline int btbcm_finalize(struct hci_dev *hdev, bool *fw_load_done, bool use_autobaud_mode)
 {
 	return 0;
 }
