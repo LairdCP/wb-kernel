@@ -393,3 +393,34 @@
 		};
 	};
 };
+
+&pinctrl_i2c0 {
+	atmel,pins =
+		<AT91_PIOA 30 AT91_PERIPH_A AT91_PINCTRL_PULL_UP	/* PA30 periph A TWD0 pin, conflicts with URXD1, ISI_VSYNC */
+		 AT91_PIOA 31 AT91_PERIPH_A AT91_PINCTRL_PULL_UP>;	/* PA31 periph A TWCK0 pin, conflicts with UTXD1, ISI_HSYNC */
+};
+
+&i2c0 {
+	status = "okay";
+	clock-frequency = <400000>;
+
+	som60_eeprom: eeprom@50 {
+		compatible = "atmel,24c02";
+		reg = <0x50>;
+		pagesize = <1>;
+
+		/* For nvmem subnodes */
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		board_hw_id: hw-id@0 {
+			reg = <0x00 0x02>;
+		};
+		eth_mac0: mac-address@2 {
+			reg = <0x02 0x06>;
+		};
+		eth_mac1: mac-address@8 {
+			reg = <0x08 0x06>;
+		};
+	};
+};
