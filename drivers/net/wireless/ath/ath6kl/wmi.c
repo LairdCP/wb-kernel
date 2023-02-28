@@ -4275,23 +4275,47 @@ enum {
 	ATHEROS_ATTR_DATA,
     __ATHEROS_ATTR_MAX,
 };
+
 #define ATHEROS_ATTR_MAX (__ATHEROS_ATTR_MAX - 1)
 
-static struct nla_policy atheros_policy[ATHEROS_ATTR_MAX + 1] = {
+static const struct nla_policy atheros_policy[ATHEROS_ATTR_MAX + 1] = {
 	[ATHEROS_ATTR_MSG] = { .type = NLA_UNSPEC },
 	[ATHEROS_ATTR_EVENT] = { .type = NLA_NESTED },
 	[ATHEROS_ATTR_CMDID] = { .type = NLA_U32 },
 	[ATHEROS_ATTR_DATA] = { .type = NLA_BINARY },
 };
 
-#define ATHEROS_EVENT_VERSION 1
-#define ATHEROS_GENL_HDR_SZ 0
-static struct genl_family atheros_fam = {
-	.hdrsize = ATHEROS_GENL_HDR_SZ,
-	.name = "atheros",
-	.version = ATHEROS_EVENT_VERSION,
-	.maxattr = ATHEROS_ATTR_MAX,
-	.policy = atheros_policy,
+static int ath6kl_genl_get_value (struct sk_buff *skb_2, struct genl_info *info);
+static int ath6kl_genl_set_phy_mode(struct sk_buff *skb_2, struct genl_info *info);
+static int ath6kl_genl_wmi_passthru (struct sk_buff *skb_2, struct genl_info *info);
+static int ath6kl_genl_qos (struct sk_buff *skb_2, struct genl_info *info);
+
+static const struct genl_ops atheros_ops[] = {
+	{
+		.cmd = ATHEROS_CMD_GET_VALUE,
+		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
+		.flags = 0,
+		.doit = ath6kl_genl_get_value,
+		.dumpit = NULL,
+	}, {
+		.cmd = ATHEROS_CMD_SET_PHY_MODE,
+		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
+		.flags = 0,
+		.doit = ath6kl_genl_set_phy_mode,
+		.dumpit = NULL,
+	}, {
+		.cmd = ATHEROS_CMD_SEND_WMI,
+		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
+		.flags = 0,
+		.doit = ath6kl_genl_wmi_passthru,
+		.dumpit = NULL,
+	}, {
+		.cmd = ATHEROS_CMD_QOS,
+		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
+		.flags = 0,
+		.doit = ath6kl_genl_qos,
+		.dumpit = NULL,
+	},
 };
 
 enum ath_multicast_groups {
@@ -4300,6 +4324,21 @@ enum ath_multicast_groups {
 
 static const struct genl_multicast_group atheros_events_mcgrp[] = {
 	[ATH_MCGRP_EVENTS] = { .name = "events", },
+};
+
+#define ATHEROS_EVENT_VERSION 1
+
+static struct genl_family atheros_fam __ro_after_init = {
+	.name		= "atheros",
+	.version	= ATHEROS_EVENT_VERSION,
+	.maxattr	= ATHEROS_ATTR_MAX,
+	.policy		= atheros_policy,
+	.module		= THIS_MODULE,
+	.ops		= atheros_ops,
+	.n_ops		= ARRAY_SIZE(atheros_ops),
+	.resv_start_op	= ATHEROS_CMD_QOS + 1,
+	.mcgrps		= atheros_events_mcgrp,
+	.n_mcgrps	= ARRAY_SIZE(atheros_events_mcgrp),
 };
 
 static struct wmi *gwmi = NULL;  // get access to wmi pointer for netlink entry point functions  FIXME: find alternative to this global!
@@ -4657,44 +4696,11 @@ static int ath6kl_genl_qos(struct sk_buff *skb_2, struct genl_info *info)
 	return 0;
 }
 
-const struct genl_ops atheros_ops[] = {
-	{
-		.cmd = ATHEROS_CMD_GET_VALUE,
-		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
-		.flags = 0,
-		.doit = ath6kl_genl_get_value,
-		.dumpit = NULL,
-	}, {
-		.cmd = ATHEROS_CMD_SET_PHY_MODE,
-		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
-		.flags = 0,
-		.doit = ath6kl_genl_set_phy_mode,
-		.dumpit = NULL,
-	}, {
-		.cmd = ATHEROS_CMD_SEND_WMI,
-		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
-		.flags = 0,
-		.doit = ath6kl_genl_wmi_passthru,
-		.dumpit = NULL,
-	}, {
-		.cmd = ATHEROS_CMD_QOS,
-		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
-		.flags = 0,
-		.doit = ath6kl_genl_qos,
-		.dumpit = NULL,
-	},
-};
-
 static int ath6kl_genl_init(void)
 {
 	int rc;
 
 	ath6kl_warn("initializing atheros generic netlink family\n");
-
-	atheros_fam.ops = atheros_ops;
-	atheros_fam.n_ops = ARRAY_SIZE(atheros_ops);
-	atheros_fam.mcgrps = atheros_events_mcgrp;
-	atheros_fam.n_mcgrps = ARRAY_SIZE(atheros_events_mcgrp);
 
 	if ((rc = genl_register_family(&atheros_fam)) != 0) {
 		ath6kl_err("cannot register atheros netlink family\n");
