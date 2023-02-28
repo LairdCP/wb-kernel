@@ -4323,7 +4323,7 @@ static const struct genl_multicast_group atheros_events_mcgrp[] = {
 
 #define ATHEROS_EVENT_VERSION 1
 
-static struct genl_family atheros_fam __ro_after_init = {
+static struct genl_family atheros_fam = {
 	.name		= "atheros",
 	.version	= ATHEROS_EVENT_VERSION,
 	.maxattr	= ATHEROS_ATTR_MAX,
