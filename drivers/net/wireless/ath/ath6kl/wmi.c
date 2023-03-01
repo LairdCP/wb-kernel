@@ -2002,14 +2002,15 @@ static int ath6kl_wmi_startscan_cmd(struct wmi *wmi, u8 if_idx,
 {
 	struct sk_buff *skb;
 	struct wmi_start_scan_cmd *sc;
-	int ret;
+	int i, ret;
+
+	if ((scan_type != WMI_LONG_SCAN) && (scan_type != WMI_SHORT_SCAN))
+		return -EINVAL;
 
 	if (num_chan > WMI_MAX_CHANNELS)
 		num_chan = 0;
 
-	if ((scan_type != WMI_LONG_SCAN) && (scan_type != WMI_SHORT_SCAN))
-		return -EINVAL;
-	skb = ath6kl_wmi_get_new_buf(struct_size(sc, ch_list, num_chan));
+	skb = ath6kl_wmi_get_new_buf(struct_size(sc, ch_list, max(num_chan,1)));
 	if (!skb)
 		return -ENOMEM;
 
@@ -2020,12 +2021,9 @@ static int ath6kl_wmi_startscan_cmd(struct wmi *wmi, u8 if_idx,
 	sc->home_dwell_time = cpu_to_le32(home_dwell_time);
 	sc->force_scan_intvl = cpu_to_le32(force_scan_interval);
 	sc->num_ch = num_chan;
-	{
-		int i;
-		for (i=0; i<num_chan; i++) {
-			sc->ch_list[i] = cpu_to_le16(ch_list[i]);
-		}
-	}
+
+	for (i = 0; i < num_chan; i++)
+		sc->ch_list[i] = cpu_to_le16(ch_list[i]);
 
 	ret = ath6kl_wmi_cmd_send(wmi, if_idx, skb, WMI_START_SCAN_CMDID,
 				  NO_SYNC_WMIFLAG);
@@ -2046,7 +2044,6 @@ int ath6kl_wmi_beginscan_cmd(struct wmi *wmi, u8 if_idx,
 {
 	struct sk_buff *skb;
 	struct wmi_begin_scan_cmd *sc;
-	s8 size;
 	int ret;
 	struct ath6kl *ar = wmi->parent_dev;
 	struct ath6kl_vif *vif = ath6kl_get_vif_by_index(ar, if_idx);
@@ -2063,12 +2060,10 @@ int ath6kl_wmi_beginscan_cmd(struct wmi *wmi, u8 if_idx,
 						num_chan, ch_list);
 	}
 
-	size = sizeof(struct wmi_begin_scan_cmd);
-
 	if ((scan_type != WMI_LONG_SCAN) && (scan_type != WMI_SHORT_SCAN))
 		return -EINVAL;
 
-	skb = ath6kl_wmi_get_new_buf(size);
+	skb = ath6kl_wmi_get_new_buf(struct_size(sc, ch_list, 1));
 	if (!skb)
 		return -ENOMEM;
 
@@ -3322,7 +3317,7 @@ int ath6kl_wmi_set_regdomain_cmd(struct wmi *wmi, const char *alpha2)
 
 	cmdId = WMI_SET_REGDOMAIN_CMDID;
 
-	return ath6kl_wmi_cmd_send(wmi, 0, skb, 
+	return ath6kl_wmi_cmd_send(wmi, 0, skb,
 				   cmdId,
 				   NO_SYNC_WMIFLAG);
 }
