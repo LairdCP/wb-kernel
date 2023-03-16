@@ -2010,7 +2010,7 @@ static int ath6kl_wmi_startscan_cmd(struct wmi *wmi, u8 if_idx,
 	if (num_chan > WMI_MAX_CHANNELS)
 		num_chan = 0;
 
-	skb = ath6kl_wmi_get_new_buf(struct_size(sc, ch_list, max(num_chan,1)));
+	skb = ath6kl_wmi_get_new_buf(struct_size(sc, ch_list, max(num_chan,(s8)1)));
 	if (!skb)
 		return -ENOMEM;
 
