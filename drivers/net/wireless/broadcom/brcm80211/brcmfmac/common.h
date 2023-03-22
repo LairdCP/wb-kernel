@@ -48,6 +48,7 @@ extern struct brcmf_mp_global_t brcmf_mp_global;
  * @trivial_ccode_map: Assume firmware uses ISO3166 country codes with rev 0
  * @country_codes: If available, pointer to struct for translating country codes
  * @bus: Bus specific platform data. Only SDIO at the mmoment.
+ * @pkt_prio: Support customer dscp to WMM up mapping.
  */
 struct brcmf_mp_device {
 	bool		p2p_enable;
@@ -71,6 +72,7 @@ struct brcmf_mp_device {
 	union {
 		struct brcmfmac_sdio_pd sdio;
 	} bus;
+	bool		pkt_prio;
 };
 
 void brcmf_c_set_joinpref_default(struct brcmf_if *ifp);
