@@ -398,6 +398,7 @@ struct mtd_info {
 
 	struct mtd_part part;
 	struct mtd_master master;
+	uint32_t reserved_size;
 };
 
 static inline struct mtd_info *mtd_get_master(struct mtd_info *mtd)

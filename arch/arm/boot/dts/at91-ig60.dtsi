@@ -9,6 +9,10 @@
  */
 
 / {
+	memory@20000000 {
+		reg = <0x20000000 0x10000000>;
+	};
+
 	reg_mmc0_en: reg_mmc0_en_grp {
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_mmc0_en>;

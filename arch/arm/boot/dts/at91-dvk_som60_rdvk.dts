@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * at91-dvk_som60.dts - Device Tree file for the DVK SOM60 board
+ * at91-dvk_som60_rdvk.dts - Device Tree file for the DVK SOM60 board
  *
  *  Copyright (C) 2018 Laird Connectivity,
  *		  2018 Ben Whitten <ben.whitten@lairdconnect.com>
@@ -42,6 +42,6 @@
 };
 
 / {
-    model = "Laird SOM60 x2 RDVK";
-    compatible = "laird,dvk-som60x2", "laird,lwb-som60x2", "laird,som60x2", "atmel,sama5d36", "atmel,sama5d3", "atmel,sama5";
+    model = "Laird SOM60 RDVK";
+    compatible = "laird,dvk-som60", "laird,lwb-som60", "laird,som60", "atmel,sama5d36", "atmel,sama5d3", "atmel,sama5";
 };

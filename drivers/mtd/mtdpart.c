@@ -115,7 +115,7 @@ static struct mtd_info *allocate_partition(struct mtd_info *parent,
 		}
 	}
 	if (child->part.size == MTDPART_SIZ_FULL)
-		child->part.size = parent_size - child->part.offset;
+		child->part.size = parent_size - child->part.offset - parent->reserved_size;
 
 	printk(KERN_NOTICE "0x%012llx-0x%012llx : \"%s\"\n",
 	       child->part.offset, child->part.offset + child->part.size,
@@ -252,7 +252,7 @@ int mtd_add_partition(struct mtd_info *parent, const char *name,
 		return -EINVAL;
 
 	if (length == MTDPART_SIZ_FULL)
-		length = parent_size - offset;
+		length = parent_size - offset - parent->reserved_size;
 
 	if (length <= 0)
 		return -EINVAL;
