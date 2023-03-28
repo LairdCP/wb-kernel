@@ -42,6 +42,6 @@
 	/* Leave last 4 blocks for bbt if nand-on-flash-bbt is defined */
 	ubi@160000 {
 		label = "ubi";
-		reg = <0x160000 0xfe20000>;
+		reg = <0x160000 0>;
 	};
 };

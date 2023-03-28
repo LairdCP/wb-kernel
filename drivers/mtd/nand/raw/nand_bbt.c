@@ -1411,6 +1411,7 @@ int nand_create_bbt(struct nand_chip *this)
 				this->bbt_md = &bbt_mirror_descr;
 			}
 		}
+		this->base.mtd.reserved_size = NAND_BBT_SCAN_MAXBLOCKS << this->bbt_erase_shift;
 	} else {
 		this->bbt_td = NULL;
 		this->bbt_md = NULL;
