@@ -48,6 +48,8 @@ static const struct brcmf_feat_fwcap brcmf_fwcap_map[] = {
 	{ BRCMF_FEAT_FBT, "fbt " },
 	{ BRCMF_FEAT_OKC, "okc" },
 	{ BRCMF_FEAT_GCMP, "gcmp" },
+	{ BRCMF_FEAT_OFFLOADS, "offloads" },
+	{ BRCMF_FEAT_ULP, "ulp" },
 };
 
 #ifdef DEBUG
@@ -364,4 +366,12 @@ bool brcmf_feat_is_quirk_enabled(struct brcmf_if *ifp,
 bool brcmf_feat_is_6ghz_enabled(struct brcmf_if *ifp)
 {
 	return (!ifp->drvr->settings->disable_6ghz);
+}
+
+bool brcmf_feat_is_offloads_enabled(struct brcmf_if *ifp)
+{
+	if (ifp && ifp->drvr)
+		return ifp->drvr->settings->offload_prof;
+
+	return false;
 }
