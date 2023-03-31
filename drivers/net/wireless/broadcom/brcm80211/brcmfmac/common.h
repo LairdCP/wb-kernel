@@ -44,6 +44,8 @@ extern struct brcmf_mp_global_t brcmf_mp_global;
  * @trivial_ccode_map: Assume firmware uses ISO3166 country codes with rev 0
  * @fw_ap_select: Allow FW to select AP.
  * @disable_6ghz: Disable 6GHz operation
+ * @offload_prof: Enable offloads configuration power profile (Low,Mid,High)
+ * @offload_feat: offloads feature flags to be enabled for selected pwr profile
  * @country_codes: If available, pointer to struct for translating country codes
  * @bus: Bus specific platform data. Only SDIO at the mmoment.
  * @pkt_prio: Support customer dscp to WMM up mapping.
@@ -60,6 +62,8 @@ struct brcmf_mp_device {
 	bool		trivial_ccode_map;
 	bool		fw_ap_select;
 	bool		disable_6ghz;
+	unsigned int	offload_prof;
+	unsigned int	offload_feat;
 	struct brcmfmac_pd_cc *country_codes;
 	const char	*board_type;
 	unsigned char	mac[ETH_ALEN];
@@ -103,5 +107,14 @@ static inline void brcmf_acpi_probe(struct device *dev,
 u8 brcmf_map_prio_to_prec(void *cfg, u8 prio);
 
 u8 brcmf_map_prio_to_aci(void *cfg, u8 prio);
+
+void brcmf_generic_offload_config(struct brcmf_if *ifp, unsigned int ol_feat,
+				  unsigned int ol_profile, bool reset);
+void brcmf_generic_offload_enable(struct brcmf_if *ifp, unsigned int ol_feat,
+				  bool enable);
+void brcmf_generic_offload_host_ipv4_update(struct brcmf_if *ifp, unsigned int ol_feat,
+					    u32 ipaddr, bool is_add);
+void brcmf_generic_offload_host_ipv6_update(struct brcmf_if *ifp, unsigned int ol_feat,
+					    void *ptr, u8 type, bool is_add);
 
 #endif /* BRCMFMAC_COMMON_H */
