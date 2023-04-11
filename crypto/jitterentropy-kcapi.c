@@ -238,10 +238,6 @@ static int __init jent_mod_init(void)
 
 static void __exit jent_mod_exit(void)
 {
-#ifdef CONFIG_HW_RANDOM_JITTER
-	hwrng_unregister(&jent_hwrng);
-#endif
-
 	crypto_unregister_rng(&jent_alg);
 }
 
