@@ -549,20 +549,6 @@ config HW_RANDOM_CN10K
 	 To compile this driver as a module, choose M here.
 	 The module will be called cn10k_rng. If unsure, say Y.
 
-config HW_RANDOM_JITTER
-	bool "Jitter based Random Number Generator support"
-	depends on CRYPTO_JITTERENTROPY
-	help
-		This driver provides Hardware Random Number Generator based on
-		kernel Jitter Generator
-
-config HW_RANDOM_JITTER_QUALITY
-	int "Jitter based Random Number Generator quality"
-	depends on HW_RANDOM_JITTER
-	default 0
-	help
-		Jitter Generator quality
-
 endif # HW_RANDOM
 
 config UML_RANDOM

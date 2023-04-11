@@ -42,7 +42,6 @@
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/time.h>
-#include <linux/hw_random.h>
 #include <crypto/internal/rng.h>
 
 #include "jitterentropy.h"
@@ -185,33 +184,6 @@ static struct rng_alg jent_alg = {
 	}
 };
 
-#ifdef CONFIG_HW_RANDOM_JITTER
-static int jent_hwrng_kcapi_init(struct hwrng *hrng)
-{
-	hrng->priv = (unsigned long)crypto_alloc_rng("jitterentropy_rng", 0, 0);
-	return 0;
-}
-
-static void jent_hwrng_kcapi_cleanup(struct hwrng *hrng)
-{
-	crypto_free_rng((void*)hrng->priv);
-}
-
-static int jent_hwrng_kcapi_read(struct hwrng *hrng, void *buf, size_t max,
-	bool wait)
-{
-	return crypto_rng_get_bytes((void*)hrng->priv, buf, max) ? 0 : max;
-}
-
-static struct hwrng jent_hwrng = {
-	.name = "jitterentropy_rng",
-	.init = jent_hwrng_kcapi_init,
-	.cleanup = jent_hwrng_kcapi_cleanup,
-	.read = jent_hwrng_kcapi_read,
-	.quality = CONFIG_HW_RANDOM_JITTER_QUALITY,
-};
-#endif
-
 static int __init jent_mod_init(void)
 {
 	int ret = 0;
@@ -225,15 +197,7 @@ static int __init jent_mod_init(void)
 		pr_info("jitterentropy: Initialization failed with host not compliant with requirements: %d\n", ret);
 		return -EFAULT;
 	}
-	ret = crypto_register_rng(&jent_alg);
-	if (ret)
-		return ret;
-
-#ifdef CONFIG_HW_RANDOM_JITTER
-	ret = hwrng_register(&jent_hwrng);
-#endif
-
-	return ret;
+	return crypto_register_rng(&jent_alg);
 }
 
 static void __exit jent_mod_exit(void)
