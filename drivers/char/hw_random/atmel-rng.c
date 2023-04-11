@@ -17,7 +17,6 @@
 #include <linux/hw_random.h>
 #include <linux/of_device.h>
 #include <linux/platform_device.h>
-#include <linux/pm_runtime.h>
 
 #define TRNG_CR		0x00
 #define TRNG_MR		0x04
@@ -38,21 +37,14 @@ struct atmel_trng {
 	void __iomem *base;
 	struct hwrng rng;
 	bool has_half_rate;
-	u32 last;
 };
 
-static DEFINE_MUTEX(trng_mutex);
-
-static bool atmel_trng_wait_ready(struct atmel_trng *trng, bool wait)
+static int atmel_trng_wait_ready(struct atmel_trng *trng, bool wait)
 {
 	int ready;
 
-	ready = readl(trng->base + TRNG_ISR) & TRNG_ISR_DATRDY;
-	if (!ready && wait)
-		readl_poll_timeout(trng->base + TRNG_ISR, ready,
-				   ready & TRNG_ISR_DATRDY, 1000, 20000);
-
-	return !!ready;
+	return readl_poll_timeout(trng->base + TRNG_ISR, ready,
+		ready & TRNG_ISR_DATRDY, 0, (wait ? 10000 : 0));
 }
 
 static int atmel_trng_read(struct hwrng *rng, void *buf, size_t max,
@@ -60,31 +52,22 @@ static int atmel_trng_read(struct hwrng *rng, void *buf, size_t max,
 {
 	struct atmel_trng *trng = container_of(rng, struct atmel_trng, rng);
 	u32 *data = buf;
-	int ret;
+	size_t len;
 
-	ret = pm_runtime_get_sync((struct device *)trng->rng.priv);
-	if (ret < 0) {
-		pm_runtime_put_sync((struct device *)trng->rng.priv);
-		return ret;
+	for (len = 0; len < max; len += sizeof(u32)) {
+		if (atmel_trng_wait_ready(trng, wait))
+			break;
+
+		*(data++) = readl(trng->base + TRNG_ODATA);
+		/*
+		 * ensure data ready is only set again AFTER the next data word is ready
+		 * in case it got set between checking ISR and reading ODATA, so we
+		 * don't risk re-reading the same word
+		 */
+		readl(trng->base + TRNG_ISR);
 	}
 
-	ret = atmel_trng_wait_ready(trng, wait);
-	if (!ret)
-		goto out;
-
-	*data = readl(trng->base + TRNG_ODATA);
-	/*
-	 * ensure data ready is only set again AFTER the next data word is ready
-	 * in case it got set between checking ISR and reading ODATA, so we
-	 * don't risk re-reading the same word
-	 */
-	readl(trng->base + TRNG_ISR);
-	ret = 4;
-
-out:
-	pm_runtime_mark_last_busy((struct device *)trng->rng.priv);
-	pm_runtime_put_sync_autosuspend((struct device *)trng->rng.priv);
-	return ret;
+	return len;
 }
 
 static int atmel_trng_init(struct atmel_trng *trng)
@@ -139,27 +122,17 @@ static int atmel_trng_probe(struct platform_device *pdev)
 	trng->has_half_rate = data->has_half_rate;
 	trng->rng.name = pdev->name;
 	trng->rng.read = atmel_trng_read;
-	trng->rng.priv = (unsigned long)&pdev->dev;
 	trng->rng.quality = 921;
+	trng->rng.priv = (unsigned long)&pdev->dev;
 	platform_set_drvdata(pdev, trng);
 
-#ifndef CONFIG_PM
 	ret = atmel_trng_init(trng);
 	if (ret)
 		return ret;
-#endif
-
-	pm_runtime_set_autosuspend_delay(&pdev->dev, 100);
-	pm_runtime_use_autosuspend(&pdev->dev);
-	pm_runtime_enable(&pdev->dev);
 
 	ret = devm_hwrng_register(&pdev->dev, &trng->rng);
 	if (ret) {
-		pm_runtime_disable(&pdev->dev);
-		pm_runtime_set_suspended(&pdev->dev);
-#ifndef CONFIG_PM
 		atmel_trng_cleanup(trng);
-#endif
 	}
 
 	return ret;
@@ -170,13 +143,11 @@ static int atmel_trng_remove(struct platform_device *pdev)
 	struct atmel_trng *trng = platform_get_drvdata(pdev);
 
 	atmel_trng_cleanup(trng);
-	pm_runtime_disable(&pdev->dev);
-	pm_runtime_set_suspended(&pdev->dev);
 
 	return 0;
 }
 
-static int __maybe_unused atmel_trng_runtime_suspend(struct device *dev)
+static int __maybe_unused atmel_trng_suspend(struct device *dev)
 {
 	struct atmel_trng *trng = dev_get_drvdata(dev);
 
@@ -185,7 +156,7 @@ static int __maybe_unused atmel_trng_runtime_suspend(struct device *dev)
 	return 0;
 }
 
-static int __maybe_unused atmel_trng_runtime_resume(struct device *dev)
+static int __maybe_unused atmel_trng_resume(struct device *dev)
 {
 	struct atmel_trng *trng = dev_get_drvdata(dev);
 
@@ -193,10 +164,8 @@ static int __maybe_unused atmel_trng_runtime_resume(struct device *dev)
 }
 
 static const struct dev_pm_ops __maybe_unused atmel_trng_pm_ops = {
-	SET_RUNTIME_PM_OPS(atmel_trng_runtime_suspend,
-			   atmel_trng_runtime_resume, NULL)
-	SET_SYSTEM_SLEEP_PM_OPS(pm_runtime_force_suspend,
-				pm_runtime_force_resume)
+	SET_SYSTEM_SLEEP_PM_OPS(atmel_trng_suspend,
+				atmel_trng_resume)
 };
 
 static const struct atmel_trng_data at91sam9g45_config = {
@@ -230,7 +199,18 @@ static struct platform_driver atmel_trng_driver = {
 	},
 };
 
-module_platform_driver(atmel_trng_driver);
+static int __init atmel_trng_module_init(void)
+{
+	return platform_driver_register(&atmel_trng_driver);
+}
+
+static void __exit atmel_trng_module_exit(void)
+{
+	platform_driver_unregister(&atmel_trng_driver);
+}
+
+fs_initcall(atmel_trng_module_init);
+module_exit(atmel_trng_module_exit);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Peter Korsgaard <jacmet@sunsite.dk>");
