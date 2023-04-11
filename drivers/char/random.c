@@ -55,6 +55,8 @@
 #include <linux/siphash.h>
 #include <crypto/chacha.h>
 #include <crypto/blake2s.h>
+#include <crypto/rng.h>
+#include <linux/fips.h>
 #include <asm/processor.h>
 #include <asm/irq.h>
 #include <asm/irq_regs.h>
@@ -396,6 +398,40 @@ void get_random_bytes(void *buf, size_t len)
 }
 EXPORT_SYMBOL(get_random_bytes);
 
+static ssize_t get_random_bytes_fips(struct iov_iter *iter)
+{
+	u8 block[CHACHA_BLOCK_SIZE];
+	size_t bytes, copied, total = 0;
+	int ret;
+
+	if (crypto_get_default_rng())
+		return -EFAULT;
+
+	for (;;) {
+		bytes = min(iov_iter_count(iter), sizeof(block));
+		ret = crypto_rng_get_bytes(crypto_default_rng, block, bytes);
+		if (ret < 0)
+			break;
+
+		copied = copy_to_iter(block, bytes, iter);
+		total += copied;
+
+		if (!iov_iter_count(iter) || copied != bytes)
+			break;
+
+		if (total % PAGE_SIZE == 0) {
+			if (signal_pending(current))
+				break;
+			cond_resched();
+		}
+	}
+
+	crypto_put_default_rng();
+
+	memzero_explicit(block, sizeof(block));
+	return total ? total : -EFAULT;
+}
+
 static ssize_t get_random_bytes_user(struct iov_iter *iter)
 {
 	u32 chacha_state[CHACHA_STATE_WORDS];
@@ -404,6 +440,9 @@ static ssize_t get_random_bytes_user(struct iov_iter *iter)
 
 	if (unlikely(!iov_iter_count(iter)))
 		return 0;
+
+	if (fips_enabled)
+		return get_random_bytes_fips(iter);
 
 	/*
 	 * Immediately overwrite the ChaCha key at index 4 with random
