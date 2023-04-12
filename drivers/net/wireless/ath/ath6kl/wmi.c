@@ -94,6 +94,20 @@ enum { // keep this list in sync with the one from ath_access.c from the SDK
 #define AIRONET_CCX_IE   0x85
 #define AIRONET_AP_IP_IE 0x95
 
+static struct country_code_to_enum_rd LrdCountries[] = {
+	//6003
+	{0x800 + 368, NO_ENUMRD, "IQ"},
+	{0x800 + 566, NO_ENUMRD, "NG"},
+	{0x800 + 688, NO_ENUMRD, "RS"},
+	//6004
+	{0x800 + 288, NO_ENUMRD, "GH"},
+	{0x800 + 417, NO_ENUMRD, "KG"},
+	{0x800 + 600, NO_ENUMRD, "PY"},
+	//Both
+	{0x800 + 104, NO_ENUMRD, "MM"},
+};
+
+
 void ath6kl_wmi_set_control_ep(struct wmi *wmi, enum htc_endpoint_id ep_id)
 {
 	if (WARN_ON(ep_id == ENDPOINT_UNUSED || ep_id >= ENDPOINT_MAX))
@@ -960,6 +974,12 @@ ath6kl_regd_find_country(u16 countryCode)
 {
 	int i;
 
+	//Check Laird Extensions
+	for (i = 0; i < ARRAY_SIZE(LrdCountries); i++) {
+		if (LrdCountries[i].countryCode == countryCode)
+			return &LrdCountries[i];
+	}
+
 	for (i = 0; i < ARRAY_SIZE(allCountries); i++) {
 		if (allCountries[i].countryCode == countryCode)
 			return &allCountries[i];
@@ -988,6 +1008,12 @@ static struct country_code_to_enum_rd *
 ath6kl_regd_find_country_by_rd(u16 regdmn)
 {
 	int i;
+
+	//Check Laird Extensions
+	for (i = 0; i < ARRAY_SIZE(LrdCountries); i++) {
+		if (LrdCountries[i].regDmnEnum == regdmn)
+			return &LrdCountries[i];
+	}
 
 	for (i = 0; i < ARRAY_SIZE(allCountries); i++) {
 		if (allCountries[i].regDmnEnum == regdmn)
