@@ -553,18 +553,12 @@ atmel_tdes_set_iv_as_last_ciphertext_block(struct atmel_tdes_dev *dd)
 
 	switch (rctx->mode & TDES_FLAGS_OPMODE_MASK) {
 	case TDES_FLAGS_CBC:
-		if (rctx->mode & TDES_FLAGS_ENCRYPT) {
+		if (rctx->mode & TDES_FLAGS_ENCRYPT)
 			scatterwalk_map_and_copy(req->iv, req->dst,
 				req->cryptlen - DES_BLOCK_SIZE, 
 				DES_BLOCK_SIZE, 0);
-		} else {
-			if (req->src == req->dst)
+		else
 				memcpy(req->iv, rctx->lastc, DES_BLOCK_SIZE);
-			else
-				scatterwalk_map_and_copy(req->iv, req->src,
-					req->cryptlen - DES_BLOCK_SIZE,
-					DES_BLOCK_SIZE, 0);
-		}
 		break;
 
 	case TDES_FLAGS_CFB8:
@@ -587,11 +581,8 @@ atmel_tdes_set_iv_as_last_ciphertext_block(struct atmel_tdes_dev *dd)
 		if (rctx->mode & TDES_FLAGS_ENCRYPT)
 			scatterwalk_map_and_copy(req->iv + ivoff, req->dst,
 				alignedlen - lastlen, lastlen, 0);
-		else if (req->src == req->dst)
-			memcpy(req->iv + ivoff, rctx->lastc, lastlen);
 		else
-			scatterwalk_map_and_copy(req->iv + ivoff, req->src,
-				alignedlen - lastlen, lastlen, 0);
+			memcpy(req->iv + ivoff, rctx->lastc, lastlen);
 		break;
 
 	case TDES_FLAGS_OFB:
@@ -737,18 +728,17 @@ static int atmel_tdes_crypt(struct skcipher_request *req, unsigned long mode)
 
 	switch (mode & TDES_FLAGS_OPMODE_MASK) {
 	case TDES_FLAGS_CBC:
-		if (!(mode & TDES_FLAGS_ENCRYPT) && req->src == req->dst) {
+		if (!(mode & TDES_FLAGS_ENCRYPT))
 			scatterwalk_map_and_copy(rctx->lastc, req->src,
 						req->cryptlen - DES_BLOCK_SIZE,
 						DES_BLOCK_SIZE, 0);
-		}
 		break;
 
 	case TDES_FLAGS_CFB8:
 	case TDES_FLAGS_CFB16:
 	case TDES_FLAGS_CFB32:
 	case TDES_FLAGS_CFB64:
-		if (!(mode & TDES_FLAGS_ENCRYPT) && (req->src == req->dst)) {
+		if (!(mode & TDES_FLAGS_ENCRYPT)) {
 			alignedlen = ALIGN_DOWN(req->cryptlen, ctx->block_size);
 			if (!alignedlen)
 				break;
