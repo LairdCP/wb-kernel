@@ -1070,18 +1070,12 @@ static int atmel_aes_transfer_complete(struct atmel_aes_dev *dd)
 
 	switch (rctx->mode & AES_FLAGS_OPMODE_MASK) {
 	case AES_FLAGS_CBC:
-		if (rctx->mode & AES_FLAGS_ENCRYPT) {
+		if (rctx->mode & AES_FLAGS_ENCRYPT)
 			scatterwalk_map_and_copy(req->iv, req->dst,
-				req->cryptlen - AES_BLOCK_SIZE, 
+				req->cryptlen - AES_BLOCK_SIZE,
 				AES_BLOCK_SIZE, 0);
-		} else {
-			if (req->src == req->dst)
-				memcpy(req->iv, rctx->lastc, AES_BLOCK_SIZE);
-			else
-				scatterwalk_map_and_copy(req->iv, req->src,
-					req->cryptlen - AES_BLOCK_SIZE,
-					AES_BLOCK_SIZE, 0);
-		}
+		else
+			memcpy(req->iv, rctx->lastc, AES_BLOCK_SIZE);
 		break;
 
 	case AES_FLAGS_CFB8:
@@ -1105,11 +1099,8 @@ static int atmel_aes_transfer_complete(struct atmel_aes_dev *dd)
 		if (rctx->mode & AES_FLAGS_ENCRYPT)
 			scatterwalk_map_and_copy(req->iv + ivoff, req->dst,
 				alignedlen - lastlen, lastlen, 0);
-		else if (req->src == req->dst)
-			memcpy(req->iv + ivoff, rctx->lastc, lastlen);
 		else
-			scatterwalk_map_and_copy(req->iv + ivoff, req->src,
-				alignedlen - lastlen, lastlen, 0);
+			memcpy(req->iv + ivoff, rctx->lastc, lastlen);
 		break;
 
 	case AES_FLAGS_OFB:
@@ -1305,7 +1296,7 @@ static int atmel_aes_crypt(struct skcipher_request *req, unsigned long mode)
 
 	switch (opmode) {
 	case AES_FLAGS_CBC:
-		if (!(mode & AES_FLAGS_ENCRYPT) && req->src == req->dst)
+		if (!(mode & AES_FLAGS_ENCRYPT))
 			scatterwalk_map_and_copy(rctx->lastc, req->src,
 				req->cryptlen - AES_BLOCK_SIZE,
 				AES_BLOCK_SIZE, 0);
@@ -1316,7 +1307,7 @@ static int atmel_aes_crypt(struct skcipher_request *req, unsigned long mode)
 	case AES_FLAGS_CFB32:
 	case AES_FLAGS_CFB64:
 	case AES_FLAGS_CFB128:
-		if (!(mode & AES_FLAGS_ENCRYPT) && (req->src == req->dst)) {
+		if (!(mode & AES_FLAGS_ENCRYPT)) {
 			alignedlen = ALIGN_DOWN(req->cryptlen, ctx->block_size);
 			if (!alignedlen)
 				break;
@@ -2071,7 +2062,7 @@ static int atmel_aes_xts_init_tfm(struct crypto_skcipher *tfm)
 {
 	struct atmel_aes_xts_ctx *ctx = crypto_skcipher_ctx(tfm);
 	const char *tfm_name = crypto_tfm_alg_name(&tfm->base);
- 
+
 	ctx->fallback_tfm = crypto_alloc_skcipher(tfm_name, 0,
 						  CRYPTO_ALG_NEED_FALLBACK);
 	if (IS_ERR(ctx->fallback_tfm))
@@ -2853,7 +2844,7 @@ static void atmel_aes_cia_blk(struct atmel_aes_base_ctx *ctx, u8 *dst,
 static void atmel_aes_cia_encrypt(struct crypto_tfm *tfm, u8 *dst,
 	const u8 *src)
 {
-	atmel_aes_cia_blk(crypto_tfm_ctx(tfm), dst, src, 
+	atmel_aes_cia_blk(crypto_tfm_ctx(tfm), dst, src,
 		AES_FLAGS_ECB | AES_FLAGS_ENCRYPT);
 }
 
@@ -3355,7 +3346,7 @@ static void atmel_aes_unregister_algs(struct atmel_aes_dev *dd)
 static void atmel_aes_crypto_alg_init(struct crypto_alg *alg)
 {
 	alg->cra_flags |= atmel_aes.sync_mode ?
-		(CRYPTO_ALG_KERN_DRIVER_ONLY) : 
+		(CRYPTO_ALG_KERN_DRIVER_ONLY) :
 		(CRYPTO_ALG_ASYNC | CRYPTO_ALG_KERN_DRIVER_ONLY);
 	alg->cra_alignmask = 0;
 	alg->cra_priority = ATMEL_AES_PRIORITY;
@@ -3629,7 +3620,7 @@ static int atmel_aes_remove(struct platform_device *pdev)
 {
 	struct atmel_aes_dev *aes_dd;
 	struct crypto_async_request *areq;
-	
+
 	aes_dd = platform_get_drvdata(pdev);
 	if (!aes_dd)
 		return -ENODEV;
