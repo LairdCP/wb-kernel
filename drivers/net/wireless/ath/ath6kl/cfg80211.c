@@ -3933,6 +3933,7 @@ int ath6kl_cfg80211_init(struct ath6kl *ar)
 	struct wiphy *wiphy = ar->wiphy;
 	bool band_2gig = false, band_5gig = false, ht = false;
 	int ret;
+	char alpha2[2] = {'0','0'};   //default WW
 
 	wiphy->mgmt_stypes = ath6kl_mgmt_stypes;
 
@@ -4077,6 +4078,9 @@ int ath6kl_cfg80211_init(struct ath6kl *ar)
 	}
 
 	ar->wiphy_registered = true;
+
+	//Indicate default country code
+	regulatory_hint(wiphy, alpha2);
 
 	return 0;
 }
