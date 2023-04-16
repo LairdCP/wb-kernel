@@ -38,18 +38,14 @@
 
 		interrupts-extended = <&pioB 10 IRQ_TYPE_EDGE_FALLING>;
 	};
+};
 
-	ahb {
-		apb {
-			aes@f8038000 {
-				sync-exec;
-			};
+&aes {
+	sync-exec;
+};
 
-			sha@f8034000 {
-				status = "disabled";
-			};
-		};
-	};
+&sha {
+	status = "disabled";
 };
 
 &pinctrl {
