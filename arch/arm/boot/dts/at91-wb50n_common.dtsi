@@ -32,13 +32,10 @@
 			<&pioE 10 IRQ_TYPE_EDGE_FALLING>;
 	};
 */
-	ahb {
-		apb {
-			sha@f8034000 {
-				status = "disabled";
-			};
-		};
-	};
+};
+
+&sha {
+	status = "disabled";
 };
 
 &pinctrl {
