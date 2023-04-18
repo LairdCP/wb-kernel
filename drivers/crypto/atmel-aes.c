@@ -2511,6 +2511,185 @@ static struct ahash_alg ahash_aes_algs[] = {
 },
 };
 
+struct atmel_aes_shash_ctx
+{
+	struct crypto_ahash *ahash;
+};
+
+struct atmel_aes_shash_rctx
+{
+	struct ahash_request req;
+	struct atmel_aes_mac_reqctx macctx;
+	struct scatterlist sg[1];
+};
+
+int atmel_aes_shash_init(struct shash_desc *desc)
+{
+	struct atmel_aes_shash_ctx *ctx = crypto_shash_ctx(desc->tfm);
+	struct atmel_aes_shash_rctx *rctx = shash_desc_ctx(desc);
+
+	sg_init_table(rctx->sg, 1);
+
+	ahash_request_set_tfm(&rctx->req, ctx->ahash);
+
+	return crypto_ahash_init(&rctx->req);
+}
+
+int atmel_aes_shash_update(struct shash_desc *desc, const u8 *data,
+			unsigned int len)
+{
+	struct atmel_aes_shash_rctx *rctx = shash_desc_ctx(desc);
+	struct ahash_request *req = &rctx->req;
+
+	sg_set_buf(rctx->sg, data, len);
+
+	ahash_request_set_crypt(req, rctx->sg, NULL, len);
+
+	return crypto_ahash_update(req);
+}
+
+int atmel_aes_shash_final(struct shash_desc *desc, u8 *out)
+{
+	struct atmel_aes_shash_rctx *rctx = shash_desc_ctx(desc);
+	struct ahash_request *req = &rctx->req;
+
+	ahash_request_set_crypt(req, NULL, out, 0);
+
+	return crypto_ahash_final(req);
+}
+
+int atmel_aes_shash_finup(struct shash_desc *desc, const u8 *data,
+			unsigned int len, u8 *out)
+{
+	struct atmel_aes_shash_rctx *rctx = shash_desc_ctx(desc);
+	struct ahash_request *req = &rctx->req;
+
+	sg_set_buf(rctx->sg, data, len);
+
+	ahash_request_set_crypt(req, rctx->sg, out, len);
+
+	return crypto_ahash_finup(req);
+}
+
+int atmel_aes_shash_digest(struct shash_desc *desc, const u8 *data,
+			unsigned int len, u8 *out)
+{
+	struct atmel_aes_shash_ctx *ctx = crypto_shash_ctx(desc->tfm);
+	struct atmel_aes_shash_rctx *rctx = shash_desc_ctx(desc);
+	struct ahash_request *req = &rctx->req;
+
+	sg_init_one(rctx->sg, data, len);
+
+	ahash_request_set_tfm(req, ctx->ahash);
+	ahash_request_set_crypt(req, rctx->sg, out, len);
+
+	return crypto_ahash_digest(req);
+}
+
+int atmel_aes_shash_export(struct shash_desc *desc, void *out)
+{
+	struct atmel_aes_shash_rctx *rctx = shash_desc_ctx(desc);
+
+	memcpy(out, rctx, sizeof(*rctx));
+
+	return 0;
+}
+
+int atmel_aes_shash_import(struct shash_desc *desc, const void *in)
+{
+	struct atmel_aes_shash_ctx *ctx = crypto_shash_ctx(desc->tfm);
+	struct atmel_aes_shash_rctx *rctx = shash_desc_ctx(desc);
+
+	memcpy(rctx, in, sizeof(*rctx));
+
+	ahash_request_set_tfm(&rctx->req, ctx->ahash);
+
+	return 0;
+}
+
+int atmel_aes_shash_setkey(struct crypto_shash *tfm, const u8 *key,
+			unsigned int keylen)
+{
+	struct atmel_aes_shash_ctx *ctx = crypto_shash_ctx(tfm);
+
+	return crypto_ahash_setkey(ctx->ahash, key, keylen);
+}
+
+int atmel_aes_shash_init_tfm(struct crypto_shash *tfm)
+{
+	struct atmel_aes_shash_ctx *ctx = crypto_shash_ctx(tfm);
+	struct crypto_ahash *ahash;
+	const char *drv;
+	const char *alg = crypto_shash_alg_name(tfm);
+
+	if (!strcmp(alg, "cmac(aes)"))
+		drv = "atmel-cmac-aes";
+	else
+		drv = "atmel-cbcmac-aes";
+
+	ahash = crypto_alloc_ahash(drv, 0, CRYPTO_ALG_NEED_FALLBACK);
+	if (IS_ERR_OR_NULL(ahash))
+		return PTR_ERR(ahash);
+
+	ctx->ahash = ahash;
+
+	return 0;
+}
+
+void atmel_aes_shash_exit_tfm(struct crypto_shash *tfm)
+{
+	struct atmel_aes_shash_ctx *ctx = crypto_shash_ctx(tfm);
+
+	crypto_free_ahash(ctx->ahash);
+}
+
+static struct shash_alg shash_aes_algs[] = {
+{
+	.base.cra_name		= "cbcmac(aes)",
+	.base.cra_driver_name	= "atmel-scbcmac-aes",
+	.base.cra_blocksize	= 1,
+	.base.cra_ctxsize	= sizeof(struct atmel_aes_shash_ctx),
+	.base.cra_flags		= CRYPTO_ALG_NEED_FALLBACK,
+
+	.descsize		= sizeof(struct atmel_aes_shash_rctx),
+	.digestsize		= AES_BLOCK_SIZE,
+	.statesize		= sizeof(struct atmel_aes_shash_rctx),
+
+	.init_tfm		= atmel_aes_shash_init_tfm,
+	.exit_tfm		= atmel_aes_shash_exit_tfm,
+	.init			= atmel_aes_shash_init,
+	.update			= atmel_aes_shash_update,
+	.final			= atmel_aes_shash_final,
+	.finup			= atmel_aes_shash_finup,
+	.digest			= atmel_aes_shash_digest,
+	.export			= atmel_aes_shash_export,
+	.import			= atmel_aes_shash_import,
+	.setkey			= atmel_aes_shash_setkey,
+},
+{
+	.base.cra_name		= "cmac(aes)",
+	.base.cra_driver_name	= "atmel-scmac-aes",
+	.base.cra_blocksize	= AES_BLOCK_SIZE,
+	.base.cra_ctxsize	= sizeof(struct atmel_aes_shash_ctx),
+	.base.cra_flags		= CRYPTO_ALG_NEED_FALLBACK,
+
+	.descsize		= sizeof(struct atmel_aes_shash_rctx),
+	.digestsize		= AES_BLOCK_SIZE,
+	.statesize		= sizeof(struct atmel_aes_shash_rctx),
+
+	.init_tfm		= atmel_aes_shash_init_tfm,
+	.exit_tfm		= atmel_aes_shash_exit_tfm,
+	.init			= atmel_aes_shash_init,
+	.update			= atmel_aes_shash_update,
+	.final			= atmel_aes_shash_final,
+	.finup			= atmel_aes_shash_finup,
+	.digest			= atmel_aes_shash_digest,
+	.export			= atmel_aes_shash_export,
+	.import			= atmel_aes_shash_import,
+	.setkey			= atmel_aes_shash_setkey,
+},
+};
+
 static int atmel_aes_ccm_set_msg_len(u8 *block, unsigned int msglen, int csize)
 {
 	__be32 data;
@@ -3335,8 +3514,10 @@ static void atmel_aes_unregister_algs(struct atmel_aes_dev *dd)
 
 	crypto_unregister_skciphers(aes_algs, ARRAY_SIZE(aes_algs));
 
-	if (atmel_aes.sync_mode)
+	if (atmel_aes.sync_mode) {
 		crypto_unregister_alg(&aes_alg);
+		crypto_unregister_shashes(shash_aes_algs, ARRAY_SIZE(shash_aes_algs));
+	}
 
 	crypto_unregister_aead(&aes_ccm_alg);
 
@@ -3418,9 +3599,19 @@ static int atmel_aes_register_algs(struct atmel_aes_dev *dd)
 		err = crypto_register_alg(&aes_alg);
 		if (err)
 			goto err_aes_block_alg;
+
+		for (i = 0; i < ARRAY_SIZE(shash_aes_algs); i++)
+			atmel_aes_crypto_alg_init(&shash_aes_algs[i].base);
+
+		err = crypto_register_shashes(shash_aes_algs, ARRAY_SIZE(shash_aes_algs));
+		if (err)
+			goto err_shash_block_alg;
 	}
 
 	return 0;
+
+err_shash_block_alg:
+	crypto_unregister_alg(&aes_alg);
 
 err_aes_block_alg:
 	crypto_unregister_aead(&aes_ccm_alg);
