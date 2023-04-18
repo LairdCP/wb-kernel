@@ -3519,6 +3519,7 @@ out:
 	return ret;
 }
 
+#if IS_ENABLED(CONFIG_CRYPTO_ANSI_CPRNG)
 static int test_cprng(struct crypto_rng *tfm,
 		      const struct cprng_testvec *template,
 		      unsigned int tcount)
@@ -3580,6 +3581,7 @@ out:
 	kfree(seed);
 	return err;
 }
+#endif
 
 static int alg_test_cipher(const struct alg_test_desc *desc,
 			   const char *driver, u32 type, u32 mask)
@@ -3694,6 +3696,7 @@ static int alg_test_crc32c(const struct alg_test_desc *desc,
 	return err;
 }
 
+#if IS_ENABLED(CONFIG_CRYPTO_ANSI_CPRNG)
 static int alg_test_cprng(const struct alg_test_desc *desc, const char *driver,
 			  u32 type, u32 mask)
 {
@@ -3713,6 +3716,7 @@ static int alg_test_cprng(const struct alg_test_desc *desc, const char *driver,
 
 	return err;
 }
+#endif
 
 
 static int drbg_cavs_test(const struct drbg_testvec *test, int pr,
@@ -4194,6 +4198,7 @@ static int test_akcipher(struct crypto_akcipher *tfm, const char *alg,
 	return 0;
 }
 
+__maybe_unused
 static int alg_test_akcipher(const struct alg_test_desc *desc,
 			     const char *driver, u32 type, u32 mask)
 {
@@ -4226,6 +4231,7 @@ static int alg_test_null(const struct alg_test_desc *desc,
 /* Please keep this list sorted by algorithm name. */
 static const struct alg_test_desc alg_test_descs[] = {
 	{
+#if IS_ENABLED(CONFIG_CRYPTO_ADIANTUM)
 		.alg = "adiantum(xchacha12,aes)",
 		.generic_driver = "adiantum(xchacha12-generic,aes-generic,nhpoly1305-generic)",
 		.test = alg_test_skcipher,
@@ -4240,18 +4246,24 @@ static const struct alg_test_desc alg_test_descs[] = {
 			.cipher = __VECS(adiantum_xchacha20_aes_tv_template)
 		},
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_AEGIS128)
 		.alg = "aegis128",
 		.test = alg_test_aead,
 		.suite = {
 			.aead = __VECS(aegis128_tv_template)
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_ANSI_CPRNG)
 		.alg = "ansi_cprng",
 		.test = alg_test_cprng,
 		.suite = {
 			.cprng = __VECS(ansi_cprng_aes_tv_template)
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_AUTHENC)
 		.alg = "authenc(hmac(md5),ecb(cipher_null))",
 		.test = alg_test_aead,
 		.suite = {
@@ -4265,6 +4277,7 @@ static const struct alg_test_desc alg_test_descs[] = {
 			.aead = __VECS(hmac_sha1_aes_cbc_tv_temp)
 		}
 	}, {
+#if IS_ENABLED(CONFIG_CRYPTO_DES)
 		.alg = "authenc(hmac(sha1),cbc(des))",
 		.test = alg_test_aead,
 		.suite = {
@@ -4277,6 +4290,7 @@ static const struct alg_test_desc alg_test_descs[] = {
 			.aead = __VECS(hmac_sha1_des3_ede_cbc_tv_temp)
 		}
 	}, {
+#endif
 		.alg = "authenc(hmac(sha1),ctr(aes))",
 		.test = alg_test_null,
 		.fips_allowed = 1,
@@ -4291,6 +4305,7 @@ static const struct alg_test_desc alg_test_descs[] = {
 		.test = alg_test_null,
 		.fips_allowed = 1,
 	}, {
+#if IS_ENABLED(CONFIG_CRYPTO_DES)
 		.alg = "authenc(hmac(sha224),cbc(des))",
 		.test = alg_test_aead,
 		.suite = {
@@ -4303,6 +4318,7 @@ static const struct alg_test_desc alg_test_descs[] = {
 			.aead = __VECS(hmac_sha224_des3_ede_cbc_tv_temp)
 		}
 	}, {
+#endif
 		.alg = "authenc(hmac(sha256),cbc(aes))",
 		.test = alg_test_aead,
 		.fips_allowed = 1,
@@ -4310,6 +4326,7 @@ static const struct alg_test_desc alg_test_descs[] = {
 			.aead = __VECS(hmac_sha256_aes_cbc_tv_temp)
 		}
 	}, {
+#if IS_ENABLED(CONFIG_CRYPTO_DES)
 		.alg = "authenc(hmac(sha256),cbc(des))",
 		.test = alg_test_aead,
 		.suite = {
@@ -4322,6 +4339,7 @@ static const struct alg_test_desc alg_test_descs[] = {
 			.aead = __VECS(hmac_sha256_des3_ede_cbc_tv_temp)
 		}
 	}, {
+#endif
 		.alg = "authenc(hmac(sha256),ctr(aes))",
 		.test = alg_test_null,
 		.fips_allowed = 1,
@@ -4330,6 +4348,7 @@ static const struct alg_test_desc alg_test_descs[] = {
 		.test = alg_test_null,
 		.fips_allowed = 1,
 	}, {
+#if IS_ENABLED(CONFIG_CRYPTO_DES)
 		.alg = "authenc(hmac(sha384),cbc(des))",
 		.test = alg_test_aead,
 		.suite = {
@@ -4342,6 +4361,7 @@ static const struct alg_test_desc alg_test_descs[] = {
 			.aead = __VECS(hmac_sha384_des3_ede_cbc_tv_temp)
 		}
 	}, {
+#endif
 		.alg = "authenc(hmac(sha384),ctr(aes))",
 		.test = alg_test_null,
 		.fips_allowed = 1,
@@ -4357,6 +4377,7 @@ static const struct alg_test_desc alg_test_descs[] = {
 			.aead = __VECS(hmac_sha512_aes_cbc_tv_temp)
 		}
 	}, {
+#if IS_ENABLED(CONFIG_CRYPTO_DES)
 		.alg = "authenc(hmac(sha512),cbc(des))",
 		.test = alg_test_aead,
 		.suite = {
@@ -4369,6 +4390,7 @@ static const struct alg_test_desc alg_test_descs[] = {
 			.aead = __VECS(hmac_sha512_des3_ede_cbc_tv_temp)
 		}
 	}, {
+#endif
 		.alg = "authenc(hmac(sha512),ctr(aes))",
 		.test = alg_test_null,
 		.fips_allowed = 1,
@@ -4377,6 +4399,8 @@ static const struct alg_test_desc alg_test_descs[] = {
 		.test = alg_test_null,
 		.fips_allowed = 1,
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_BLAKE2B)
 		.alg = "blake2b-160",
 		.test = alg_test_hash,
 		.fips_allowed = 0,
@@ -4405,6 +4429,7 @@ static const struct alg_test_desc alg_test_descs[] = {
 			.hash = __VECS(blake2b_512_tv_template)
 		}
 	}, {
+#endif
 		.alg = "cbc(aes)",
 		.test = alg_test_skcipher,
 		.fips_allowed = 1,
@@ -4412,42 +4437,55 @@ static const struct alg_test_desc alg_test_descs[] = {
 			.cipher = __VECS(aes_cbc_tv_template)
 		},
 	}, {
+#if IS_ENABLED(CONFIG_CRYPTO_ANUBIS)
 		.alg = "cbc(anubis)",
 		.test = alg_test_skcipher,
 		.suite = {
 			.cipher = __VECS(anubis_cbc_tv_template)
 		},
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_ARIA)
 		.alg = "cbc(aria)",
 		.test = alg_test_skcipher,
 		.suite = {
 			.cipher = __VECS(aria_cbc_tv_template)
 		},
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_BLOWFISH)
 		.alg = "cbc(blowfish)",
 		.test = alg_test_skcipher,
 		.suite = {
 			.cipher = __VECS(bf_cbc_tv_template)
 		},
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_CAMELLIA)
 		.alg = "cbc(camellia)",
 		.test = alg_test_skcipher,
 		.suite = {
 			.cipher = __VECS(camellia_cbc_tv_template)
 		},
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_CAST5)
 		.alg = "cbc(cast5)",
 		.test = alg_test_skcipher,
 		.suite = {
 			.cipher = __VECS(cast5_cbc_tv_template)
 		},
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_CAST6)
 		.alg = "cbc(cast6)",
 		.test = alg_test_skcipher,
 		.suite = {
 			.cipher = __VECS(cast6_cbc_tv_template)
 		},
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_DES)
 		.alg = "cbc(des)",
 		.test = alg_test_skcipher,
 		.suite = {
@@ -4460,6 +4498,7 @@ static const struct alg_test_desc alg_test_descs[] = {
 			.cipher = __VECS(des3_ede_cbc_tv_template)
 		},
 	}, {
+#endif
 		/* Same as cbc(aes) except the key is stored in
 		 * hardware secure memory which we reference by index
 		 */
@@ -4473,24 +4512,30 @@ static const struct alg_test_desc alg_test_descs[] = {
 		.alg = "cbc(psm4)",
 		.test = alg_test_null,
 	}, {
+#if IS_ENABLED(CONFIG_CRYPTO_SERPENT)
 		.alg = "cbc(serpent)",
 		.test = alg_test_skcipher,
 		.suite = {
 			.cipher = __VECS(serpent_cbc_tv_template)
 		},
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_SM4)
 		.alg = "cbc(sm4)",
 		.test = alg_test_skcipher,
 		.suite = {
 			.cipher = __VECS(sm4_cbc_tv_template)
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_TWOFISH)
 		.alg = "cbc(twofish)",
 		.test = alg_test_skcipher,
 		.suite = {
 			.cipher = __VECS(tf_cbc_tv_template)
 		},
 	}, {
+#endif
 #if IS_ENABLED(CONFIG_CRYPTO_PAES_S390)
 		.alg = "cbc-paes-s390",
 		.fips_allowed = 1,
@@ -4507,12 +4552,14 @@ static const struct alg_test_desc alg_test_descs[] = {
 			.hash = __VECS(aes_cbcmac_tv_template)
 		}
 	}, {
+#if IS_ENABLED(CONFIG_CRYPTO_SM4)
 		.alg = "cbcmac(sm4)",
 		.test = alg_test_hash,
 		.suite = {
 			.hash = __VECS(sm4_cbcmac_tv_template)
 		}
 	}, {
+#endif
 		.alg = "ccm(aes)",
 		.generic_driver = "ccm_base(ctr(aes-generic),cbcmac(aes-generic))",
 		.test = alg_test_aead,
@@ -4524,6 +4571,7 @@ static const struct alg_test_desc alg_test_descs[] = {
 			}
 		}
 	}, {
+#if IS_ENABLED(CONFIG_CRYPTO_SM4)
 		.alg = "ccm(sm4)",
 		.generic_driver = "ccm_base(ctr(sm4-generic),cbcmac(sm4-generic))",
 		.test = alg_test_aead,
@@ -4534,6 +4582,7 @@ static const struct alg_test_desc alg_test_descs[] = {
 			}
 		}
 	}, {
+#endif
 		.alg = "cfb(aes)",
 		.test = alg_test_skcipher,
 		.fips_allowed = 1,
@@ -4541,24 +4590,30 @@ static const struct alg_test_desc alg_test_descs[] = {
 			.cipher = __VECS(aes_cfb_tv_template)
 		},
 	}, {
+#if IS_ENABLED(CONFIG_CRYPTO_ARIA)
 		.alg = "cfb(aria)",
 		.test = alg_test_skcipher,
 		.suite = {
 			.cipher = __VECS(aria_cfb_tv_template)
 		},
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_SM4)
 		.alg = "cfb(sm4)",
 		.test = alg_test_skcipher,
 		.suite = {
 			.cipher = __VECS(sm4_cfb_tv_template)
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_CHACHA20)
 		.alg = "chacha20",
 		.test = alg_test_skcipher,
 		.suite = {
 			.cipher = __VECS(chacha20_tv_template)
 		},
 	}, {
+#endif
 		.alg = "cmac(aes)",
 		.fips_allowed = 1,
 		.test = alg_test_hash,
@@ -4566,21 +4621,26 @@ static const struct alg_test_desc alg_test_descs[] = {
 			.hash = __VECS(aes_cmac128_tv_template)
 		}
 	}, {
+#if IS_ENABLED(CONFIG_CRYPTO_DES)
 		.alg = "cmac(des3_ede)",
 		.test = alg_test_hash,
 		.suite = {
 			.hash = __VECS(des3_ede_cmac64_tv_template)
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_SM4)
 		.alg = "cmac(sm4)",
 		.test = alg_test_hash,
 		.suite = {
 			.hash = __VECS(sm4_cmac128_tv_template)
 		}
 	}, {
+#endif
 		.alg = "compress_null",
 		.test = alg_test_null,
 	}, {
+#if IS_ENABLED(CONFIG_CRYPTO_CRC32)
 		.alg = "crc32",
 		.test = alg_test_hash,
 		.fips_allowed = 1,
@@ -4588,6 +4648,8 @@ static const struct alg_test_desc alg_test_descs[] = {
 			.hash = __VECS(crc32_tv_template)
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_CRC32C)
 		.alg = "crc32c",
 		.test = alg_test_crc32c,
 		.fips_allowed = 1,
@@ -4595,6 +4657,8 @@ static const struct alg_test_desc alg_test_descs[] = {
 			.hash = __VECS(crc32c_tv_template)
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_CRC64_ROCKSOFT)
 		.alg = "crc64-rocksoft",
 		.test = alg_test_hash,
 		.fips_allowed = 1,
@@ -4602,6 +4666,8 @@ static const struct alg_test_desc alg_test_descs[] = {
 			.hash = __VECS(crc64_rocksoft_tv_template)
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_CRCT10DIF)
 		.alg = "crct10dif",
 		.test = alg_test_hash,
 		.fips_allowed = 1,
@@ -4609,6 +4675,7 @@ static const struct alg_test_desc alg_test_descs[] = {
 			.hash = __VECS(crct10dif_tv_template)
 		}
 	}, {
+#endif
 		.alg = "ctr(aes)",
 		.test = alg_test_skcipher,
 		.fips_allowed = 1,
@@ -4616,36 +4683,47 @@ static const struct alg_test_desc alg_test_descs[] = {
 			.cipher = __VECS(aes_ctr_tv_template)
 		}
 	}, {
+#if IS_ENABLED(CONFIG_CRYPTO_ARIA)
 		.alg = "ctr(aria)",
 		.test = alg_test_skcipher,
 		.suite = {
 			.cipher = __VECS(aria_ctr_tv_template)
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_BLOWFISH)
 		.alg = "ctr(blowfish)",
 		.test = alg_test_skcipher,
 		.suite = {
 			.cipher = __VECS(bf_ctr_tv_template)
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_CAMELLIA)
 		.alg = "ctr(camellia)",
 		.test = alg_test_skcipher,
 		.suite = {
 			.cipher = __VECS(camellia_ctr_tv_template)
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_CAST5)
 		.alg = "ctr(cast5)",
 		.test = alg_test_skcipher,
 		.suite = {
 			.cipher = __VECS(cast5_ctr_tv_template)
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_CAST6)
 		.alg = "ctr(cast6)",
 		.test = alg_test_skcipher,
 		.suite = {
 			.cipher = __VECS(cast6_ctr_tv_template)
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_DES)
 		.alg = "ctr(des)",
 		.test = alg_test_skcipher,
 		.suite = {
@@ -4658,6 +4736,7 @@ static const struct alg_test_desc alg_test_descs[] = {
 			.cipher = __VECS(des3_ede_ctr_tv_template)
 		}
 	}, {
+#endif
 		/* Same as ctr(aes) except the key is stored in
 		 * hardware secure memory which we reference by index
 		 */
@@ -4672,24 +4751,30 @@ static const struct alg_test_desc alg_test_descs[] = {
 		.alg = "ctr(psm4)",
 		.test = alg_test_null,
 	}, {
+#if IS_ENABLED(CONFIG_CRYPTO_SERPENT)
 		.alg = "ctr(serpent)",
 		.test = alg_test_skcipher,
 		.suite = {
 			.cipher = __VECS(serpent_ctr_tv_template)
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_SM4)
 		.alg = "ctr(sm4)",
 		.test = alg_test_skcipher,
 		.suite = {
 			.cipher = __VECS(sm4_ctr_tv_template)
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_TWOFISH)
 		.alg = "ctr(twofish)",
 		.test = alg_test_skcipher,
 		.suite = {
 			.cipher = __VECS(tf_ctr_tv_template)
 		}
 	}, {
+#endif
 #if IS_ENABLED(CONFIG_CRYPTO_PAES_S390)
 		.alg = "ctr-paes-s390",
 		.fips_allowed = 1,
@@ -4713,12 +4798,15 @@ static const struct alg_test_desc alg_test_descs[] = {
 		.test = alg_test_null,
 		.fips_allowed = 1,
 	}, {
+#if IS_ENABLED(CONFIG_CRYPTO_CURVE25519)
 		.alg = "curve25519",
 		.test = alg_test_kpp,
 		.suite = {
 			.kpp = __VECS(curve25519_tv_template)
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_DEFLATE)
 		.alg = "deflate",
 		.test = alg_test_comp,
 		.fips_allowed = 1,
@@ -4729,15 +4817,19 @@ static const struct alg_test_desc alg_test_descs[] = {
 			}
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_DH)
 		.alg = "dh",
 		.test = alg_test_kpp,
 		.suite = {
 			.kpp = __VECS(dh_tv_template)
 		}
 	}, {
+#endif
 		.alg = "digest_null",
 		.test = alg_test_null,
 	}, {
+#if IS_ENABLED(CONFIG_CRYPTO_DRBG_CTR)
 		.alg = "drbg_nopr_ctr_aes128",
 		.test = alg_test_drbg,
 		.fips_allowed = 1,
@@ -4759,12 +4851,14 @@ static const struct alg_test_desc alg_test_descs[] = {
 			.drbg = __VECS(drbg_nopr_ctr_aes256_tv_template)
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_DRBG_HMAC)
 		/*
 		 * There is no need to specifically test the DRBG with every
 		 * backend cipher -- covered by drbg_nopr_hmac_sha256 test
 		 */
 		.alg = "drbg_nopr_hmac_sha1",
-		.fips_allowed = 1,
+		.fips_allowed = 0,
 		.test = alg_test_null,
 	}, {
 		.alg = "drbg_nopr_hmac_sha256",
@@ -4776,7 +4870,7 @@ static const struct alg_test_desc alg_test_descs[] = {
 	}, {
 		/* covered by drbg_nopr_hmac_sha256 test */
 		.alg = "drbg_nopr_hmac_sha384",
-		.fips_allowed = 1,
+		.fips_allowed = 0,
 		.test = alg_test_null,
 	}, {
 		.alg = "drbg_nopr_hmac_sha512",
@@ -4786,8 +4880,10 @@ static const struct alg_test_desc alg_test_descs[] = {
 			.drbg = __VECS(drbg_nopr_hmac_sha512_tv_template)
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_DRBG_HASH)
 		.alg = "drbg_nopr_sha1",
-		.fips_allowed = 1,
+		.fips_allowed = 0,
 		.test = alg_test_null,
 	}, {
 		.alg = "drbg_nopr_sha256",
@@ -4799,13 +4895,15 @@ static const struct alg_test_desc alg_test_descs[] = {
 	}, {
 		/* covered by drbg_nopr_sha256 test */
 		.alg = "drbg_nopr_sha384",
-		.fips_allowed = 1,
+		.fips_allowed = 0,
 		.test = alg_test_null,
 	}, {
 		.alg = "drbg_nopr_sha512",
 		.fips_allowed = 1,
 		.test = alg_test_null,
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_DRBG_CTR)
 		.alg = "drbg_pr_ctr_aes128",
 		.test = alg_test_drbg,
 		.fips_allowed = 1,
@@ -4822,8 +4920,10 @@ static const struct alg_test_desc alg_test_descs[] = {
 		.fips_allowed = 1,
 		.test = alg_test_null,
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_DRBG_HMAC)
 		.alg = "drbg_pr_hmac_sha1",
-		.fips_allowed = 1,
+		.fips_allowed = 0,
 		.test = alg_test_null,
 	}, {
 		.alg = "drbg_pr_hmac_sha256",
@@ -4835,15 +4935,17 @@ static const struct alg_test_desc alg_test_descs[] = {
 	}, {
 		/* covered by drbg_pr_hmac_sha256 test */
 		.alg = "drbg_pr_hmac_sha384",
-		.fips_allowed = 1,
+		.fips_allowed = 0,
 		.test = alg_test_null,
 	}, {
 		.alg = "drbg_pr_hmac_sha512",
 		.test = alg_test_null,
 		.fips_allowed = 1,
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_DRBG_HASH)
 		.alg = "drbg_pr_sha1",
-		.fips_allowed = 1,
+		.fips_allowed = 0,
 		.test = alg_test_null,
 	}, {
 		.alg = "drbg_pr_sha256",
@@ -4855,13 +4957,14 @@ static const struct alg_test_desc alg_test_descs[] = {
 	}, {
 		/* covered by drbg_pr_sha256 test */
 		.alg = "drbg_pr_sha384",
-		.fips_allowed = 1,
+		.fips_allowed = 0,
 		.test = alg_test_null,
 	}, {
 		.alg = "drbg_pr_sha512",
 		.fips_allowed = 1,
 		.test = alg_test_null,
 	}, {
+#endif
 		.alg = "ecb(aes)",
 		.test = alg_test_skcipher,
 		.fips_allowed = 1,
@@ -4869,12 +4972,15 @@ static const struct alg_test_desc alg_test_descs[] = {
 			.cipher = __VECS(aes_tv_template)
 		}
 	}, {
+#if IS_ENABLED(CONFIG_CRYPTO_ANUBIS)
 		.alg = "ecb(anubis)",
 		.test = alg_test_skcipher,
 		.suite = {
 			.cipher = __VECS(anubis_tv_template)
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_ARC4)
 		.alg = "ecb(arc4)",
 		.generic_driver = "ecb(arc4)-generic",
 		.test = alg_test_skcipher,
@@ -4882,40 +4988,52 @@ static const struct alg_test_desc alg_test_descs[] = {
 			.cipher = __VECS(arc4_tv_template)
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_ARIA)
 		.alg = "ecb(aria)",
 		.test = alg_test_skcipher,
 		.suite = {
 			.cipher = __VECS(aria_tv_template)
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_BLOWFISH)
 		.alg = "ecb(blowfish)",
 		.test = alg_test_skcipher,
 		.suite = {
 			.cipher = __VECS(bf_tv_template)
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_CAMELLIA)
 		.alg = "ecb(camellia)",
 		.test = alg_test_skcipher,
 		.suite = {
 			.cipher = __VECS(camellia_tv_template)
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_CAST5)
 		.alg = "ecb(cast5)",
 		.test = alg_test_skcipher,
 		.suite = {
 			.cipher = __VECS(cast5_tv_template)
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_CAST6)
 		.alg = "ecb(cast6)",
 		.test = alg_test_skcipher,
 		.suite = {
 			.cipher = __VECS(cast6_tv_template)
 		}
 	}, {
+#endif
 		.alg = "ecb(cipher_null)",
 		.test = alg_test_null,
 		.fips_allowed = 1,
 	}, {
+#if IS_ENABLED(CONFIG_CRYPTO_DES)
 		.alg = "ecb(des)",
 		.test = alg_test_skcipher,
 		.suite = {
@@ -4928,6 +5046,8 @@ static const struct alg_test_desc alg_test_descs[] = {
 			.cipher = __VECS(des3_ede_tv_template)
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_FCRYPT)
 		.alg = "ecb(fcrypt)",
 		.test = alg_test_skcipher,
 		.suite = {
@@ -4937,12 +5057,15 @@ static const struct alg_test_desc alg_test_descs[] = {
 			}
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_KHAZAD)
 		.alg = "ecb(khazad)",
 		.test = alg_test_skcipher,
 		.suite = {
 			.cipher = __VECS(khazad_tv_template)
 		}
 	}, {
+#endif
 		/* Same as ecb(aes) except the key is stored in
 		 * hardware secure memory which we reference by index
 		 */
@@ -4950,36 +5073,47 @@ static const struct alg_test_desc alg_test_descs[] = {
 		.test = alg_test_null,
 		.fips_allowed = 1,
 	}, {
+#if IS_ENABLED(CONFIG_CRYPTO_SEED)
 		.alg = "ecb(seed)",
 		.test = alg_test_skcipher,
 		.suite = {
 			.cipher = __VECS(seed_tv_template)
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_SERPENT)
 		.alg = "ecb(serpent)",
 		.test = alg_test_skcipher,
 		.suite = {
 			.cipher = __VECS(serpent_tv_template)
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_SM4)
 		.alg = "ecb(sm4)",
 		.test = alg_test_skcipher,
 		.suite = {
 			.cipher = __VECS(sm4_tv_template)
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_TEA)
 		.alg = "ecb(tea)",
 		.test = alg_test_skcipher,
 		.suite = {
 			.cipher = __VECS(tea_tv_template)
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_TWOFISH)
 		.alg = "ecb(twofish)",
 		.test = alg_test_skcipher,
 		.suite = {
 			.cipher = __VECS(tf_tv_template)
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_TEA)
 		.alg = "ecb(xeta)",
 		.test = alg_test_skcipher,
 		.suite = {
@@ -4992,6 +5126,7 @@ static const struct alg_test_desc alg_test_descs[] = {
 			.cipher = __VECS(xtea_tv_template)
 		}
 	}, {
+#endif
 #if IS_ENABLED(CONFIG_CRYPTO_PAES_S390)
 		.alg = "ecb-paes-s390",
 		.fips_allowed = 1,
@@ -5001,6 +5136,7 @@ static const struct alg_test_desc alg_test_descs[] = {
 		}
 	}, {
 #endif
+#if IS_ENABLED(CONFIG_CRYPTO_ECDH)
 		.alg = "ecdh-nist-p192",
 		.test = alg_test_kpp,
 		.suite = {
@@ -5021,6 +5157,8 @@ static const struct alg_test_desc alg_test_descs[] = {
 			.kpp = __VECS(ecdh_p384_tv_template)
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_ECDSA)
 		.alg = "ecdsa-nist-p192",
 		.test = alg_test_akcipher,
 		.suite = {
@@ -5039,12 +5177,16 @@ static const struct alg_test_desc alg_test_descs[] = {
 			.akcipher = __VECS(ecdsa_nist_p384_tv_template)
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_ECRDSA)
 		.alg = "ecrdsa",
 		.test = alg_test_akcipher,
 		.suite = {
 			.akcipher = __VECS(ecrdsa_tv_template)
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_AUTHENC)
 		.alg = "essiv(authenc(hmac(sha256),cbc(aes)),sha256)",
 		.test = alg_test_aead,
 		.fips_allowed = 1,
@@ -5052,6 +5194,7 @@ static const struct alg_test_desc alg_test_descs[] = {
 			.aead = __VECS(essiv_hmac_sha256_aes_cbc_tv_temp)
 		}
 	}, {
+#endif
 		.alg = "essiv(cbc(aes),sha256)",
 		.test = alg_test_skcipher,
 		.fips_allowed = 1,
@@ -5104,6 +5247,7 @@ static const struct alg_test_desc alg_test_descs[] = {
 			.aead = __VECS(aes_gcm_tv_template)
 		}
 	}, {
+#if IS_ENABLED(CONFIG_CRYPTO_ARIA)
 		.alg = "gcm(aria)",
 		.generic_driver = "gcm_base(ctr(aria-generic),ghash-generic)",
 		.test = alg_test_aead,
@@ -5111,6 +5255,8 @@ static const struct alg_test_desc alg_test_descs[] = {
 			.aead = __VECS(aria_gcm_tv_template)
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_SM4)
 		.alg = "gcm(sm4)",
 		.generic_driver = "gcm_base(ctr(sm4-generic),ghash-generic)",
 		.test = alg_test_aead,
@@ -5118,6 +5264,7 @@ static const struct alg_test_desc alg_test_descs[] = {
 			.aead = __VECS(sm4_gcm_tv_template)
 		}
 	}, {
+#endif
 		.alg = "ghash",
 		.test = alg_test_hash,
 		.fips_allowed = 1,
@@ -5125,6 +5272,7 @@ static const struct alg_test_desc alg_test_descs[] = {
 			.hash = __VECS(ghash_tv_template)
 		}
 	}, {
+#if IS_ENABLED(CONFIG_CRYPTO_HCTR2)
 		.alg = "hctr2(aes)",
 		.generic_driver =
 		    "hctr2_base(xctr(aes-generic),polyval-generic)",
@@ -5133,18 +5281,23 @@ static const struct alg_test_desc alg_test_descs[] = {
 			.cipher = __VECS(aes_hctr2_tv_template)
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_MD5)
 		.alg = "hmac(md5)",
 		.test = alg_test_hash,
 		.suite = {
 			.hash = __VECS(hmac_md5_tv_template)
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_RMD160)
 		.alg = "hmac(rmd160)",
 		.test = alg_test_hash,
 		.suite = {
 			.hash = __VECS(hmac_rmd160_tv_template)
 		}
 	}, {
+#endif
 		.alg = "hmac(sha1)",
 		.test = alg_test_hash,
 		.fips_allowed = 1,
@@ -5208,12 +5361,15 @@ static const struct alg_test_desc alg_test_descs[] = {
 			.hash = __VECS(hmac_sha512_tv_template)
 		}
 	}, {
+#if IS_ENABLED(CONFIG_CRYPTO_SM3)
 		.alg = "hmac(sm3)",
 		.test = alg_test_hash,
 		.suite = {
 			.hash = __VECS(hmac_sm3_tv_template)
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_STREEBOG)
 		.alg = "hmac(streebog256)",
 		.test = alg_test_hash,
 		.suite = {
@@ -5226,10 +5382,12 @@ static const struct alg_test_desc alg_test_descs[] = {
 			.hash = __VECS(hmac_streebog512_tv_template)
 		}
 	}, {
+#endif
 		.alg = "jitterentropy_rng",
 		.fips_allowed = 1,
 		.test = alg_test_null,
 	}, {
+#if IS_ENABLED(CONFIG_CRYPTO_KEYWRAP)
 		.alg = "kw(aes)",
 		.test = alg_test_skcipher,
 		.fips_allowed = 1,
@@ -5237,6 +5395,8 @@ static const struct alg_test_desc alg_test_descs[] = {
 			.cipher = __VECS(aes_kw_tv_template)
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_LRW)
 		.alg = "lrw(aes)",
 		.generic_driver = "lrw(ecb(aes-generic))",
 		.test = alg_test_skcipher,
@@ -5258,6 +5418,7 @@ static const struct alg_test_desc alg_test_descs[] = {
 			.cipher = __VECS(cast6_lrw_tv_template)
 		}
 	}, {
+#if IS_ENABLED(CONFIG_CRYPTO_SERPENT)
 		.alg = "lrw(serpent)",
 		.generic_driver = "lrw(ecb(serpent-generic))",
 		.test = alg_test_skcipher,
@@ -5265,6 +5426,7 @@ static const struct alg_test_desc alg_test_descs[] = {
 			.cipher = __VECS(serpent_lrw_tv_template)
 		}
 	}, {
+#endif
 		.alg = "lrw(twofish)",
 		.generic_driver = "lrw(ecb(twofish-generic))",
 		.test = alg_test_skcipher,
@@ -5272,6 +5434,8 @@ static const struct alg_test_desc alg_test_descs[] = {
 			.cipher = __VECS(tf_lrw_tv_template)
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_LZ4)
 		.alg = "lz4",
 		.test = alg_test_comp,
 		.fips_allowed = 1,
@@ -5282,6 +5446,8 @@ static const struct alg_test_desc alg_test_descs[] = {
 			}
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_LZ4HC)
 		.alg = "lz4hc",
 		.test = alg_test_comp,
 		.fips_allowed = 1,
@@ -5292,6 +5458,8 @@ static const struct alg_test_desc alg_test_descs[] = {
 			}
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_LZO)
 		.alg = "lzo",
 		.test = alg_test_comp,
 		.fips_allowed = 1,
@@ -5312,30 +5480,39 @@ static const struct alg_test_desc alg_test_descs[] = {
 			}
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_MD4)
 		.alg = "md4",
 		.test = alg_test_hash,
 		.suite = {
 			.hash = __VECS(md4_tv_template)
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_MD5)
 		.alg = "md5",
 		.test = alg_test_hash,
 		.suite = {
 			.hash = __VECS(md5_tv_template)
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_MICHAEL_MIC)
 		.alg = "michael_mic",
 		.test = alg_test_hash,
 		.suite = {
 			.hash = __VECS(michael_mic_tv_template)
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_NHPOLY1305)
 		.alg = "nhpoly1305",
 		.test = alg_test_hash,
 		.suite = {
 			.hash = __VECS(nhpoly1305_tv_template)
 		}
 	}, {
+#endif
 		.alg = "ofb(aes)",
 		.test = alg_test_skcipher,
 		.fips_allowed = 1,
@@ -5350,18 +5527,23 @@ static const struct alg_test_desc alg_test_descs[] = {
 		.test = alg_test_null,
 		.fips_allowed = 1,
 	}, {
+#if IS_ENABLED(CONFIG_CRYPTO_SM4)
 		.alg = "ofb(sm4)",
 		.test = alg_test_skcipher,
 		.suite = {
 			.cipher = __VECS(sm4_ofb_tv_template)
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_FCRYPT)
 		.alg = "pcbc(fcrypt)",
 		.test = alg_test_skcipher,
 		.suite = {
 			.cipher = __VECS(fcrypt_pcbc_tv_template)
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_RSA)
 		.alg = "pkcs1pad(rsa,sha224)",
 		.test = alg_test_null,
 		.fips_allowed = 1,
@@ -5381,18 +5563,23 @@ static const struct alg_test_desc alg_test_descs[] = {
 		.test = alg_test_null,
 		.fips_allowed = 1,
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_POLY1305)
 		.alg = "poly1305",
 		.test = alg_test_hash,
 		.suite = {
 			.hash = __VECS(poly1305_tv_template)
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_POLYVAL)
 		.alg = "polyval",
 		.test = alg_test_hash,
 		.suite = {
 			.hash = __VECS(polyval_tv_template)
 		}
 	}, {
+#endif
 		.alg = "rfc3686(ctr(aes))",
 		.test = alg_test_skcipher,
 		.fips_allowed = 1,
@@ -5400,12 +5587,14 @@ static const struct alg_test_desc alg_test_descs[] = {
 			.cipher = __VECS(aes_ctr_rfc3686_tv_template)
 		}
 	}, {
+#if IS_ENABLED(CONFIG_CRYPTO_SM4)
 		.alg = "rfc3686(ctr(sm4))",
 		.test = alg_test_skcipher,
 		.suite = {
 			.cipher = __VECS(sm4_ctr_rfc3686_tv_template)
 		}
 	}, {
+#endif
 		.alg = "rfc4106(gcm(aes))",
 		.generic_driver = "rfc4106(gcm_base(ctr(aes-generic),ghash-generic))",
 		.test = alg_test_aead,
@@ -5441,6 +5630,7 @@ static const struct alg_test_desc alg_test_descs[] = {
 			}
 		}
 	}, {
+#if IS_ENABLED(CONFIG_CRYPTO_CHACHA20POLY1305)
 		.alg = "rfc7539(chacha20,poly1305)",
 		.test = alg_test_aead,
 		.suite = {
@@ -5457,12 +5647,16 @@ static const struct alg_test_desc alg_test_descs[] = {
 			}
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_RMD160)
 		.alg = "rmd160",
 		.test = alg_test_hash,
 		.suite = {
 			.hash = __VECS(rmd160_tv_template)
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_RSA)
 		.alg = "rsa",
 		.test = alg_test_akcipher,
 		.fips_allowed = 1,
@@ -5470,6 +5664,7 @@ static const struct alg_test_desc alg_test_descs[] = {
 			.akcipher = __VECS(rsa_tv_template)
 		}
 	}, {
+#endif
 		.alg = "sha1",
 		.test = alg_test_hash,
 		.fips_allowed = 1,
@@ -5533,18 +5728,23 @@ static const struct alg_test_desc alg_test_descs[] = {
 			.hash = __VECS(sha512_tv_template)
 		}
 	}, {
+#if IS_ENABLED(CONFIG_CRYPTO_SM2)
 		.alg = "sm2",
 		.test = alg_test_akcipher,
 		.suite = {
 			.akcipher = __VECS(sm2_tv_template)
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_SM3)
 		.alg = "sm3",
 		.test = alg_test_hash,
 		.suite = {
 			.hash = __VECS(sm3_tv_template)
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_STREEBOG)
 		.alg = "streebog256",
 		.test = alg_test_hash,
 		.suite = {
@@ -5557,12 +5757,16 @@ static const struct alg_test_desc alg_test_descs[] = {
 			.hash = __VECS(streebog512_tv_template)
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_VMAC)
 		.alg = "vmac64(aes)",
 		.test = alg_test_hash,
 		.suite = {
 			.hash = __VECS(vmac64_aes_tv_template)
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_WP512)
 		.alg = "wp256",
 		.test = alg_test_hash,
 		.suite = {
@@ -5581,12 +5785,16 @@ static const struct alg_test_desc alg_test_descs[] = {
 			.hash = __VECS(wp512_tv_template)
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_XCBC)
 		.alg = "xcbc(aes)",
 		.test = alg_test_hash,
 		.suite = {
 			.hash = __VECS(aes_xcbc128_tv_template)
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_CHACHA20)
 		.alg = "xchacha12",
 		.test = alg_test_skcipher,
 		.suite = {
@@ -5599,12 +5807,15 @@ static const struct alg_test_desc alg_test_descs[] = {
 			.cipher = __VECS(xchacha20_tv_template)
 		},
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_XCTR)
 		.alg = "xctr(aes)",
 		.test = alg_test_skcipher,
 		.suite = {
 			.cipher = __VECS(aes_xctr_tv_template)
 		}
 	}, {
+#endif
 		.alg = "xts(aes)",
 		.generic_driver = "xts(ecb(aes-generic))",
 		.test = alg_test_skcipher,
@@ -5613,6 +5824,7 @@ static const struct alg_test_desc alg_test_descs[] = {
 			.cipher = __VECS(aes_xts_tv_template)
 		}
 	}, {
+#if IS_ENABLED(CONFIG_CRYPTO_CAMELLIA)
 		.alg = "xts(camellia)",
 		.generic_driver = "xts(ecb(camellia-generic))",
 		.test = alg_test_skcipher,
@@ -5620,6 +5832,8 @@ static const struct alg_test_desc alg_test_descs[] = {
 			.cipher = __VECS(camellia_xts_tv_template)
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_CAST6)
 		.alg = "xts(cast6)",
 		.generic_driver = "xts(ecb(cast6-generic))",
 		.test = alg_test_skcipher,
@@ -5627,6 +5841,7 @@ static const struct alg_test_desc alg_test_descs[] = {
 			.cipher = __VECS(cast6_xts_tv_template)
 		}
 	}, {
+#endif
 		/* Same as xts(aes) except the key is stored in
 		 * hardware secure memory which we reference by index
 		 */
@@ -5634,6 +5849,7 @@ static const struct alg_test_desc alg_test_descs[] = {
 		.test = alg_test_null,
 		.fips_allowed = 1,
 	}, {
+#if IS_ENABLED(CONFIG_CRYPTO_SERPENT)
 		.alg = "xts(serpent)",
 		.generic_driver = "xts(ecb(serpent-generic))",
 		.test = alg_test_skcipher,
@@ -5641,6 +5857,8 @@ static const struct alg_test_desc alg_test_descs[] = {
 			.cipher = __VECS(serpent_xts_tv_template)
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_TWOFISH)
 		.alg = "xts(twofish)",
 		.generic_driver = "xts(ecb(twofish-generic))",
 		.test = alg_test_skcipher,
@@ -5648,6 +5866,7 @@ static const struct alg_test_desc alg_test_descs[] = {
 			.cipher = __VECS(tf_xts_tv_template)
 		}
 	}, {
+#endif
 #if IS_ENABLED(CONFIG_CRYPTO_PAES_S390)
 		.alg = "xts-paes-s390",
 		.fips_allowed = 1,
@@ -5665,6 +5884,7 @@ static const struct alg_test_desc alg_test_descs[] = {
 		.test = alg_test_null,
 		.fips_allowed = 1,
 	}, {
+#if IS_ENABLED(CONFIG_CRYPTO_XXHASH)
 		.alg = "xxhash64",
 		.test = alg_test_hash,
 		.fips_allowed = 1,
@@ -5672,6 +5892,8 @@ static const struct alg_test_desc alg_test_descs[] = {
 			.hash = __VECS(xxhash64_tv_template)
 		}
 	}, {
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_DEFLATE)
 		.alg = "zlib-deflate",
 		.test = alg_test_comp,
 		.fips_allowed = 1,
@@ -5682,6 +5904,7 @@ static const struct alg_test_desc alg_test_descs[] = {
 			}
 		}
 	}, {
+#endif
 		.alg = "zstd",
 		.test = alg_test_comp,
 		.fips_allowed = 1,
