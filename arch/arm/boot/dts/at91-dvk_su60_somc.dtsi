@@ -14,7 +14,7 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_pck2_as_audio_mck>;
 
-		atmel,model = "wm8904 @ DVK-SOM60";
+		atmel,model = "wm8904_SOM60DVK";
 		atmel,audio-routing =
 			"Headphone Jack", "HPOUTL",
 			"Headphone Jack", "HPOUTR",
