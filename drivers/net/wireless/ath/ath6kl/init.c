@@ -1156,7 +1156,10 @@ static int ath6kl_fetch_fw_apin(struct ath6kl *ar, const char *name)
 				break;
 
 			val = (__le32 *) data;
-			ar->hw.board_addr = le32_to_cpup(val);
+			//BZ24315 - Ignore board addr if loading tcmd/utf firmware.
+			if (!test_bit(TESTMODE, &ar->flag)) {
+				ar->hw.board_addr = le32_to_cpup(val);
+			}
 
 			ath6kl_dbg(ATH6KL_DBG_BOOT,
 				   "found board address ie 0x%x\n",
