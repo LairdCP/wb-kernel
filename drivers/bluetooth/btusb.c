@@ -63,7 +63,6 @@ static struct usb_driver btusb_driver;
 #define BTUSB_INTEL_BROKEN_SHUTDOWN_LED	BIT(24)
 #define BTUSB_INTEL_BROKEN_INITIAL_NCMD BIT(25)
 #define BTUSB_INTEL_NO_WBS_SUPPORT	BIT(26)
-#define BTUSB_CYPRESS_PATCHRAM	BIT(27)
 
 static const struct usb_device_id btusb_table[] = {
 	/* Generic Bluetooth USB device */
@@ -174,7 +173,7 @@ static const struct usb_device_id btusb_table[] = {
 	 * This works with CYW4373, other chipsets unknown
 	 */
 	{ USB_VENDOR_AND_INTERFACE_INFO(0x04b4, 0xff, 0x01, 0x01),
-	  .driver_info = BTUSB_CYPRESS_PATCHRAM },
+	  .driver_info = BTUSB_BCM_PATCHRAM },
 
 	{ }	/* Terminating entry */
 };
@@ -3842,16 +3841,6 @@ static int btusb_probe(struct usb_interface *intf,
 		hdev->manufacturer = 15;
 		hdev->setup = btbcm_setup_apple;
 		hdev->set_diag = btusb_bcm_set_diag;
-
-		/* Broadcom LM_DIAG Interface numbers are hardcoded */
-		data->diag = usb_ifnum_to_if(data->udev, ifnum_base + 2);
-	}
-
-	if (IS_ENABLED(CONFIG_BT_HCIBTUSB_BCM) &&
-	    (id->driver_info & BTUSB_CYPRESS_PATCHRAM)) {
-		hdev->setup = btbcm_setup_patchram;
-		hdev->set_diag = btusb_bcm_set_diag;
-		hdev->set_bdaddr = btbcm_set_bdaddr;
 
 		/* Broadcom LM_DIAG Interface numbers are hardcoded */
 		data->diag = usb_ifnum_to_if(data->udev, ifnum_base + 2);
