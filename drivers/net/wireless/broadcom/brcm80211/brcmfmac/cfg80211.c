@@ -6046,6 +6046,13 @@ brcmf_cfg80211_start_ap(struct wiphy *wiphy, struct net_device *ndev,
 	}
 	brcmf_dbg(TRACE, "mbss %s\n", mbss ? "enabled" : "disabled");
 
+	// Disable AP mode operation in 6G band by default due to regulatory restrictions
+	if ((!drvr->settings->enable_6ghz_master) &&
+		(settings->chandef.chan->band == NL80211_BAND_6GHZ)) {
+		brcmf_err("Master mode operation not permitted in 6G band\n");
+		return -EINVAL;
+	}
+
 	/* store current 11d setting */
 	if (brcmf_fil_cmd_int_get(ifp, BRCMF_C_GET_REGULATORY,
 				  &ifp->vif->is_11d)) {
@@ -9639,7 +9646,7 @@ static const struct wiphy_wowlan_support brcmf_wowlan_support = {
 };
 #endif
 
-// Laird - Do not enable wowlan by default
+// Do not enable wowlan by default
 //  Leave to userspace to configure if desired
 #define DISABLE_DEFAULT_WOWLAN_CONFG
 

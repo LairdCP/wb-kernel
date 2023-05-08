@@ -69,6 +69,7 @@ extern struct brcmf_mp_global_t brcmf_mp_global;
  * @idle_time_zero: Set idle interval to zero.
  */
 struct brcmf_mp_device {
+	bool		enable_6ghz_master;
 	bool		p2p_enable;
 	unsigned int	feature_disable;
 	int		fcmode;
