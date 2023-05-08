@@ -5595,6 +5595,16 @@ brcmf_config_ap_mgmt_ie(struct brcmf_cfg80211_vif *vif,
 	return err;
 }
 
+static bool brmcf_is_extsae_pwe_supported(struct brcmf_pub *drvr)
+{
+	switch (drvr->bus_if->chip) {
+	case BRCM_CC_43430_CHIP_ID:
+		return false;
+	default:
+		return true;
+	}
+}
+
 static s32
 brcmf_parse_configure_sae_pwe(struct brcmf_if *ifp,
 			      struct cfg80211_ap_settings *settings)
@@ -5605,6 +5615,11 @@ brcmf_parse_configure_sae_pwe(struct brcmf_if *ifp,
 	const struct brcmf_tlv *supp_rate_ie;
 	u8 ie_len, i;
 	bool support_sae_h2e = false, must_sae_h2e = false;
+
+	// Laird - Some versions of 43438 firmware support SAE_EXT but
+	// do not support extsae_pwe parameter, resulting in write failure
+	if (!brmcf_is_extsae_pwe_supported(ifp->drvr))
+		return 0;
 
 	if (brcmf_feat_is_enabled(ifp, BRCMF_FEAT_SAE_EXT)) {
 		rsnx_ie = brcmf_parse_tlvs((u8 *)settings->beacon.tail,
