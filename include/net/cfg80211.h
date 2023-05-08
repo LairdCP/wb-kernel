@@ -1307,7 +1307,7 @@ struct cfg80211_unsol_bcast_probe_resp {
  *	networks.
  * @beacon_rate: bitrate to be used for beacons
  * @ht_cap: HT capabilities (or %NULL if HT isn't enabled)
- * @vht_cap: VHT capabilities (or %NULL if VHT isn't enabled)
+ * @vht_cap: VHT capabilities (or %NULLcfg80211_ap_settings if VHT isn't enabled)
  * @he_cap: HE capabilities (or %NULL if HE isn't enabled)
  * @eht_cap: EHT capabilities (or %NULL if EHT isn't enabled)
  * @eht_oper: EHT operation IE (or %NULL if EHT isn't enabled)

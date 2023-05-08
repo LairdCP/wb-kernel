@@ -61,6 +61,7 @@ struct brcmf_mp_device {
 	bool		ignore_probe_fail;
 	bool		fw_ap_select;
 	bool		disable_6ghz;
+	bool		enable_6ghz_master;
 	bool		trivial_ccode_map;
 	struct brcmfmac_pd_cc *country_codes;
 	const char	*board_type;

@@ -5759,6 +5759,13 @@ brcmf_cfg80211_start_ap(struct wiphy *wiphy, struct net_device *ndev,
 	mbss = ifp->vif->mbss;
 	brcmf_dbg(TRACE, "mbss %s\n", mbss ? "enabled" : "disabled");
 
+	// Laird - Disable AP mode operation in 6G band by default due to regulatory restrictions
+	if ((!drvr->settings->enable_6ghz_master) &&
+		(settings->chandef.chan->band == NL80211_BAND_6GHZ)) {
+		brcmf_err("Master mode operation not permitted in 6G band\n");
+		return -EINVAL;
+	}
+
 	/* store current 11d setting */
 	if (brcmf_fil_cmd_int_get(ifp, BRCMF_C_GET_REGULATORY,
 				  &ifp->vif->is_11d)) {
