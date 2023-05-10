@@ -9347,6 +9347,11 @@ static void brcmf_update_he_cap(struct ieee80211_supported_band *band,
 				   IEEE80211_VHT_MAX_AMPDU_1024K) |
 			FIELD_PREP(IEEE80211_HE_6GHZ_CAP_MAX_MPDU_LEN,
 				   IEEE80211_VHT_CAP_MAX_MPDU_LENGTH_11454);
+
+		// Indicate antenna path consistency
+		capa |= IEEE80211_HE_6GHZ_CAP_RX_ANTPAT_CONS;
+		capa |= IEEE80211_HE_6GHZ_CAP_TX_ANTPAT_CONS;
+
 		he_6ghz_capa->capa = cpu_to_le16(capa);
 	}
 	band->n_iftype_data = idx;
