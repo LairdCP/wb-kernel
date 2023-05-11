@@ -23,27 +23,27 @@
 };
 
 &nand_partitions {
-	ubootspl@0 {
+	partition@0 {
 		label = "u-boot-spl";
 		reg = <0x0 0x20000>;
 	};
 
-	uboot@20000 {
+	partition@20000 {
 		label = "u-boot";
 		reg = <0x20000 0x80000>;
 	};
 
-	ubootenv@a0000 {
+	partition@a0000 {
 		label = "u-boot-env-a";
 		reg = <0xa0000 0x20000>;
 	};
 
-	ubootenv@c0000 {
+	partition@c0000 {
 		label = "u-boot-env-b";
 		reg = <0xc0000 0x20000>;
 	};
 
-	ubi@e0000 {
+	partition@e0000 {
 		label = "ubi";
 		reg = <0xe0000 0x1fc00000>;
 	};

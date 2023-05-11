@@ -19,28 +19,28 @@
 };
 
 &nand_partitions {
-	ubootspl@0 {
+	partition@0 {
 		label = "u-boot-spl";
 		reg = <0x0 0x20000>;
 	};
 
-	uboot@20000 {
+	partition@20000 {
 		label = "u-boot";
 		reg = <0x20000 0x100000>;
 	};
 
-	ubootenv@120000 {
+	partition@120000 {
 		label = "u-boot-env-a";
 		reg = <0x120000 0x20000>;
 	};
 
-	ubootenv@140000 {
+	partition@140000 {
 		label = "u-boot-env-b";
 		reg = <0x140000 0x20000>;
 	};
 
 	/* Leave last 4 blocks for bbt if nand-on-flash-bbt is defined */
-	ubi@160000 {
+	partition@160000 {
 		label = "ubi";
 		reg = <0x160000 0>;
 	};
