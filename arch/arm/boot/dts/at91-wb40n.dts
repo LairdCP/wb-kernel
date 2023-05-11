@@ -231,47 +231,47 @@
 			#address-cells = <1>;
 			#size-cells = <1>;
 
-			at91bootstrap@0 {
+			partition@0 {
 				label = "at91bs";
 				reg = <0x0 0x20000>;
 			};
 
-			uboot@20000 {
+			partition@20000 {
 				label = "u-boot";
 				reg = <0x20000 0x80000>;
 			};
 
-			ubootenv@a0000 {
+			partition@a0000 {
 				label = "u-boot-env-a";
 				reg = <0xa0000 0x20000>;
 			};
 
-			ubootenv@c0000 {
+			partition@c0000 {
 				label = "u-boot-env-b";
 				reg = <0xc0000 0x20000>;
 			};
 
-			kernel-a@e0000 {
+			partition@e0000 {
 				label = "kernel-a";
 				reg = <0xe0000 0x500000>;
 			};
 
-			kernel-b@5e0000 {
+			partition@5e0000 {
 				label = "kernel-b";
 				reg = <0x5e0000 0x500000>;
 			};
 
-			rootfs-a@ae0000 {
+			partition@ae0000 {
 				label = "rootfs-a";
 				reg = <0xae0000 0x3000000>;
 			};
 
-			rootfs-b@3ae0000 {
+			partition@3ae0000 {
 				label = "rootfs-b";
 				reg = <0x3ae0000 0x3000000>;
 			};
 
-			user@6ae0000 {
+			partition@6ae0000 {
 				label = "user";
 				reg = <0x6ae0000 0x14a0000>;
 			};

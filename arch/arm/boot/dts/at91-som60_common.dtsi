@@ -376,6 +376,8 @@
 		nand-ecc-strength = <8>;
 		nand-ecc-step-size = <512>;
 
+		compatible = "atmel,sama5d3-nand-node";
+
 		/*
 		 * Note - nand-on-flash-bbt requires the last 4 blocks on
 		 * flash to be reserved for bad block table.  These blocks
