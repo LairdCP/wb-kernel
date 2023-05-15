@@ -1180,15 +1180,15 @@ static int drbg_seed(struct drbg_state *drbg, struct drbg_string *pers,
 			entropylen = ((entropylen + 1) / 2) * 3;
 		BUG_ON((entropylen * 2) > sizeof(entropy));
 
+		/* Get seed from in-kernel /dev/urandom */
+		if (!rng_is_initialized())
+			new_seed_state = DRBG_SEED_STATE_PARTIAL;
+
+		ret = drbg_get_random_bytes(drbg, entropy, entropylen);
+		if (ret)
+			goto out;
+
 		if (!drbg->jent) {
-			/* Get seed from in-kernel /dev/urandom */
-			if (!rng_is_initialized())
-				new_seed_state = DRBG_SEED_STATE_PARTIAL;
-
-			ret = drbg_get_random_bytes(drbg, entropy, entropylen);
-			if (ret)
-				goto out;
-
 			drbg_string_fill(&data1, entropy, entropylen);
 			pr_devel("DRBG: (re)seeding with %u bytes of entropy\n",
 				 entropylen);
@@ -1198,8 +1198,8 @@ static int drbg_seed(struct drbg_state *drbg, struct drbg_string *pers,
 			 * fatal only in FIPS mode.
 			 */
 			ret = crypto_rng_get_bytes(drbg->jent,
-						   entropy,
-						   entropylen * 2);
+						   entropy + entropylen,
+						   entropylen);
 			if (fips_enabled && ret) {
 				pr_devel("DRBG: jent failed with %d\n", ret);
 
@@ -1546,7 +1546,7 @@ static int drbg_prepare_hrng(struct drbg_state *drbg)
 		const int err = PTR_ERR(drbg->jent);
 
 		drbg->jent = NULL;
-		if (fips_enabled || err != -ENOENT)
+		if (fips_enabled)
 			return err;
 		pr_info("DRBG: Continuing without Jitter RNG\n");
 	}
