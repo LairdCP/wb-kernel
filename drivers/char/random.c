@@ -1350,7 +1350,7 @@ SYSCALL_DEFINE3(getrandom, char __user *, ubuf, size_t, len, unsigned int, flags
 		return -EINVAL;
 
 	if (fips_enabled || fips_random) {
-		ret = import_single_range(ITER_DEST, ubuf, len, &iov, &iter);
+		ret = import_single_range(&iter, ubuf, len, &iov, &iter);
 		if (unlikely(ret))
 			return ret;
 
