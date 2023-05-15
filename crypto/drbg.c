@@ -1158,24 +1158,23 @@ static int drbg_seed(struct drbg_state *drbg, struct drbg_string *pers,
 			entropylen = ((entropylen + 1) / 2) * 3;
 		BUG_ON((entropylen * 2) > sizeof(entropy));
 
+		/* Get seed from in-kernel /dev/urandom */
+		if (!rng_is_initialized())
+			new_seed_state = DRBG_SEED_STATE_PARTIAL;
+
+		ret = drbg_get_random_bytes(drbg, entropy, entropylen);
+		if (ret)
+			goto out;
+
 		if (!drbg->jent) {
-
-			if (!rng_is_initialized())
-				new_seed_state = DRBG_SEED_STATE_PARTIAL;
-
-			/* Get seed from in-kernel /dev/urandom */
-			ret = drbg_get_random_bytes(drbg, entropy, entropylen);
-			if (ret)
-				goto out;
-
 			drbg_string_fill(&data1, entropy, entropylen);
 			pr_devel("DRBG: (re)seeding with %u bytes of entropy\n",
 				 entropylen);
 		} else {
 			/* Get seed from Jitter RNG */
 			ret = crypto_rng_get_bytes(drbg->jent,
-						   entropy,
-						   entropylen * 2);
+						   entropy + entropylen,
+						   entropylen);
 			if (ret) {
 				pr_devel("DRBG: jent failed with %d\n", ret);
 
@@ -1517,6 +1516,14 @@ static int drbg_prepare_hrng(struct drbg_state *drbg)
 		return 0;
 
 	drbg->jent = crypto_alloc_rng("jitterentropy_rng", 0, 0);
+	if (IS_ERR(drbg->jent)) {
+		const int err = PTR_ERR(drbg->jent);
+
+		drbg->jent = NULL;
+		if (fips_enabled)
+			return err;
+		pr_info("DRBG: Continuing without Jitter RNG\n");
+	}
 
 	return 0;
 }
@@ -1571,14 +1578,6 @@ static int drbg_instantiate(struct drbg_state *drbg, struct drbg_string *pers,
 		ret = drbg_prepare_hrng(drbg);
 		if (ret)
 			goto free_everything;
-
-		if (IS_ERR(drbg->jent)) {
-			ret = PTR_ERR(drbg->jent);
-			drbg->jent = NULL;
-			if (fips_enabled || ret != -ENOENT)
-				goto free_everything;
-			pr_info("DRBG: Continuing without Jitter RNG\n");
-		}
 
 		reseed = false;
 	}
