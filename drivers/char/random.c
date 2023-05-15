@@ -55,6 +55,8 @@
 #include <linux/siphash.h>
 #include <crypto/chacha.h>
 #include <crypto/blake2s.h>
+#include <crypto/rng.h>
+#include <linux/fips.h>
 #include <asm/processor.h>
 #include <asm/irq.h>
 #include <asm/irq_regs.h>
@@ -92,6 +94,13 @@ static int ratelimit_disable __read_mostly =
 	IS_ENABLED(CONFIG_WARN_ALL_UNSEEDED_RANDOM);
 module_param_named(ratelimit_disable, ratelimit_disable, int, 0644);
 MODULE_PARM_DESC(ratelimit_disable, "Disable random ratelimit suppression");
+
+static DEFINE_MUTEX(crypto_fips_rng_lock);
+static struct crypto_rng *crypto_fips_rng;
+
+static int fips_random	__read_mostly = 0;
+module_param_named(fips_random, fips_random, int, 0644);
+MODULE_PARM_DESC(fips_random, "Force FIPS Random Number Generator (RNG)");
 
 /*
  * Returns whether or not the input pool has been seeded and thus guaranteed
@@ -395,6 +404,63 @@ void get_random_bytes(void *buf, size_t len)
 	_get_random_bytes(buf, len);
 }
 EXPORT_SYMBOL(get_random_bytes);
+
+static ssize_t get_random_bytes_fips(struct iov_iter *iter, bool drbg_reseed)
+{
+	u8 block[CHACHA_BLOCK_SIZE];
+	size_t bytes, copied, total = 0;
+	struct crypto_rng *rng;
+	int ret;
+
+	mutex_lock(&crypto_fips_rng_lock);
+
+	if (!crypto_fips_rng) {
+		rng = crypto_alloc_rng("drbg_nopr_ctr_aes256", 0, 0);
+		if (IS_ERR(rng)) {
+			ret = PTR_ERR(rng);
+			goto unlock;
+		}
+
+		ret = crypto_rng_reset(rng, NULL, 0);
+		if (ret) {
+			crypto_free_rng(rng);
+			goto unlock;
+		}
+
+		crypto_fips_rng = rng;
+	}
+	else if (drbg_reseed)
+		crypto_rng_reset(crypto_fips_rng, NULL, 0);
+
+	for (;;) {
+		bytes = min(iov_iter_count(iter), sizeof(block));
+		ret = crypto_rng_get_bytes(crypto_fips_rng, block, bytes);
+		if (ret < 0)
+			break;
+
+		copied = copy_to_iter(block, bytes, iter);
+		total += copied;
+
+		if (!iov_iter_count(iter) || copied != bytes)
+			break;
+
+		if (total % PAGE_SIZE == 0) {
+			if (signal_pending(current))
+				break;
+			cond_resched();
+		}
+	}
+
+	memzero_explicit(block, sizeof(block));
+
+	if (drbg_reseed)
+		crypto_rng_reset(crypto_fips_rng, NULL, 0);
+
+unlock:
+	mutex_unlock(&crypto_fips_rng_lock);
+
+	return total ? total : -EFAULT;
+}
 
 static ssize_t get_random_bytes_user(struct iov_iter *iter)
 {
@@ -1283,6 +1349,14 @@ SYSCALL_DEFINE3(getrandom, char __user *, ubuf, size_t, len, unsigned int, flags
 	if ((flags & (GRND_INSECURE | GRND_RANDOM)) == (GRND_INSECURE | GRND_RANDOM))
 		return -EINVAL;
 
+	if (fips_enabled || fips_random) {
+		ret = import_single_range(ITER_DEST, ubuf, len, &iov, &iter);
+		if (unlikely(ret))
+			return ret;
+
+		return get_random_bytes_fips(&iter, flags & GRND_RANDOM);
+	}
+
 	if (!crng_ready() && !(flags & GRND_INSECURE)) {
 		if (flags & GRND_NONBLOCK)
 			return -EAGAIN;
@@ -1299,6 +1373,9 @@ SYSCALL_DEFINE3(getrandom, char __user *, ubuf, size_t, len, unsigned int, flags
 
 static __poll_t random_poll(struct file *file, poll_table *wait)
 {
+	if (fips_enabled || fips_random)
+		return EPOLLIN | EPOLLRDNORM;
+
 	poll_wait(file, &crng_init_wait, wait);
 	return crng_ready() ? EPOLLIN | EPOLLRDNORM : EPOLLOUT | EPOLLWRNORM;
 }
@@ -1333,12 +1410,18 @@ static ssize_t write_pool_user(struct iov_iter *iter)
 
 static ssize_t random_write_iter(struct kiocb *kiocb, struct iov_iter *iter)
 {
+	if (fips_enabled || fips_random)
+		return -ENOTSUPP;
+
 	return write_pool_user(iter);
 }
 
 static ssize_t urandom_read_iter(struct kiocb *kiocb, struct iov_iter *iter)
 {
 	static int maxwarn = 10;
+
+	if (fips_enabled || fips_random)
+		return get_random_bytes_fips(iter, kiocb->ki_flags & O_SYNC);
 
 	/*
 	 * Opportunistically attempt to initialize the RNG on platforms that
@@ -1363,6 +1446,9 @@ static ssize_t urandom_read_iter(struct kiocb *kiocb, struct iov_iter *iter)
 static ssize_t random_read_iter(struct kiocb *kiocb, struct iov_iter *iter)
 {
 	int ret;
+
+	if (fips_enabled || fips_random)
+		return get_random_bytes_fips(iter, kiocb->ki_flags & O_SYNC);
 
 	if (!crng_ready() &&
 	    ((kiocb->ki_flags & (IOCB_NOWAIT | IOCB_NOIO)) ||
