@@ -144,13 +144,13 @@ static int atmel_asoc_wm8904_probe(struct platform_device *pdev)
 	id = of_alias_get_id((struct device_node *)dailink->cpus->of_node, "ssc");
 	ret = atmel_ssc_set_audio(id);
 	if (ret != 0) {
-		dev_err(&pdev->dev, "failed to set SSC %d for audio\n", id);
+		dev_err_probe(&pdev->dev, ret, "failed to set SSC %d for audio\n", id);
 		return ret;
 	}
 
 	ret = snd_soc_register_card(card);
 	if (ret) {
-		dev_err(&pdev->dev, "snd_soc_register_card failed\n");
+		dev_err_probe(&pdev->dev, ret, "snd_soc_register_card failed\n");
 		goto err_set_audio;
 	}
 
