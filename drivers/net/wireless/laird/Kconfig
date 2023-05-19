@@ -84,10 +84,10 @@ config LRDMWL_FIPS
 endif # LRDMWL
 
 config LRD_MWIFIEX
-	tristate "Laird Connectivity wireless support based for Marvell/NXP chipsets"
+	tristate "Sona Series driver (cfg80211 compatible)"
 	depends on CFG80211
 	help
-		Select to build the mwifiex driver
+		Select to build the mwifiex driver for thick firmware architecture
 
 		If you want to compile the driver as a module (= code which can be
 		inserted in and removed from the running kernel whenever you want),
@@ -95,25 +95,33 @@ config LRD_MWIFIEX
 		modules will be called moal and mlan.
 
 if LRD_MWIFIEX
+config LRD_MWIFIEX_NX61X
+	bool "Sona NX611 driver"
+	depends on MMC
+	select FW_LOADER
+	help
+		Sona NX611 Wi-Fi module
 
-config LRD_MWIFIEX_PCIE
+config LRD_MWIFIEX_8997
+	bool "8997 driver for manufacturing"
+	help
+		8997 Wi-Fi module for manufacturing purposes only
+
+if LRD_MWIFIEX_8997
+config LRD_MWIFIEX_8997_PCIE
 	bool "PCIE Bus"
 	depends on PCI
 	select FW_LOADER
 	help
 		PCIe Wi-Fi module
 
-config LRD_MWIFIEX_SDIO
+config LRD_MWIFIEX_8997_SDIO
 	bool "SDIO Bus"
 	depends on MMC
 	select FW_LOADER
 	help
 		SDIO Wi-Fi module
-
-config LRD_MWIFIEX_WIFI_DIRECT_SUPPORT
-	bool "Include support for Wi-Fi Direct"
-	help
-		Select to include support for Wi-Fi direct mode.
+endif # LRD_MWIFIEX_8997
 
 endif # LRD_MWIFIEX
 
