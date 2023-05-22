@@ -11,7 +11,8 @@
  * published by the Free Software Foundation.
  */
 
-#include <drm/drmP.h>
+#include <drm/drm_crtc.h>
+#include <drm/drm_modes.h>
 #include <drm/drm_panel.h>
 
 #include <linux/module.h>
@@ -138,7 +139,6 @@ static const struct drm_display_mode dmt035qwnxnt_mode = {
 	.vsync_start = 480 + 2,
 	.vsync_end = 480 + 2 + 2,
 	.vtotal = 480 + 2 + 2 + 2,
-	.vrefresh = 60,
 	.flags = DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_NVSYNC,
 };
 
@@ -273,12 +273,11 @@ static int ili9488_unprepare(struct drm_panel *panel)
 	return ili9488_power_off(ctx);
 }
 
-static int ili9488_get_modes(struct drm_panel *panel)
+static int ili9488_get_modes(struct drm_panel *panel, struct drm_connector *connector)
 {
-	struct drm_connector *connector = panel->connector;
 	struct drm_display_mode *mode;
 
-	mode = drm_mode_duplicate(panel->drm, &dmt035qwnxnt_mode);
+	mode = drm_mode_duplicate(connector->dev, &dmt035qwnxnt_mode);
 
 	drm_mode_set_name(mode);
 
@@ -322,7 +321,7 @@ static int ili9488_probe(struct spi_device *spi)
 
 	ret = spi_setup(spi);
 	if (ret < 0) {
-		dev_err(dev, "spi setup failed.\n");
+		dev_err_probe(dev, ret, "spi setup failed.\n");
 		return ret;
 	}
 
@@ -330,7 +329,7 @@ static int ili9488_probe(struct spi_device *spi)
 
 	ctx->power = devm_regulator_get(dev, "power");
 	if (IS_ERR(ctx->power)) {
-		dev_err(dev, "Couldn't get our power regulator\n");
+		dev_err_probe(dev, ret, "Couldn't get our power regulator\n");
 		return PTR_ERR(ctx->power);
 	}
 
@@ -367,24 +366,19 @@ static int ili9488_probe(struct spi_device *spi)
 
 	ctx->reset_gpio = devm_gpiod_get(dev, "reset", GPIOD_OUT_LOW);
 	if (IS_ERR(ctx->reset_gpio)) {
-		dev_err(dev, "Couldn't get our reset GPIO\n");
-		return PTR_ERR(ctx->reset_gpio);
+		ret = PTR_ERR(ctx->reset_gpio);
+		dev_err_probe(dev, ret, "Couldn't get our reset GPIO\n");
+		return ret;
 	}
 	gpiod_set_consumer_name(ctx->reset_gpio, "Panel Reset");
 
 	spi_set_drvdata(spi, ctx);
 
-	drm_panel_init(&ctx->panel);
+	drm_panel_init(&ctx->panel, dev, &ili9488_drm_funcs, DRM_MODE_CONNECTOR_DPI);
 
-	ctx->panel.dev = dev;
-	ctx->panel.funcs = &ili9488_drm_funcs;
+	drm_panel_add(&ctx->panel);
 
-	ret = drm_panel_add(&ctx->panel);
-
-	if (!ret)
-		dev_info(dev, "Ilitek 9488 Panel driver Initialized\n");
-
-	return ret;
+	return 0;
 }
 
 static int ili9488_remove(struct spi_device *spi)
