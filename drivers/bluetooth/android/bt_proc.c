@@ -178,7 +178,7 @@ string_to_number(char *s)
 	} else
 		base = 10;
 
-	for (s = s; *s != 0; s++) {
+	for ( ; *s != 0; s++) {
 		if ((*s >= '0') && (*s <= '9'))
 			r = (r * base) + (*s - '0');
 		else if ((*s >= 'A') && (*s <= 'F'))
@@ -352,7 +352,7 @@ proc_write(struct file *file,
 			line += strlen("fw_reload") + 1;
 			config_data = string_to_number(line);
 		}
-#ifdef __SDIO__ 
+#ifdef __SDIO__
 		else
 			config_data = FW_RELOAD_SDIO_INBAND_RESET;
 #endif // __SDIO__
