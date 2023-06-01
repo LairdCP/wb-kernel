@@ -3474,7 +3474,11 @@ int ath6kl_cfg80211_get_channel(struct wiphy *wiphy,
 	if (!chandef->chan)
 		goto error;
 
-	chandef->width = NL80211_CHAN_WIDTH_20;
+	if (vif->bss_ch == 2484)
+		chandef->width = NL80211_CHAN_WIDTH_20_NOHT;
+	else
+		chandef->width = NL80211_CHAN_WIDTH_20;
+
 	chandef->center_freq1 = vif->bss_ch;
 	chandef->center_freq2 = 0;
 
