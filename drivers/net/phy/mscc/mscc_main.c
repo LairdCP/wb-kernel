@@ -580,11 +580,9 @@ static int vsc85xx_default_config(struct phy_device *phydev)
 		return rc;
 
 	/* Laird */
-	rc = phy_modify_paged(phydev, MSCC_PHY_PAGE_EXTENDED_GPIO,
+	return phy_modify_paged(phydev, MSCC_PHY_PAGE_EXTENDED_GPIO,
 				MSCC_PHY_CLKOUT_CNTL, MSCC_CLKOUT_FREQ_MASK,
 				MSCC_CLKOUT_FREQ_125_MHZ);
-	if (rc)
-		return rc;
 }
 
 static int vsc85xx_get_tunable(struct phy_device *phydev,
