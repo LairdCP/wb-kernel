@@ -102,6 +102,14 @@
 #include <linux/kernel.h>
 #include <linux/jiffies.h>
 
+static bool fips_drbg_force_reseed_insert = 0;
+module_param(fips_drbg_force_reseed_insert, bool, 0444);
+MODULE_PARM_DESC(fips_drbg_force_reseed_insert, "FIPS testing: force drbg reseed test to fail.");
+
+static bool fips_force_drbg_max_requests_insert = 0;
+module_param(fips_force_drbg_max_requests_insert, bool, 0444);
+MODULE_PARM_DESC(fips_force_drbg_max_requests_insert, "FIPS testing: force drbg max requests bits to fail.");
+
 /***************************************************************
  * Backend cipher definitions available to DRBG
  ***************************************************************/
@@ -1049,6 +1057,11 @@ static inline int __drbg_seed(struct drbg_state *drbg, struct list_head *seed,
 	/* 10.1.1.2 / 10.1.1.3 step 5 */
 	drbg->reseed_ctr = 1;
 
+	/* Added for FIPS testing */
+	if (fips_drbg_force_reseed_insert)
+		printk("DRBG reseed counter value after reseed operation is %zu\n", drbg->reseed_ctr);
+	/* End of patch for FIPS testing */
+
 	switch (drbg->seeded) {
 	case DRBG_SEED_STATE_UNSEEDED:
 		/* Impossible, but handle it to silence compiler warnings. */
@@ -1402,6 +1415,12 @@ static int drbg_generate(struct drbg_state *drbg,
 
 	/* 9.3.1 step 2 */
 	len = -EINVAL;
+
+	/* Added for FIPS testing */
+	if (fips_force_drbg_max_requests_insert)
+		buflen = drbg_max_request_bytes(drbg) +  1;
+	/* End of patch for FIPS testing */
+
 	if (buflen > (drbg_max_request_bytes(drbg))) {
 		pr_devel("DRBG: requested random numbers too large %u\n",
 			 buflen);
@@ -1422,6 +1441,15 @@ static int drbg_generate(struct drbg_state *drbg,
 	 * 9.3.1 step 6 and 9 supplemented by 9.3.2 step c is implemented
 	 * here. The spec is a bit convoluted here, we make it simpler.
 	 */
+
+	/* Added for FIPS testing */
+	if (fips_drbg_force_reseed_insert) {
+		printk("Forcing DRBG Reseed counter value to be greater than reseed threshold value");
+		drbg->reseed_ctr = drbg->reseed_threshold + 1;
+		printk("DRBG reseed counter value after modification is %zu\n", drbg->reseed_ctr);
+	}
+	/* End of patch for FIPS testing */
+
 	if (drbg->reseed_threshold < drbg->reseed_ctr)
 		drbg->seeded = DRBG_SEED_STATE_UNSEEDED;
 
