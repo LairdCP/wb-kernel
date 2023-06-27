@@ -50,6 +50,14 @@
 
 #define JENT_CONDITIONING_HASH	"sha3-256-generic"
 
+#ifdef CONFIG_CRYPTO_JITTERENTROPY_TESTINTERFACE
+//////////////Added for Kernel Testing//////////////
+static bool fips_prevent_panic = 0;
+module_param(fips_prevent_panic, bool, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+MODULE_PARM_DESC(fips_prevent_panic, "FIPS testing: prevent health test panics");
+//////////////Added for Kernel Testing//////////////
+#endif
+
 /***************************************************************************
  * Helper function
  ***************************************************************************/
@@ -278,8 +286,17 @@ static int jent_kcapi_random(struct crypto_rng *tfm,
 		 * an SP800-90B permanent health test error is treated as
 		 * a FIPS module error.
 		 */
-		if (fips_enabled)
-			panic("Jitter RNG permanent health test failure\n");
+		if (fips_enabled) {
+
+#ifdef CONFIG_CRYPTO_JITTERENTROPY_TESTINTERFACE
+			//////////////Added for Kernel Testing//////////////
+			if (fips_prevent_panic)
+				printk("FIPS test: preventing permanent health test failure panic\n");
+			else
+			//////////////Added for Kernel Testing//////////////
+#endif
+				panic("Jitter RNG permanent health test failure\n");
+		}
 
 		pr_err("Jitter RNG permanent health test failure\n");
 		ret = -EFAULT;

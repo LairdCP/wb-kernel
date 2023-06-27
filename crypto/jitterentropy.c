@@ -135,18 +135,21 @@ struct rand_data {
  */
 #define JENT_ENTROPY_SAFETY_FACTOR	64
 
+#include <linux/module.h>
 #include <linux/fips.h>
 #include "jitterentropy.h"
 
-#include <linux/module.h>
+#ifdef CONFIG_CRYPTO_JITTERENTROPY_TESTINTERFACE
+//////////////Added for Kernel Testing//////////////
+static int fips_fail_apt = 0;
+module_param(fips_fail_apt, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+MODULE_PARM_DESC(fips_fail_apt, "FIPS testing: force APT health test failure");
 
-static bool fips_fail_jent_apt_insert = 0;
-module_param(fips_fail_jent_apt_insert, bool, 0444);
-MODULE_PARM_DESC(fips_fail_jent_apt_insert, "FIPS testing: force jent_apt_insert() health test to fail.");
-
-static bool fips_fail_jent_rct_insert = 0;
-module_param(fips_fail_jent_rct_insert, bool, 0444);
-MODULE_PARM_DESC(fips_fail_jent_rct_insert, "FIPS testing: force jent_rct_insert() health test to fail.");
+static int fips_fail_rct = 0;
+module_param(fips_fail_rct, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+MODULE_PARM_DESC(fips_fail_rct, "FIPS testing: force RCT health test failure");
+//////////////Added for Kernel Testing//////////////
+#endif
 
 /***************************************************************************
  * Adaptive Proportion Test
@@ -185,7 +188,24 @@ static void jent_apt_insert(struct rand_data *ec, unsigned int delta_masked)
 	if (delta_masked == ec->apt_base)
 		ec->apt_count++;
 
+#ifdef CONFIG_CRYPTO_JITTERENTROPY_TESTINTERFACE
+	//////////////Added for Kernel Testing//////////////
+	if (fips_fail_apt) {
+		// We skip the first 100 "CLEARCACHE" rounds of startup tests.
+		if (fips_fail_apt - 1 == 100) {
+			ec->apt_count = JENT_APT_CUTOFF_PERMANENT;
+			printk("FIPS test: setting APT count to %u\n",
+			       ec->apt_count);
+			fips_fail_apt = 0;
+		} else {
+			fips_fail_apt++;
+		}
+	}
+	//////////////Added for Kernel Testing//////////////
+#endif
+
 	ec->apt_observations++;
+
 
 	if (ec->apt_observations >= JENT_APT_WINDOW_SIZE)
 		jent_apt_reset(ec, delta_masked);
@@ -232,7 +252,24 @@ static void jent_rct_insert(struct rand_data *ec, int stuck)
 		/* Reset RCT */
 		ec->rct_count = 0;
 	}
+
+#ifdef CONFIG_CRYPTO_JITTERENTROPY_TESTINTERFACE
+	//////////////Added for Kernel Testing//////////////
+	if (fips_fail_rct) {
+		// We skip the first 100 "CLEARCACHE" rounds of startup tests.
+		if (fips_fail_rct - 1 == 100) {
+			ec->rct_count = JENT_RCT_CUTOFF_PERMANENT;
+			printk("FIPS test: setting RCT count to %u\n",
+			       ec->rct_count);
+			fips_fail_rct = 0;
+		} else {
+			fips_fail_rct++;
+		}
+	}
+	//////////////Added for Kernel Testing//////////////
+#endif
 }
+
 
 static inline __u64 jent_delta(__u64 prev, __u64 next)
 {
