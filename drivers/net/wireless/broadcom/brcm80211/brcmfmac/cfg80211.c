@@ -7655,7 +7655,6 @@ struct brcmf_cfg80211_info *brcmf_cfg80211_attach(struct brcmf_pub *drvr,
 			case BRCM_CC_4339_CHIP_ID:
 			case BRCM_CC_43430_CHIP_ID:
 			case CY_CC_43439_CHIP_ID:
-			case CY_CC_55572_CHIP_ID:
 				strcpy(ccreq.country_abbrev, "EU");
 				break;
 			}
@@ -7690,8 +7689,7 @@ struct brcmf_cfg80211_info *brcmf_cfg80211_attach(struct brcmf_pub *drvr,
 		}
 		brcmf_info("Using regulatory domain %s\n", drvr->settings->regdomain);
 	} else if (drvr->bus_if->chip == CY_CC_4373_CHIP_ID
-			|| drvr->bus_if->chip == CY_CC_43439_CHIP_ID
-			|| drvr->bus_if->chip == CY_CC_55572_CHIP_ID) {
+			|| drvr->bus_if->chip == CY_CC_43439_CHIP_ID) {
 		brcmf_err("Regulatory domain not configured, aborting!\n");
 		goto wiphy_out;
 	}
