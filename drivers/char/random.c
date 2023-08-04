@@ -97,6 +97,7 @@ MODULE_PARM_DESC(ratelimit_disable, "Disable random ratelimit suppression");
 
 static DEFINE_MUTEX(crypto_fips_rng_lock);
 static struct crypto_rng *crypto_fips_rng;
+static struct crypto_rng *crypto_jitter_fips_rng;
 
 static int fips_random	__read_mostly = 0;
 module_param_named(fips_random, fips_random, int, 0644);
@@ -405,7 +406,7 @@ void get_random_bytes(void *buf, size_t len)
 }
 EXPORT_SYMBOL(get_random_bytes);
 
-static ssize_t get_random_bytes_fips(struct iov_iter *iter, bool drbg_reseed)
+static ssize_t get_random_bytes_fips(struct iov_iter *iter, bool seed)
 {
 	u8 block[CHACHA_BLOCK_SIZE];
 	size_t bytes, copied, total = 0;
@@ -414,27 +415,47 @@ static ssize_t get_random_bytes_fips(struct iov_iter *iter, bool drbg_reseed)
 
 	mutex_lock(&crypto_fips_rng_lock);
 
-	if (!crypto_fips_rng) {
-		rng = crypto_alloc_rng("drbg_nopr_ctr_aes256", 0, 0);
-		if (IS_ERR(rng)) {
-			ret = PTR_ERR(rng);
-			goto unlock;
-		}
+	if (seed) {
+		if (!crypto_jitter_fips_rng) {
+			rng = crypto_alloc_rng("jitterentropy_rng", 0, 0);
+			if (IS_ERR(rng)) {
+				ret = PTR_ERR(rng);
+				goto unlock;
+			}
 
-		ret = crypto_rng_reset(rng, NULL, 0);
-		if (ret) {
-			crypto_free_rng(rng);
-			goto unlock;
-		}
+			ret = crypto_rng_reset(rng, NULL, 0);
+			if (ret) {
+				crypto_free_rng(rng);
+				goto unlock;
+			}
 
-		crypto_fips_rng = rng;
+			crypto_jitter_fips_rng = rng;
+		}
+		else
+			rng = crypto_jitter_fips_rng;
+	} else {
+		if (!crypto_fips_rng) {
+			rng = crypto_alloc_rng("drbg_nopr_ctr_aes256", 0, 0);
+			if (IS_ERR(rng)) {
+				ret = PTR_ERR(rng);
+				goto unlock;
+			}
+
+			ret = crypto_rng_reset(rng, NULL, 0);
+			if (ret) {
+				crypto_free_rng(rng);
+				goto unlock;
+			}
+
+			crypto_fips_rng = rng;
+		}
+		else
+			rng = crypto_fips_rng;
 	}
-	else if (drbg_reseed)
-		crypto_rng_reset(crypto_fips_rng, NULL, 0);
 
 	for (;;) {
 		bytes = min(iov_iter_count(iter), sizeof(block));
-		ret = crypto_rng_get_bytes(crypto_fips_rng, block, bytes);
+		ret = crypto_rng_get_bytes(rng, block, bytes);
 		if (ret < 0)
 			break;
 
@@ -452,9 +473,6 @@ static ssize_t get_random_bytes_fips(struct iov_iter *iter, bool drbg_reseed)
 	}
 
 	memzero_explicit(block, sizeof(block));
-
-	if (drbg_reseed)
-		crypto_rng_reset(crypto_fips_rng, NULL, 0);
 
 unlock:
 	mutex_unlock(&crypto_fips_rng_lock);
