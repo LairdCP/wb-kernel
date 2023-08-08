@@ -4586,6 +4586,10 @@ static const struct alg_test_desc alg_test_descs[] = {
 			.cipher = __VECS(aes_cfb_tv_template)
 		},
 	}, {
+		.alg = "cfb8(aes)",
+		.test = alg_test_null,
+		.fips_allowed = 1,
+	}, {
 #if IS_ENABLED(CONFIG_CRYPTO_ARIA)
 		.alg = "cfb(aria)",
 		.test = alg_test_skcipher,
