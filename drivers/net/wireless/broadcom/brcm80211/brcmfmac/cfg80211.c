@@ -9869,6 +9869,8 @@ struct brcmf_cfg80211_info *brcmf_cfg80211_attach(struct brcmf_pub *drvr,
 				ccreq.rev = cpu_to_le32(116);
 			else if (!strcmp("JP", ccreq.ccode))
 				ccreq.rev = cpu_to_le32(101);
+			else if (!strcmp("KR", ccreq.ccode))
+				ccreq.rev = cpu_to_le32(301);
 			else {
 				brcmf_err("Regulatory domain %s not supported, aborting!\n", drvr->settings->regdomain);
 				goto wiphy_out;
