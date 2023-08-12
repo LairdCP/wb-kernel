@@ -1125,7 +1125,7 @@ static int atmel_aes_start(struct atmel_aes_dev *dd)
 	struct atmel_aes_reqctx *rctx = skcipher_request_ctx(req);
 
 	bool use_dma = (req->cryptlen >= ATMEL_AES_DMA_THRESHOLD) ||
-		dd->ctx->block_size < AES_BLOCK_SIZE;
+		(dd->ctx->block_size < AES_BLOCK_SIZE);
 
 	dd->force_sync = atmel_aes.sync_mode ||
 		(req->cryptlen <= ATMEL_AES_SYNC_THRESHOLD);
