@@ -621,7 +621,9 @@ static int atmel_aes_cpu_start(struct atmel_aes_dev *dd,
 			       size_t len,
 			       atmel_aes_fn_t resume)
 {
-	size_t padlen = atmel_aes_padlen(len, AES_BLOCK_SIZE);
+	size_t padlen;
+	
+	padlen = atmel_aes_padlen(len, AES_BLOCK_SIZE);
 
 	if (unlikely(len == 0))
 		return -EINVAL;
@@ -1124,7 +1126,8 @@ static int atmel_aes_start(struct atmel_aes_dev *dd)
 	struct skcipher_request *req = skcipher_request_cast(dd->areq);
 	struct atmel_aes_reqctx *rctx = skcipher_request_ctx(req);
 
-	bool use_dma = (req->cryptlen >= ATMEL_AES_DMA_THRESHOLD);
+	bool use_dma = (req->cryptlen >= ATMEL_AES_DMA_THRESHOLD) ||
+		dd->ctx->block_size < AES_BLOCK_SIZE;
 
 	dd->force_sync = atmel_aes.sync_mode ||
 		(req->cryptlen <= ATMEL_AES_SYNC_THRESHOLD);
