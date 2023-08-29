@@ -222,6 +222,7 @@
 
 &usart2 {
 	pinctrl-0 = <&pinctrl_usart2 &pinctrl_usart2_rts_cts>;
+	atmel,use-dma-rx;
 	atmel,use-dma-tx;
 	status = "okay";
 };
@@ -229,7 +230,6 @@
 &usart3 {
 	pinctrl-0 = <&pinctrl_usart3 &pinctrl_usart3_rts_cts>;
 	status = "okay";
-	atmel,use-dma-tx;
 };
 
 &uart0 {
