@@ -9844,12 +9844,12 @@ struct brcmf_cfg80211_info *brcmf_cfg80211_attach(struct brcmf_pub *drvr,
 		if (!strcmp("ETSI", drvr->settings->regdomain)) {
 			switch (drvr->bus_if->chip) {
 			case CY_CC_4373_CHIP_ID:
+			case CY_CC_55572_CHIP_ID:
 				strcpy(ccreq.country_abbrev, "DE");
 				break;
 			case BRCM_CC_4339_CHIP_ID:
 			case BRCM_CC_43430_CHIP_ID:
 			case CY_CC_43439_CHIP_ID:
-			case CY_CC_55572_CHIP_ID:
 				strcpy(ccreq.country_abbrev, "EU");
 				break;
 			}
