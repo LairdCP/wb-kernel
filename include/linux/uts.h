@@ -9,7 +9,7 @@
 #ifndef CONFIG_CRYPTO_FIPS
 #define UTS_SYSNAME "Summit Linux"
 #else
-#define UTS_SYSNAME "Summit Linux 7.1"
+#define UTS_SYSNAME "Summit Linux 11.0"
 #endif
 #endif
 
