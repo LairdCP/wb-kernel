@@ -488,7 +488,7 @@ brcmf_twt_setup_event_handler(struct brcmf_if *ifp, const struct brcmf_event_msg
 			twt_params.bcast_twt_id = setup_desc->bid;
 
 			/* TODO: Handle the Broadcast TWT Setup Event */
-			/* FALLTHRU */
+			fallthrough;
 		default:
 			brcmf_err("TWT: Setup EVENT: Negotiation Type %d not handled",
 				  twt_params.negotiation_type);
@@ -631,7 +631,7 @@ brcmf_twt_teardown_event_handler(struct brcmf_if *ifp, const struct brcmf_event_
 		twt_params.bcast_twt_id = teardown_desc->bid;
 
 		/* TODO: Handle the Broadcast TWT Teardown Event */
-		/* FALLTHRU */
+		fallthrough;
 	default:
 		brcmf_err("TWT: Negotiation Type not handled\n");
 		ret = -EOPNOTSUPP;
@@ -756,7 +756,7 @@ brcmf_twt_setup_oper_handler(struct brcmf_if *ifp, struct brcmf_twt_params twt_p
 		val.sdesc.bid = twt_params.bcast_twt_id;
 
 		/* TODO: Handle the Broadcast TWT Setup REQ */
-		/* FALLTHRU */
+		fallthrough;
 	default:
 		brcmf_err("TWT: Setup REQ: Negotiation Type %d not handled",
 			  twt_params.negotiation_type);
@@ -913,7 +913,7 @@ brcmf_twt_teardown_oper_handler(struct brcmf_if *ifp, struct brcmf_twt_params tw
 		val.teardesc.bid = twt_params.bcast_twt_id;
 
 		/* TODO: Handle the Broadcast TWT Teardown REQ */
-		/* FALLTHRU */
+		fallthrough;
 	default:
 		brcmf_err("TWT: Teardown REQ: Negotiation Type %d not handled",
 			  twt_params.negotiation_type);
