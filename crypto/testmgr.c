@@ -44,6 +44,17 @@ static bool notests;
 module_param(notests, bool, 0644);
 MODULE_PARM_DESC(notests, "disable crypto self-tests");
 
+////////Added for Kernel Testing//////////////
+/* FIPS 140-2 testing parameter */
+static char *fips_tinker = NULL;
+module_param(fips_tinker, charp, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+MODULE_PARM_DESC(fips_tinker, "FIPS testing: select cipher implementation for tinkering");
+
+static int fips_prevent_panic = 0;
+module_param(fips_prevent_panic, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+MODULE_PARM_DESC(fips_prevent_panic, "FIPS testing: prevent panic upon failing self test");
+////////Added for Kernel Testing//////////////
+
 static bool panic_on_fail;
 module_param(panic_on_fail, bool, 0444);
 
@@ -1403,6 +1414,16 @@ static int test_shash_vec_cfg(const struct hash_testvec *vec,
 	if (err)
 		return err;
 result_ready:
+	//////////////////////Added for Kernel Testing////////////////////
+	if (fips_tinker &&
+	    !strncmp(fips_tinker, tfm->base.__crt_alg->cra_driver_name,
+		     strlen(tfm->base.__crt_alg->cra_driver_name))) {
+
+		result[0] = (result[0] + 1) & 0xff;
+		printk("Altering input for hash %s\n", fips_tinker);
+	}
+
+	//////////////////////Added for Kernel Testing///////////////////
 	return check_hash_result("shash", result, digestsize, vec, vec_name,
 				 driver, cfg);
 }
@@ -1605,6 +1626,16 @@ static int test_ahash_vec_cfg(const struct hash_testvec *vec,
 	}
 
 result_ready:
+	//////////////////////Added for Kernel Testing////////////////////
+	if (fips_tinker &&
+	    !strncmp(fips_tinker, tfm->base.__crt_alg->cra_driver_name,
+		     strlen(tfm->base.__crt_alg->cra_driver_name))) {
+
+		result[0] = (result[0] + 1) & 0xff;
+		printk("Altering input for hash %s\n", fips_tinker);
+	}
+	//////////////////////Added for Kernel Testing////////////////////
+
 	return check_hash_result("ahash", result, digestsize, vec, vec_name,
 				 driver, cfg);
 }
@@ -2031,6 +2062,8 @@ static int test_aead_vec_cfg(int enc, const struct aead_testvec *vec,
 	const char *driver = crypto_aead_driver_name(tfm);
 	const u32 req_flags = CRYPTO_TFM_REQ_MAY_BACKLOG | cfg->req_flags;
 	const char *op = enc ? "encryption" : "decryption";
+	char *testbuf = NULL;
+	const char *expected_ptr = enc ? vec->ctext : vec->ptext;
 	DECLARE_CRYPTO_WAIT(wait);
 	u8 _iv[3 * (MAX_ALGAPI_ALIGNMASK + 1) + MAX_IVLEN];
 	u8 *iv = PTR_ALIGN(&_iv[0], 2 * (MAX_ALGAPI_ALIGNMASK + 1)) +
@@ -2183,11 +2216,32 @@ static int test_aead_vec_cfg(int enc, const struct aead_testvec *vec,
 	if (err) /* Expectedly failed. */
 		return 0;
 
+	////////////////////////Added for Kernel testing///////////////////////////
+	if ((enc ? vec->clen : vec->plen) && fips_tinker &&
+	    !strncmp(fips_tinker, tfm->base.__crt_alg->cra_driver_name,
+		     strlen(tfm->base.__crt_alg->cra_driver_name))) {
+
+		testbuf = kmalloc(enc ? vec->clen : vec->plen, GFP_KERNEL);
+		if (!testbuf)
+			return -ENOMEM;
+		memcpy(testbuf,
+		       enc ? vec->ctext : vec->ptext,
+		       enc ? vec->clen : vec->plen);
+		testbuf[0] = (testbuf[0] + 1) & 0xff;
+		expected_ptr = testbuf;
+
+		printk("Altering expected data for aead cipher %s\n",
+		       fips_tinker);
+	}
+	////////////////////////Added for Kernel testing///////////////////////////
+
 	/* Check for the correct output (ciphertext or plaintext) */
-	err = verify_correct_output(&tsgls->dst, enc ? vec->ctext : vec->ptext,
+	err = verify_correct_output(&tsgls->dst, expected_ptr,
 				    enc ? vec->clen : vec->plen,
 				    vec->alen,
 				    enc || cfg->inplace_mode == OUT_OF_PLACE);
+	if (testbuf)
+		kfree(testbuf);
 	if (err == -EOVERFLOW) {
 		pr_err("alg: aead: %s %s overran dst buffer on test vector %s, cfg=\"%s\"\n",
 		       driver, op, vec_name, cfg->name);
@@ -2747,6 +2801,18 @@ static int test_cipher(struct crypto_cipher *tfm, int enc,
 
 		data = xbuf[0];
 		memcpy(data, input, template[i].len);
+		///////////Addition for Kernel Testing///////////
+		if (fips_tinker &&
+		    !strncmp(fips_tinker, tfm->base.__crt_alg->cra_driver_name,
+			     strlen(tfm->base.__crt_alg->cra_driver_name))) {
+			u8 *buf = (u8 *)data;
+
+			if (template[i].len)
+				buf[0] = (buf[0] + 1) & 0xff;
+			printk("Altering input for raw cipher %s\n",
+			       fips_tinker);
+		}
+		///////////Addition for Kernel Testing///////////
 
 		crypto_cipher_clear_flags(tfm, ~0);
 		if (template[i].wk)
@@ -2809,6 +2875,8 @@ static int test_skcipher_vec_cfg(int enc, const struct cipher_testvec *vec,
 	const char *driver = crypto_skcipher_driver_name(tfm);
 	const u32 req_flags = CRYPTO_TFM_REQ_MAY_BACKLOG | cfg->req_flags;
 	const char *op = enc ? "encryption" : "decryption";
+	char *testbuf = NULL;
+	const char *expected_ptr = enc ? vec->ctext : vec->ptext;
 	DECLARE_CRYPTO_WAIT(wait);
 	u8 _iv[3 * (MAX_ALGAPI_ALIGNMASK + 1) + MAX_IVLEN];
 	u8 *iv = PTR_ALIGN(&_iv[0], 2 * (MAX_ALGAPI_ALIGNMASK + 1)) +
@@ -2936,9 +3004,28 @@ static int test_skcipher_vec_cfg(int enc, const struct cipher_testvec *vec,
 		return -EINVAL;
 	}
 
+	////////////////////////Added for Kernel testing///////////////////////////
+	if (vec->len && fips_tinker &&
+	    !strncmp(fips_tinker, tfm->base.__crt_alg->cra_driver_name,
+		     strlen(tfm->base.__crt_alg->cra_driver_name))) {
+
+		testbuf = kmalloc(vec->len, GFP_KERNEL);
+		if (!testbuf)
+			return -ENOMEM;
+		memcpy(testbuf, enc ? vec->ctext : vec->ptext, vec->len);
+		testbuf[0] = (testbuf[0] + 1) & 0xff;
+		expected_ptr = testbuf;
+
+		printk("Altering expected data for skcipher cipher %s\n",
+		       fips_tinker);
+	}
+	////////////////////////Added for Kernel testing///////////////////////////
+
 	/* Check for the correct output (ciphertext or plaintext) */
-	err = verify_correct_output(&tsgls->dst, enc ? vec->ctext : vec->ptext,
+	err = verify_correct_output(&tsgls->dst, expected_ptr,
 				    vec->len, 0, true);
+	if (testbuf)
+		kfree(testbuf);
 	if (err == -EOVERFLOW) {
 		pr_err("alg: skcipher: %s %s overran dst buffer on test vector %s, cfg=\"%s\"\n",
 		       driver, op, vec_name, cfg->name);
@@ -3850,6 +3937,14 @@ static int drbg_cavs_test(const struct drbg_testvec *test, int pr,
 		goto outbuf;
 	}
 
+	////////Added for Kernel Testing//////////////
+        if (fips_tinker &&
+            !strncmp(fips_tinker, driver, strlen(driver))) {
+                buf[0] = (buf[0] + 1) & 0xff;
+                printk("Altering input for DRBG %s\n", fips_tinker);
+        }
+        ////////Added for Kernel Testing//////////////
+
 	ret = memcmp(test->expected, buf, test->expectedlen);
 
 outbuf:
@@ -3938,6 +4033,18 @@ static int do_test_kpp(struct crypto_kpp *tfm, const struct kpp_testvec *vec,
 			goto free_output;
 		}
 	} else {
+		////////Added for Kernel Testing/////////////
+		if (fips_tinker &&
+		    !strncmp(fips_tinker, tfm->base.__crt_alg->cra_driver_name,
+			     strlen(tfm->base.__crt_alg->cra_driver_name))) {
+			u8 *buf = (u8 *)output_buf;
+
+			if (out_len_max)
+				buf[0] = (buf[0] + 1) & 0xff;
+			printk("Altering input for KPP %s\n", fips_tinker);
+		}
+		////////Added for Kernel Testing/////////////
+
 		/* Verify calculated public key */
 		if (memcmp(vec->expected_a_public, sg_virt(req->dst),
 			   vec->expected_a_public_size)) {
@@ -4004,7 +4111,7 @@ static int do_test_kpp(struct crypto_kpp *tfm, const struct kpp_testvec *vec,
 		shared_secret = (void *)vec->expected_ss;
 	}
 
-	/*
+		/*
 	 * verify shared secret from which the user will derive
 	 * secret key by executing whatever hash it has chosen
 	 */
@@ -4159,6 +4266,18 @@ static int test_akcipher_one(struct crypto_akcipher *tfm,
 	akcipher_request_set_callback(req, CRYPTO_TFM_REQ_MAY_BACKLOG,
 				      crypto_req_done, &wait);
 
+		/////////////Added for Kernel Testing////////////////
+	           if (fips_tinker &&
+                        !strncmp(fips_tinker, tfm->base.__crt_alg->cra_driver_name,
+                                strlen(tfm->base.__crt_alg->cra_driver_name))){
+                        u8 *buf = (u8 *)xbuf[1];
+
+                        if (out_len_max)
+                                buf[0] = (buf[0] + 1) & 0xff;
+                        printk("Altering input for akcipher %s\n", fips_tinker);
+                }
+                /////////////Added for Kernel Testing////////////////////
+
 	err = crypto_wait_req(vecs->siggen_sigver_test ?
 			      /* Run asymmetric signature verification */
 			      crypto_akcipher_verify(req) :
@@ -4175,6 +4294,19 @@ static int test_akcipher_one(struct crypto_akcipher *tfm,
 			err = -EINVAL;
 			goto free_all;
 		}
+
+		 /////////////Added for Kernel Testing////////////////
+                if (fips_tinker &&
+                    !strncmp(fips_tinker, tfm->base.__crt_alg->cra_driver_name,
+                             strlen(tfm->base.__crt_alg->cra_driver_name))) {
+                        u8 *buf = (u8 *)outbuf_enc;
+
+                        if (out_len_max)
+                                buf[0] = (buf[0] + 1) & 0xff;
+                        printk("Altering input for akcipher %s\n", fips_tinker);
+                }
+                /////////////Added for Kernel Testing////////////////
+
 		/* verify that encrypted message is equal to expected */
 		if (memcmp(c, outbuf_enc, c_size) != 0) {
 			pr_err("alg: akcipher: %s test failed. Invalid output\n",
@@ -6115,6 +6247,15 @@ int alg_test(const char *driver, const char *alg, u32 type, u32 mask)
 test_done:
 	if (rc) {
 		if (fips_enabled || panic_on_fail) {
+			if (fips_prevent_panic) {
+				printk("FIPS test: prevent kernel panic\n");
+				printk("FIPS test: Reverting the flag value to avoid kernel panic\n");
+
+				pr_warn("alg: self-tests for %s using %s failed (rc=%d)",
+					alg, driver, rc);
+				return 0;
+			}
+
 			fips_fail_notify();
 			panic("alg: self-tests for %s (%s) failed in %s mode!\n",
 			      driver, alg,
