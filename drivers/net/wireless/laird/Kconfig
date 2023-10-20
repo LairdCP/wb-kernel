@@ -128,7 +128,7 @@ endif # LRD_MWIFIEX
 config QCA_CLD_WLAN
 	tristate "Qualcomm Atheros CLD WLAN module"
 	depends on CFG80211
-	select CFG80211_WEXT_EXPORT
+	depends on MMC
 	select FW_LOADER
 	select CRYPTO
 	select CRYPTO_AES
