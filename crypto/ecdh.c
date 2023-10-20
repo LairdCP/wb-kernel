@@ -13,6 +13,10 @@
 #include <linux/scatterlist.h>
 #include <linux/fips.h>
 
+static bool fips_fail_ecdh_pct = 0;
+module_param(fips_fail_ecdh_pct, bool, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+MODULE_PARM_DESC(fips_fail_ecdh_pct, "FIPS testing: force ECDH PCT to fail.");
+
 struct ecdh_ctx {
 	unsigned int curve_id;
 	unsigned int ndigits;
@@ -120,6 +124,13 @@ static int ecdh_compute_value(struct kpp_request *req)
 				kfree(public_key_pct);
 				goto free_all;
 			}
+
+			////////Added for Kernel Testing/////////////
+			if (fips_fail_ecdh_pct) {
+				*public_key_pct += 1;
+			    printk("Altering input for ECDH PCT %u\n", fips_fail_ecdh_pct);
+            }
+			////////Added for Kernel Testing/////////////
 
 			if (memcmp(public_key, public_key_pct, public_key_sz))
 				panic("ECDH PCT failed in FIPS mode");
