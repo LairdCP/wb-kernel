@@ -1781,9 +1781,6 @@ static int ath6kl_get_station(struct wiphy *wiphy, struct net_device *dev,
 	struct ath6kl *ar = ath6kl_priv(dev);
 	struct ath6kl_vif *vif = netdev_priv(dev);
 	long left;
-	u8 sgi;
-	s32 legacy;
-	u8 ht40;
 	int ret;
 
 	if (memcmp(mac, vif->bssid, ETH_ALEN) != 0)
@@ -1830,22 +1827,19 @@ static int ath6kl_get_station(struct wiphy *wiphy, struct net_device *dev,
 	sinfo->signal = vif->target_stats.cs_rssi;
 	sinfo->filled |= BIT_ULL(NL80211_STA_INFO_SIGNAL);
 
-	sgi = vif->target_stats.txrate.sgi;
-	legacy = vif->target_stats.txrate.legacy;
-	ht40 = vif->target_stats.txrate.ht40;
-
-	if (legacy != 0) {
-		sinfo->txrate.legacy = legacy / 100;
-	} else if (vif->target_stats.txrate.mcs != 0) {
+	if (vif->target_stats.txrate.legacy != RATE_AUTO) {
+		sinfo->txrate.legacy = vif->target_stats.txrate.legacy / 100;
+	} else if (((s8)vif->target_stats.txrate.mcs) != RATE_AUTO) {
 		sinfo->txrate.flags |= RATE_INFO_FLAGS_MCS;
 
-		if (ht40 != ATH6KL_IS_HT40_MCS_RATE) {
+		if (vif->target_stats.txrate.ht40 != ATH6KL_IS_HT40_MCS_RATE) {
 			sinfo->txrate.bw = RATE_INFO_BW_20;
 		} else {
 			sinfo->txrate.bw = RATE_INFO_BW_40;
 		}
+
 		/* Set short guard interval flag */
-		if (sgi != 0) {
+		if (vif->target_stats.txrate.sgi != 0) {
 			sinfo->txrate.flags |= RATE_INFO_FLAGS_SHORT_GI;
 		}
 		sinfo->txrate.mcs = vif->target_stats.txrate.mcs;
@@ -1855,8 +1849,31 @@ static int ath6kl_get_station(struct wiphy *wiphy, struct net_device *dev,
 		ath6kl_debug_war(ar, ATH6KL_WAR_INVALID_RATE);
 		return 0;
 	}
-
 	sinfo->filled |= BIT_ULL(NL80211_STA_INFO_TX_BITRATE);
+
+	if (vif->target_stats.rxrate.legacy != RATE_AUTO) {
+		sinfo->rxrate.legacy = vif->target_stats.rxrate.legacy / 100;
+	} else if (((s8)vif->target_stats.rxrate.mcs) != RATE_AUTO) {
+		sinfo->rxrate.flags |= RATE_INFO_FLAGS_MCS;
+
+		if (vif->target_stats.rxrate.ht40 != ATH6KL_IS_HT40_MCS_RATE) {
+			sinfo->rxrate.bw = RATE_INFO_BW_20;
+		} else {
+			sinfo->rxrate.bw = RATE_INFO_BW_40;
+		}
+
+		/* Set short guard interval flag */
+		if (vif->target_stats.rxrate.sgi != 0) {
+			sinfo->rxrate.flags |= RATE_INFO_FLAGS_SHORT_GI;
+		}
+		sinfo->rxrate.mcs = vif->target_stats.rxrate.mcs;
+	} else {
+		ath6kl_dbg(ATH6KL_DBG_WLAN_CFG,
+			   "invalid rate from stats\n");
+		ath6kl_debug_war(ar, ATH6KL_WAR_INVALID_RATE);
+		return 0;
+	}
+	sinfo->filled |= BIT_ULL(NL80211_STA_INFO_RX_BITRATE);
 
 	if (test_bit(CONNECTED, &vif->flags) &&
 	    test_bit(DTIM_PERIOD_AVAIL, &vif->flags) &&
