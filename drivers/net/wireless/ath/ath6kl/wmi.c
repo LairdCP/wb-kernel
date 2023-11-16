@@ -3353,8 +3353,8 @@ struct ath6kl_rate_info ath6kl_wmi_get_rate(s8 rate_index)
 	struct ath6kl_rate_info info;
 
 	info.sgi = 0;
-	info.mcs = 0;
-	info.legacy = 0;
+	info.mcs = RATE_AUTO;
+	info.legacy = RATE_AUTO;
 	info.ht40 = 0;
 
 	if (rate_index == RATE_AUTO) {
