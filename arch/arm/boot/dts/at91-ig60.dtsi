@@ -296,7 +296,6 @@
 		interrupt-parent = <&pioB>;
 		interrupts = <25 IRQ_TYPE_EDGE_FALLING>;
 
-		ksz9021,rgmii_2.0_timing;
 		micrel,force-master;
 	};
 };

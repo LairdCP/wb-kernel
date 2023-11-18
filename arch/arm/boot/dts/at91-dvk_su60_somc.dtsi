@@ -194,7 +194,6 @@
 		interrupt-parent = <&pioB>;
 		interrupts = <25 IRQ_TYPE_LEVEL_LOW>;
 
-		ksz9021,rgmii_2.0_timing;
 		micrel,force-master;
 
 		vsc8531,vddmac = /bits/ 16 <3300>;
