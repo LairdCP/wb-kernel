@@ -35,6 +35,10 @@
 #include <linux/gpio/consumer.h>
 
 /* Operation Mode Strap Override */
+#define MII_KSZPHY_OMSS				0x17
+#define KSZPHY_OMSS_PHYAD_MASK			GENMASK(15, 13)
+
+/* Operation Mode Strap Override */
 #define MII_KSZPHY_OMSO				0x16
 #define KSZPHY_OMSO_FACTORY_TEST		BIT(15)
 #define KSZPHY_OMSO_B_CAST_OFF			BIT(9)
@@ -530,6 +534,19 @@ out:
 	return ret;
 }
 
+static int kszphy_phyad(struct phy_device *phydev)
+{
+	int ret;
+
+	ret = phy_read(phydev, MII_KSZPHY_OMSS);
+	if (ret < 0) {
+		phydev_err(phydev, "failed to read phy address\n");
+		return ret;
+	}
+
+	return FIELD_GET(KSZPHY_OMSS_PHYAD_MASK, ret);
+}
+
 /* Some config bits need to be set again on resume, handle them here. */
 static int kszphy_config_reset(struct phy_device *phydev)
 {
@@ -561,7 +578,8 @@ static int kszphy_config_init(struct phy_device *phydev)
 
 	type = priv->type;
 
-	if (type && type->has_broadcast_disable)
+	if (type && type->has_broadcast_disable &&
+	    (phydev->mdio.addr || kszphy_phyad(phydev) <= 0))
 		kszphy_broadcast_disable(phydev);
 
 	if (type && type->has_nand_tree_disable)
