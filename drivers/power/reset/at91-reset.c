@@ -418,7 +418,18 @@ static struct platform_driver at91_reset_driver = {
 		.of_match_table = at91_reset_of_match,
 	},
 };
-module_platform_driver_probe(at91_reset_driver, at91_reset_probe);
+
+static int __init at91_reset_init(void)
+{
+	return platform_driver_probe(&at91_reset_driver, at91_reset_probe);
+}
+subsys_initcall(at91_reset_init);
+
+static void __exit at91_reset_exit(void)
+{
+	platform_driver_unregister(&at91_reset_driver);
+}
+module_exit(at91_reset_exit);
 
 MODULE_AUTHOR("Atmel Corporation");
 MODULE_DESCRIPTION("Reset driver for Atmel SoCs");
