@@ -8195,6 +8195,25 @@ static void brcmf_update_bw40_channel_flag(struct ieee80211_channel *channel,
 	}
 }
 
+#define BRCMF_C_SET_BAND			142
+void lrd_setband(struct brcmf_if *ifp, int band)
+{
+	s32 val;
+
+	switch(band) {
+	case BRCMU_CHAN_BAND_6G:
+		val = 3; break;
+	case BRCMU_CHAN_BAND_2G:
+		val = 2; break;
+	case BRCMU_CHAN_BAND_5G:
+		val = 1; break;
+	default:
+		val = 0;
+	}
+
+	brcmf_fil_cmd_int_set(ifp, BRCMF_C_SET_BAND, val);
+}
+
 static int brcmf_construct_chaninfo(struct brcmf_cfg80211_info *cfg,
 				    u32 bw_cap[])
 {
@@ -8334,8 +8353,17 @@ static int brcmf_construct_chaninfo(struct brcmf_cfg80211_info *cfg,
 			ch.bw = BRCMU_CHAN_BW_20;
 			cfg->d11inf.encchspec(&ch);
 			chaninfo = ch.chspec;
+
+			// Laird: If 6GHz is enabled, need to ensure firmware is on the correct band
+			if (wiphy->bands[NL80211_BAND_6GHZ])
+				lrd_setband(ifp, ch.band);
+
 			err = brcmf_fil_bsscfg_int_get(ifp, "per_chan_info",
 						       &chaninfo);
+
+			if (wiphy->bands[NL80211_BAND_6GHZ])
+				lrd_setband(ifp, 0);
+
 			if (!err) {
 				if (chaninfo & WL_CHAN_RADAR)
 					channel->flags |=
