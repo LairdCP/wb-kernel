@@ -165,7 +165,7 @@ void brcmf_generic_offload_config(struct brcmf_if *ifp, unsigned int ol_feat,
 		brcmf_err("failed to %s generic offload profile:%u feat:0x%x, err = %d",
 			  reset ? "reset" : "set", ol_profile, ol_feat, err);
 	else
-		brcmf_info("successfully %s generic offload profile:%u feat:0x%x",
+		brcmf_dbg(TRACE, "successfully %s generic offload profile:%u feat:0x%x",
 			   reset ? "reset" : "set", ol_profile, ol_feat);
 }
 
@@ -191,7 +191,7 @@ void brcmf_generic_offload_enable(struct brcmf_if *ifp, unsigned int ol_feat,
 		brcmf_err("failed to %s generic offload feat:0x%x, err = %d",
 			  enable ? "enable" : "disable", ol_feat, err);
 	else
-		brcmf_info("successfully %s generic offload feat:0x%x",
+		brcmf_dbg(TRACE, "successfully %s generic offload feat:0x%x",
 			   enable ? "enabled" : "disabled", ol_feat);
 }
 
