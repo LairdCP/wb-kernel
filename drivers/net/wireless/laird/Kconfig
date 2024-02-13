@@ -102,6 +102,28 @@ config LRD_MWIFIEX_NX61X
 	help
 		Sona NX611 Wi-Fi module
 
+if LRD_MWIFIEX_NX61X
+choice 
+	prompt "Driver debug log integration"
+	default LRD_NX61X_DEBUG_DEFAULT
+
+config LRD_NX61X_DEBUG_NONE
+	bool "None"
+	help
+		No debug logs integrated
+
+config LRD_NX61X_DEBUG_DEFAULT
+	bool "Typical"
+	help
+		Typical level of logs integrated
+
+config LRD_NX61X_DEBUG_ALL
+	bool "All"
+	help
+		All debug logs integrated
+endchoice
+endif # LRD_MWIFIEX_NX61X
+
 config LRD_MWIFIEX_8997
 	bool "8997 driver for manufacturing"
 	help
@@ -122,6 +144,7 @@ config LRD_MWIFIEX_8997_SDIO
 	help
 		SDIO Wi-Fi module
 endif # LRD_MWIFIEX_8997
+
 
 endif # LRD_MWIFIEX
 
