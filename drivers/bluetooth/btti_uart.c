@@ -13,10 +13,11 @@
 #include <linux/skbuff.h>
 #include <linux/serdev.h>
 #include <linux/of.h>
-#include <linux/irq.h>
+#include <linux/interrupt.h>
 #include <linux/firmware.h>
 #include <linux/regulator/consumer.h>
 #include <linux/pm_runtime.h>
+#include <linux/suspend.h>
 #include <linux/gpio/consumer.h>
 #include <linux/pinctrl/consumer.h>
 #include <asm/unaligned.h>
