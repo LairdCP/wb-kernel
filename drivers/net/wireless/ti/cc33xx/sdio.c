@@ -7,7 +7,7 @@
  * Contact: Luciano Coelho <luciano.coelho@nokia.com>
  */
 
-#include <linux/irq.h>
+#include <linux/interrupt.h>
 #include <linux/module.h>
 #include <linux/vmalloc.h>
 #include <linux/platform_device.h>
