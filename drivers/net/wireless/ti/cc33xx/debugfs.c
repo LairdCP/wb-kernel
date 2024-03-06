@@ -245,9 +245,11 @@ static ssize_t conf_read(struct file *file, char __user *user_buf,
 	mutex_lock(&wl->mutex);
 
 	pos = buf;
-	memcpy(pos, &header, sizeof(header));
-	pos += sizeof(header);
+	// Copy current conf struct contents
 	memcpy(pos, &wl->conf, sizeof(wl->conf));
+	
+	// Overwite header portion with fixed values
+	memcpy(pos, &header, sizeof(header));
 
 	mutex_unlock(&wl->mutex);
 
