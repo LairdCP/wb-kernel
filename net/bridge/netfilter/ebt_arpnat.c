@@ -420,9 +420,13 @@ static unsigned int ebt_target_arpnat(struct sk_buff *pskb, const struct xt_acti
 				struct udphdr *uh = (struct udphdr*)((u32*)iph + iph->ihl);
 				if (uh->dest == __constant_htons(67)) {
 					struct dhcp_packet *dhcp = (struct dhcp_packet*)((u8*)uh + sizeof(*uh));
-					u32 size = pskb->len - (iph->ihl << 2);
+					unsigned int size = pskb->len - (iph->ihl << 2);
 
 					if (size >= DHCP_MIN_SIZE && dhcp->op == BOOTPREQUEST) {
+#if IS_ENABLED(CONFIG_BRIDGE_EBT_ARPNAT_DHCPRELAY_IMPERSONATE)
+						u8* options = (u8*)dhcp + sizeof(*dhcp);
+						unsigned int optsize = size - DHCP_MIN_SIZE;
+#endif
 						pr_devel("OUT BOOTPREQUEST: %pM[%pI4] -> %pM[%pI4] xid=%x\n",
 							dhcp->chaddr, &dhcp->yiaddr, eth_dmac, &iph->daddr, dhcp->xid);
 
@@ -435,6 +439,33 @@ static unsigned int ebt_target_arpnat(struct sk_buff *pskb, const struct xt_acti
 						ether_addr_copy(chaddr_orig, dhcp->chaddr);
 						/* Change the DHCP HWADDR of the requestor to the HWADDR of the out device */
 						ether_addr_copy(dhcp->chaddr, out->dev_addr);
+
+						/* Skip magic cookie */
+						if (optsize >= 4) {
+							options += 4;
+							optsize -= 4;
+						} else
+							optsize = 0;
+
+						/* Looking for 7 byte long Option 61 */
+						while (optsize >= 9) {
+							if (options[0] == 0xFF)
+								break;
+
+							if (options[0] == 0x3d) {
+								if (options[1] == 0x07 && options[2] == 0x01 &&
+								    ether_addr_equal(options + 3, chaddr_orig))
+									ether_addr_copy(options + 3, out->dev_addr);
+
+								break;
+							}
+
+							if (options[1] + 2 >= optsize)
+								break;
+
+							options += options[1] + 2;
+							optsize -= options[1] + 2;
+						}
 #else
 						/* DHCP server sends unicast replies to the MAC in 'chaddr'
 						   as a result they will be never received
