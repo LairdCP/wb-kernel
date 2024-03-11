@@ -132,7 +132,7 @@ static int __wlcore_cmd_send(struct cc33xx *wl, u16 id, void *buf,
 	case CMD_TEST_MODE:
 	case CMD_BM_READ_DEVICE_INFO:
 		cc33xx_debug(DEBUG_CMD, 
-			"Response len %d, allocated buffer len %d",
+			"Response len %d, allocated buffer len %lu",
 			wl->result_length,
 			res_len);
 
@@ -168,7 +168,7 @@ static int wlcore_cmd_send_failsafe(struct cc33xx *wl, u16 id, void *buf,
 	int ret = __wlcore_cmd_send(wl, id, buf, len, res_len, true);
 	
 
-	cc33xx_debug(DEBUG_TESTMODE, "CMD# %d, len=%d", id, len);
+	cc33xx_debug(DEBUG_TESTMODE, "CMD# %d, len=%lu", id, len);
 
 	if (ret < 0)
 		goto fail;

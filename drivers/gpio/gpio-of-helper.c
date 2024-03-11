@@ -84,12 +84,12 @@ static int gpio_of_entry_create(struct device *dev, struct device_node *node,
 {
 	enum gpiod_flags gpio_flags;
 	unsigned long irq_flags = 0;
-	int err;
+	int ret;
 
-	err = of_property_read_string(node, "gpio-name", &entry->name);
-	if (err) {
+	ret = of_property_read_string(node, "gpio-name", &entry->name);
+	if (ret) {
 		dev_err(dev, "Failed to get name property\n");
-		return err;
+		return ret;
 	}
 
 	/* get the type of the node first */
@@ -113,32 +113,28 @@ static int gpio_of_entry_create(struct device *dev, struct device_node *node,
 		return -EINVAL;
 	}
 
-	entry->desc = devm_gpiod_get_from_of_node(dev, node, "gpio", 0,
-		gpio_flags, entry->name);
-	if (IS_ERR(entry->desc)) {
-		err = PTR_ERR(entry->desc);
-		if (err != -EPROBE_DEFER)
-			dev_err(dev, "Failed to get gpio property of '%s' %d\n",
-				entry->name, err);
-		return err;
-	}
+	entry->desc = devm_gpiod_get(dev, "gpio", gpio_flags);
+	if (IS_ERR(entry->desc))
+		return dev_err_probe(dev, PTR_ERR(entry->desc),
+			"Failed to get gpio property of '%s'\n", entry->name);
+
+	ret = gpiod_set_consumer_name(entry->desc, entry->name);
+	if (ret)
+		return dev_err_probe(dev, ret, "Failed to set %s gpio name\n",
+			entry->name);
 
 	/* counter mode requested - need an interrupt */
 	if (irq_flags) {
 		entry->irq = gpiod_to_irq(entry->desc);
-		if (entry->irq < 0) {
-			dev_err(dev, "Failed to request gpio '%s' %d\n",
-				entry->name, entry->irq);
-			return entry->irq;
-		}
+		if (entry->irq < 0)
+			return dev_err_probe(dev, entry->irq,
+				"Failed to get gpio irq '%s'\n", entry->name);
 
-		err = devm_request_irq(dev, entry->irq, gpio_of_helper_handler,
+		ret = devm_request_irq(dev, entry->irq, gpio_of_helper_handler,
 				irq_flags, entry->name, entry);
-		if (err) {
-			dev_err(dev, "Failed to request irq of '%s' %d\n",
-				entry->name, err);
-			return err;
-		}
+		if (ret)
+			return dev_err_probe(dev, ret,
+				"Failed to request irq of '%s'\n", entry->name);
 	}
 
 	return 0;
@@ -153,7 +149,7 @@ static int gpio_of_helper_probe(struct platform_device *pdev)
 	struct device_node *cnode;
 	struct pinctrl *pinctrl;
 	unsigned i;
-	int err;
+	int ret;
 
 	/* we only support OF */
 	if (!pnode) {
@@ -184,20 +180,15 @@ static int gpio_of_helper_probe(struct platform_device *pdev)
 	entry = info->gpios;
 
 	for_each_child_of_node(pnode, cnode) {
-		err = gpio_of_entry_create(dev, cnode, entry);
-		if (err) {
-			if (err != -EPROBE_DEFER)
-				dev_err(dev, "Failed to create gpio entry %d\n", err);
-			return err;
-		}
+		ret = gpio_of_entry_create(dev, cnode, entry);
+		if (ret)
+			return ret;
 		++entry;
 	}
 
-	err = device_create_file(dev, &dev_attr_status);
-	if (err) {
-		dev_err(dev, "Failed to create status sysfs attribute\n");
-		return err;
-	}
+	ret = device_create_file(dev, &dev_attr_status);
+	if (ret)
+		return dev_err_probe(dev, ret, "Failed to create status sysfs attribute\n");
 
 	for (i = 0; i < info->size; ++i) {
 		gpiod_export(info->gpios[i].desc, 0);
@@ -228,41 +219,35 @@ static int gpio_of_helper_remove(struct platform_device *pdev)
 }
 
 #ifdef CONFIG_PM_SLEEP
-static int gpio_of_helper_runtime_suspend(struct device *dev)
+static int gpio_of_helper_suspend(struct device *dev)
 {
 	pinctrl_pm_select_sleep_state(dev);
 	return 0;
 }
 
-static int gpio_of_helper_runtime_resume(struct device *dev)
+static int gpio_of_helper_resume(struct device *dev)
 {
 	pinctrl_pm_select_default_state(dev);
 	return 0;
 }
-
-static struct dev_pm_ops gpio_of_helper_pm_ops = {
-	SET_RUNTIME_PM_OPS(gpio_of_helper_runtime_suspend,
-			   gpio_of_helper_runtime_resume, NULL)
-};
-#define GPIO_OF_HELPER_PM_OPS (&gpio_of_helper_pm_ops)
-#else
-#define GPIO_OF_HELPER_PM_OPS NULL
 #endif /* CONFIG_PM_SLEEP */
+
+static SIMPLE_DEV_PM_OPS(gpio_of_helper_pm_ops, gpio_of_helper_suspend,
+	gpio_of_helper_resume);
 
 struct platform_driver gpio_of_helper_driver = {
 	.probe		= gpio_of_helper_probe,
 	.remove		= gpio_of_helper_remove,
 	.driver = {
 		.name		= "gpio-of-helper",
-		.owner		= THIS_MODULE,
-		.pm		= GPIO_OF_HELPER_PM_OPS,
+		.pm		= &gpio_of_helper_pm_ops,
 		.of_match_table	= gpio_of_helper_of_match,
 	},
 };
 
 module_platform_driver(gpio_of_helper_driver);
 
-MODULE_AUTHOR("Boris Krasnovskiy <boris.krasnovskiy@lairdconnect.com>");
+MODULE_AUTHOR("Boris Krasnovskiy <boris.krasnovskiy@ezurio.com>");
 MODULE_DESCRIPTION("GPIO OF Helper driver");
 MODULE_LICENSE("GPL");
 MODULE_ALIAS("platform:gpio-of-helper");

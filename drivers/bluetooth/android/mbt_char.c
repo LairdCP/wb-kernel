@@ -115,9 +115,9 @@ mbtchar_chmod(char *name, mode_t mode)
 	newattrs.ia_mode = (mode & S_IALLUGO) | (inode->i_mode & ~S_IALLUGO);
 	newattrs.ia_valid = ATTR_MODE | ATTR_CTIME;
 	if (inode->i_op->setattr)
-		ret = inode->i_op->setattr(&init_user_ns, path.dentry, &newattrs);
+		ret = inode->i_op->setattr(&nop_mnt_idmap, path.dentry, &newattrs);
 	else
-		ret = simple_setattr(&init_user_ns, path.dentry, &newattrs);
+		ret = simple_setattr(&nop_mnt_idmap, path.dentry, &newattrs);
 
 	inode_unlock(inode);
 	mnt_drop_write(path.mnt);
@@ -177,9 +177,9 @@ mbtchar_chown(char *name, uid_t user, gid_t group)
 		newattrs.ia_valid |=
 			ATTR_KILL_SUID | ATTR_KILL_SGID | ATTR_KILL_PRIV;
 	if (inode->i_op->setattr)
-		ret = inode->i_op->setattr(&init_user_ns, path.dentry, &newattrs);
+		ret = inode->i_op->setattr(&nop_mnt_idmap, path.dentry, &newattrs);
 	else
-		ret = simple_setattr(&init_user_ns, path.dentry, &newattrs);
+		ret = simple_setattr(&nop_mnt_idmap, path.dentry, &newattrs);
 
 	inode_unlock(inode);
 	mnt_drop_write(path.mnt);

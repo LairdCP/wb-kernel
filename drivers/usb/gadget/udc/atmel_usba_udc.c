@@ -2294,15 +2294,13 @@ static int usba_udc_probe(struct platform_device *pdev)
 
 	INIT_LIST_HEAD(&udc->gadget.ep_list);
 
-	res = platform_get_resource(pdev, IORESOURCE_MEM, CTRL_IOMEM_ID);
-	udc->regs = devm_ioremap_resource(&pdev->dev, res);
+	udc->regs = devm_platform_get_and_ioremap_resource(pdev, CTRL_IOMEM_ID, &res);
 	if (IS_ERR(udc->regs))
 		return PTR_ERR(udc->regs);
 	dev_info(&pdev->dev, "MMIO registers at %pR mapped at %p\n",
 		 res, udc->regs);
 
-	res = platform_get_resource(pdev, IORESOURCE_MEM, FIFO_IOMEM_ID);
-	udc->fifo = devm_ioremap_resource(&pdev->dev, res);
+	udc->fifo = devm_platform_get_and_ioremap_resource(pdev, FIFO_IOMEM_ID, &res);
 	if (IS_ERR(udc->fifo))
 		return PTR_ERR(udc->fifo);
 	dev_info(&pdev->dev, "FIFO at %pR mapped at %p\n", res, udc->fifo);
@@ -2378,7 +2376,7 @@ static int usba_udc_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int usba_udc_remove(struct platform_device *pdev)
+static void usba_udc_remove(struct platform_device *pdev)
 {
 	struct usba_udc *udc;
 	int i;
@@ -2391,8 +2389,6 @@ static int usba_udc_remove(struct platform_device *pdev)
 	for (i = 1; i < udc->num_ep; i++)
 		usba_ep_cleanup_debugfs(&udc->usba_ep[i]);
 	usba_cleanup_debugfs(udc);
-
-	return 0;
 }
 
 #ifdef CONFIG_PM_SLEEP
@@ -2459,7 +2455,7 @@ static SIMPLE_DEV_PM_OPS(usba_udc_pm_ops, usba_udc_suspend, usba_udc_resume);
 
 static struct platform_driver udc_driver = {
 	.probe		= usba_udc_probe,
-	.remove		= usba_udc_remove,
+	.remove_new	= usba_udc_remove,
 	.driver		= {
 		.name		= "atmel_usba_udc",
 		.pm		= &usba_udc_pm_ops,

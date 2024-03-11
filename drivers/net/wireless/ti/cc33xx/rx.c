@@ -191,13 +191,14 @@ int wlcore_rx_getPacketData(struct cc33xx *wl, u8 *raw_buffer_ptr,
 	u16 seq_num;
 	u16 prev_buffer_len = *raw_buffer_len;
 
+	missing_data_bytes = wl->partial_rx.original_bytes -
+				wl->partial_rx.handled_bytes;
+
 	cc33xx_debug(DEBUG_RX, "current rx data: original bytes: %d, "
 		"handled bytes %d, desc pad len %d, missing_data_bytes %d",
 		wl->partial_rx.original_bytes, wl->partial_rx.handled_bytes,
 		wl->partial_rx.desc.pad_len,missing_data_bytes);
 
-	missing_data_bytes = wl->partial_rx.original_bytes -
-				wl->partial_rx.handled_bytes;
 	available_data_bytes = min(missing_data_bytes,*raw_buffer_len);
 
 	skb_put_data(wl->partial_rx.skb, raw_buffer_ptr, available_data_bytes);
