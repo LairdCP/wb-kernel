@@ -1021,7 +1021,7 @@ static int parse_control_message(struct cc33xx *wl,
 				DUMP_PREFIX_OFFSET, 16, 1,
 				start_of_payload, buffer_length, false);
 
-			WARN(1, "Error processing device message @ offset %x",
+			WARN(1, "Error processing device message @ offset %lx",
 				(size_t)(buffer-start_of_payload));
 
 			goto message_parse_error;
