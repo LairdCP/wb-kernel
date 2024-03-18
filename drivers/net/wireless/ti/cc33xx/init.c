@@ -299,9 +299,9 @@ static bool find_calibration_entry(u8 *id,
 			default_calibration = (u8 *)calibration_header;
 
 		// advance ptr by specified payload length to next entry in file
-		*data_ptr = (u8 *)((u32)calibration_header
+		*data_ptr = (u8 *)calibration_header
 				+ sizeof(struct calibration_header)
-				+ le16_to_cpu(calibration_header_fw->length));
+				+ le16_to_cpu(calibration_header_fw->length);
 	}
 
 	if (false == mac_match) {
