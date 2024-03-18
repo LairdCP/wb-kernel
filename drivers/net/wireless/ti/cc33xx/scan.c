@@ -51,8 +51,8 @@ static void cc33xx_adjust_channels(struct scan_param *scanParam,
         dfs           = (u8*)&scanParam->u.one_shot.dfs;
     }
 
-    memcpy(passive, cmd_channels->passive, sizeof(cmd_channels->passive));
-    memcpy(active, cmd_channels->active, sizeof(cmd_channels->active));
+    memcpy(passive, cmd_channels->passive, CONN_SCAN_MAX_BAND);
+    memcpy(active, cmd_channels->active, CONN_SCAN_MAX_BAND);
     *dfs = cmd_channels->dfs;
 
     for (i = 0; i < MAX_CHANNELS_2GHZ; ++i)
