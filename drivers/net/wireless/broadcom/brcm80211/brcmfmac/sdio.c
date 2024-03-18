@@ -3937,7 +3937,7 @@ static int brcmf_sdio_download_firmware_43022(struct brcmf_sdio *bus,
 	rstvec = get_unaligned_le32(fw->data);
 	brcmf_dbg(SDIO, "firmware rstvec: %x\n", rstvec);
 
-	if (bus->ci->blhs) {
+	if (bus->ci->blhs && bus->ci->chip == CY_CC_43022_CHIP_ID) {
 		bcmerror = bus->ci->blhs->pre_nvramdl(bus->ci);
 		if (bcmerror) {
 			brcmf_err("NVRAM download preparation failed\n");
@@ -3978,7 +3978,17 @@ static int brcmf_sdio_download_firmware_43022(struct brcmf_sdio *bus,
 			brcmf_fw_nvram_free(nvram);
 			goto err;
 		}
-	} else {
+	} else if (bus->ci->blhs) {
+		bcmerror = bus->ci->blhs->prep_fwdl(bus->ci);
+		if (bcmerror) {
+			brcmf_err("FW download preparation failed\n");
+			release_firmware(fw);
+			brcmf_fw_nvram_free(nvram);
+			goto err;
+		}
+	}
+
+	if (!(bus->ci->blhs)) {
 		bcmerror = brcmf_sdio_download_code_file(bus, fw);
 		release_firmware(fw);
 		if (bcmerror) {
@@ -3986,14 +3996,37 @@ static int brcmf_sdio_download_firmware_43022(struct brcmf_sdio *bus,
 			brcmf_fw_nvram_free(nvram);
 			goto err;
 		}
+	}
 
+	if (bus->ci->blhs && (!(bus->ci->chip == CY_CC_43022_CHIP_ID))) {
+		bcmerror = bus->ci->blhs->post_fwdl(bus->ci);
+		if (bcmerror) {
+			brcmf_err("FW download failed, err=%d\n", bcmerror);
+			brcmf_fw_nvram_free(nvram);
+			goto err;
+		}
+
+		bcmerror = bus->ci->blhs->chk_validation(bus->ci);
+		if (bcmerror) {
+			brcmf_err("FW valication failed, err=%d\n", bcmerror);
+			brcmf_fw_nvram_free(nvram);
+			goto err;
+		}
+	}
+	if (!(bus->ci->blhs)) {
 		bcmerror = brcmf_sdio_download_nvram(bus, nvram, nvlen);
 		brcmf_fw_nvram_free(nvram);
 		if (bcmerror) {
 			brcmf_err("dongle nvram file download failed\n");
 			goto err;
 		}
+	}
 
+	if (bus->ci->blhs && bus->ci->chip == CY_CC_43022_CHIP_ID) {
+		brcmf_err("Avoid resetting ARM in 43022 secured chip\n");
+	} else if (bus->ci->blhs && (!(bus->ci->chip == CY_CC_43022_CHIP_ID))) {
+		bus->ci->blhs->post_nvramdl(bus->ci);
+	} else {
 		/* Take arm out of reset */
 		if (!brcmf_chip_set_active(bus->ci, rstvec)) {
 			brcmf_err("error getting out of ARM core reset\n");
@@ -4316,19 +4349,19 @@ void brcmf_sdio_isr(struct brcmf_sdio *bus, bool in_isr)
 		return;
 	}
 
-	/* Wake up the bus if in sleep */
-	if (brcmf_sdio_bus_sleep_state(bus)) {
-		brcmf_sdio_bus_sleep(bus, false, false);
-	}
-
 	/* Count the interrupt call */
 	bus->sdcnt.intrcount++;
 	if (in_isr)
 		atomic_set(&bus->ipend, 1);
-	else
+	else {
+		/* Wake up the bus if in sleep */
+		if (brcmf_sdio_bus_sleep_state(bus))
+			brcmf_sdio_bus_sleep(bus, false, false);
+
 		if (brcmf_sdio_intr_rstatus(bus)) {
 			brcmf_err("failed backplane access\n");
 		}
+	}
 
 	/* Disable additional interrupts (is this needed now)? */
 	if (!bus->intr)
