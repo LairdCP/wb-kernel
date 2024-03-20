@@ -1454,7 +1454,7 @@ out:
 
 int cc33xx_plt_start(struct cc33xx *wl, const enum plt_mode plt_mode)
 {
-	int ret;
+	int ret = -1;
 
 	mutex_lock(&wl->mutex);
 
@@ -3252,7 +3252,7 @@ static void cc33xx_op_configure_filter(struct ieee80211_hw *hw,
 {
 	struct cc33xx_filter_params *fp = (void *)(unsigned long)multicast;
 	struct cc33xx *wl = hw->priv;
-	struct cc33xx_vif *wlvif;
+	struct cc33xx_vif *wlvif = NULL;
 
 	cc33xx_debug(DEBUG_MAC80211, "mac80211 configure filter, FIF_ALLMULTI = %d", *total & FIF_ALLMULTI);
 
@@ -3732,7 +3732,7 @@ out_unlock:
 
 void wlcore_regdomain_config(struct cc33xx *wl)
 {
-	int ret;
+//	int ret;
 
 	if (!(wl->quirks & WLCORE_QUIRK_REGDOMAIN_CONF))
 		return;
@@ -3741,13 +3741,13 @@ void wlcore_regdomain_config(struct cc33xx *wl)
 
 	if (unlikely(wl->state != WLCORE_STATE_ON))
 		goto out;
-
-	//ret = wlcore_cmd_regdomain_config_locked(wl);
+/*
+	ret = wlcore_cmd_regdomain_config_locked(wl);
 	if (ret < 0) {
 		cc33xx_queue_recovery_work(wl);
 		goto out;
 	}
-
+*/
 out:
 	mutex_unlock(&wl->mutex);
 }
@@ -4245,7 +4245,7 @@ static void cc33xx_bss_info_changed_sta(struct cc33xx *wl,
 	bool ibss_joined = false;
 	u32 sta_rate_set = 0;
 	int ret;
-	struct ieee80211_sta *sta;
+	struct ieee80211_sta *sta = NULL;
 	bool sta_exists = false;
 	struct ieee80211_sta_ht_cap sta_ht_cap;
 	struct ieee80211_sta_he_cap sta_he_cap;
