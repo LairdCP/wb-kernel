@@ -169,7 +169,7 @@ static struct ath6kl_wide_channel_mapping wide_channel_mapping[] = {
 	WIDE(108, 110), WIDE(112, 110),
 	WIDE(116, 118), WIDE(120, 118),
 	WIDE(124, 126), WIDE(128, 126),
-	WIDE(132, 136), WIDE(136, 136),
+	WIDE(132, 134), WIDE(136, 134),
 	WIDE(140, 142), WIDE(144, 142),
 	WIDE(149, 151), WIDE(153, 151),
 	WIDE(157, 159), WIDE(161, 159),
