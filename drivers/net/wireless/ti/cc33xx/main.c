@@ -6625,7 +6625,7 @@ static struct platform_driver cc33xx_driver = {
 	}
 };
 
-u32 cc33xx_debug_level = DEBUG_NO_DATAPATH;
+u32 cc33xx_debug_level = (DEBUG_CC33xx|DEBUG_BOOT);
 
 module_platform_driver(cc33xx_driver);
 
