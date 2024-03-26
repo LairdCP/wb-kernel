@@ -1723,18 +1723,19 @@ static struct atmel_nand *atmel_nand_create(struct atmel_nand_controller *nc,
 		if (!IS_ERR(gpio))
 			nand->cs[i].csgpio = gpio;
 
-		gpio = devm_fwnode_get_index_gpiod_from_child(nc->dev, "wp",
-							      i, &np->fwnode,
-							      GPIOD_OUT_HIGH,
-							      "nand-wp");
-		if (!IS_ERR(gpio))
-			nand->cs[i].wpgpio = gpio;
-		else if (PTR_ERR(gpio) != -ENOENT) {
+		gpio = devm_fwnode_gpiod_get_index(nc->dev,
+							of_fwnode_handle(np),
+							"wp", i, GPIOD_OUT_HIGH,
+							"nand-wp");
+		if (IS_ERR(gpio) && PTR_ERR(gpio) != -ENOENT) {
 			dev_err(nc->dev,
 				"Failed to get WP gpio (err = %ld)\n",
 				PTR_ERR(gpio));
 			return ERR_CAST(gpio);
 		}
+
+		if (!IS_ERR(gpio))
+			nand->cs[i].wpgpio = gpio;
 	}
 
 	nand_set_flash_node(&nand->base, np);
@@ -1811,8 +1812,7 @@ atmel_nand_controller_legacy_add_nands(struct atmel_nand_controller *nc)
 
 	nand->numcs = 1;
 
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	nand->cs[0].io.virt = devm_ioremap_resource(dev, res);
+	nand->cs[0].io.virt = devm_platform_get_and_ioremap_resource(pdev, 0, &res);
 	if (IS_ERR(nand->cs[0].io.virt))
 		return PTR_ERR(nand->cs[0].io.virt);
 
@@ -2646,13 +2646,11 @@ static int atmel_nand_controller_probe(struct platform_device *pdev)
 	return caps->ops->probe(pdev, caps);
 }
 
-static int atmel_nand_controller_remove(struct platform_device *pdev)
+static void atmel_nand_controller_remove(struct platform_device *pdev)
 {
 	struct atmel_nand_controller *nc = platform_get_drvdata(pdev);
 
 	WARN_ON(nc->caps->ops->remove(nc));
-
-	return 0;
 }
 
 static __maybe_unused int atmel_nand_controller_suspend(struct device *dev)
@@ -2712,7 +2710,7 @@ static struct platform_driver atmel_nand_controller_driver = {
 		.pm = &atmel_nand_controller_pm_ops,
 	},
 	.probe = atmel_nand_controller_probe,
-	.remove = atmel_nand_controller_remove,
+	.remove_new = atmel_nand_controller_remove,
 };
 module_platform_driver(atmel_nand_controller_driver);
 

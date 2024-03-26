@@ -3939,7 +3939,7 @@ bt_init_module(void)
 	bt_root_proc_init();
 
 	/** create char device class */
-	chardev_class = class_create(THIS_MODULE, MODULE_NAME);
+	chardev_class = class_create(MODULE_NAME);
 	if (IS_ERR(chardev_class)) {
 		PRINTM(ERROR, "Unable to allocate class\n");
 		bt_root_proc_remove();

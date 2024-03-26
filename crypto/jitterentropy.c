@@ -89,10 +89,14 @@ struct rand_data {
 	unsigned int rct_count;			/* Number of stuck values */
 
 	/* Intermittent health test failure threshold of 2^-30 */
-#define JENT_RCT_CUTOFF		30	/* Taken from SP800-90B sec 4.4.1 */
-#define JENT_APT_CUTOFF		325	/* Taken from SP800-90B sec 4.4.2 */
+	/* From an SP800-90B perspective, this RCT cutoff value is equal to 31. */
+	/* However, our RCT implementation starts at 1, so we subtract 1 here. */
+#define JENT_RCT_CUTOFF		(31 - 1)	/* Taken from SP800-90B sec 4.4.1 */
+#define JENT_APT_CUTOFF		325			/* Taken from SP800-90B sec 4.4.2 */
 	/* Permanent health test failure threshold of 2^-60 */
-#define JENT_RCT_CUTOFF_PERMANENT	60
+	/* From an SP800-90B perspective, this RCT cutoff value is equal to 61. */
+	/* However, our RCT implementation starts at 1, so we subtract 1 here. */
+#define JENT_RCT_CUTOFF_PERMANENT	(61 - 1)
 #define JENT_APT_CUTOFF_PERMANENT	355
 #define JENT_APT_WINDOW_SIZE	512	/* Data window size */
 	/* LSB of time stamp to process */
@@ -118,7 +122,6 @@ struct rand_data {
 				   * zero). */
 #define JENT_ESTUCK		8 /* Too many stuck results during init. */
 #define JENT_EHEALTH		9 /* Health test failed during initialization */
-#define JENT_ERCT		10 /* RCT failed during initialization */
 
 /*
  * The output n bits can receive more than n bits of min entropy, of course,
@@ -723,14 +726,12 @@ int jent_entropy_init(void *hash_state)
 			if ((nonstuck % JENT_APT_WINDOW_SIZE) == 0) {
 				jent_apt_reset(&ec,
 					       delta & JENT_APT_WORD_MASK);
-				if (jent_health_failure(&ec))
-					return JENT_EHEALTH;
 			}
 		}
 
-		/* Validate RCT */
-		if (jent_rct_failure(&ec))
-			return JENT_ERCT;
+		/* Validate health test result */
+		if (jent_health_failure(&ec))
+			return JENT_EHEALTH;
 
 		/* test whether we have an increasing timer */
 		if (!(time2 > time))

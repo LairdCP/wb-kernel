@@ -22,7 +22,7 @@
 #include "debug.h"
 #include "core.h"
 
-static unsigned int reset_pwd_gpio = ARCH_NR_GPIOS;
+static unsigned int reset_pwd_gpio = -1;
 #ifdef CONFIG_GPIOLIB
 module_param(reset_pwd_gpio, uint, 0644);
 MODULE_PARM_DESC(reset_pwd_gpio, "WIFI CHIP_PWD reset pin GPIO");
@@ -1263,7 +1263,7 @@ static int ath6kl_usb_init_gpio(void)
 			return ret;
 		}
 		else {
-			gpio_export(reset_pwd_gpio, false);
+			gpiod_export(gpio_to_desc(reset_pwd_gpio), false);
 		}
 
 		ath6kl_dbg(ATH6KL_DBG_SUSPEND, "Setup wifi gpio #%d\n",

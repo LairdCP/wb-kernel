@@ -5679,6 +5679,8 @@ static const struct ieee80211_ops cc33xx_ops = {
 	.sta_rc_update = cc33xx_op_sta_rc_update,
 	.sta_statistics = cc33xx_op_sta_statistics,
 	.get_expected_throughput = cc33xx_op_get_expected_throughput,
+	.wake_tx_queue = ieee80211_handle_wake_tx_queue,
+
 	CFG80211_TESTMODE_CMD(cc33xx_tm_cmd)
 };
 
