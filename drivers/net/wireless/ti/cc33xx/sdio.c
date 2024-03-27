@@ -129,7 +129,7 @@ static int __must_check cc33xx_sdio_raw_write(struct device *child, int addr,
 
 	if (unlikely(dump)) {
 		printk(KERN_DEBUG "wlcore_sdio: "
-			"WRITE to 0x%04x length 0x%lx (first 64 Bytes):\n", addr, len);
+			"WRITE to 0x%04x length 0x%x (first 64 Bytes):\n", addr, (int)len);
 		print_hex_dump(KERN_DEBUG, "wlcore_sdio: WRITE ",
 				DUMP_PREFIX_OFFSET, 16, 1,
 				buf, min(len, (size_t)64), false);

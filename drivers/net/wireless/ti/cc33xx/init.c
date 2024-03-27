@@ -362,11 +362,11 @@ int download_static_calibration_data(struct cc33xx *wl)
     	file_header = (struct calibration_file_header *)file_ptr;
 	cc33xx_debug(DEBUG_BOOT, "Parsing static calibration file version: %d, "
 			 	 "payload struct ver: %d, entries count: %d, "
-				 "file size: %lu",
+				 "file size: %d",
 			 	 file_header->file_version, 
 				 file_header->payload_struct_version,
 			 	 le16_to_cpu(file_header->entries_count),
-				 fw->size);
+				 (int)fw->size);
     
 	/* Limit the search to the file's length and skip 4 file header bytes */
 	mac_address = (u8 *)wl->efuse_mac_address;
@@ -575,7 +575,7 @@ int cc33xx_download_ini_params_and_wait(struct cc33xx *wl)
 	
 	cc33xx_set_max_buffer_size(wl,INI_MAX_BUFFER_SIZE);
 
-	cc33xx_debug(DEBUG_ACX, "Downloading INI Params and Configurations to FW, INI Bin File Payload Length: %lu",sizeof(wl->conf));
+	cc33xx_debug(DEBUG_ACX, "Downloading INI Params and Configurations to FW, INI Bin File Payload Length: %d", (int)sizeof(wl->conf));
 	cmd = kzalloc(command_size, GFP_KERNEL);
 	if (!cmd) {
 		cc33xx_error("INI Params Download: "
