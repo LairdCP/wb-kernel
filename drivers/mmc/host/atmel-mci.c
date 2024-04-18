@@ -1075,8 +1075,9 @@ static u32 atmci_prepare_data(struct atmel_mci *host, struct mmc_data *data)
 	data->error = -EINPROGRESS;
 
 	sg_miter_start(&host->miter, data->sg, data->sg_len,
-		data->flags & MMC_DATA_READ ?
-			SG_MITER_TO_SG : SG_MITER_FROM_SG);
+		SG_MITER_ATOMIC |
+		(data->flags & MMC_DATA_READ ?
+			SG_MITER_TO_SG : SG_MITER_FROM_SG));
 
 	sg_miter_next(&host->miter);
 
