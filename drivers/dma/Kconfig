@@ -101,6 +101,13 @@ config AT_HDMAC
 	help
 	  Support the Atmel AHB DMA controller.
 
+config AT_HDMAC_SUMMIT
+	tristate "Atmel Summit AHB DMA support"
+	depends on ARCH_AT91
+	depends on !AT_HDMAC
+	help
+	  Support the Atmel AHB DMA controller.
+
 config AT_XDMAC
 	tristate "Atmel XDMA support"
 	depends on ARCH_AT91
