@@ -470,7 +470,7 @@ static void mcp23s08_irq_mask(struct irq_data *data)
 	struct mcp23s08 *mcp = gpiochip_get_data(gc);
 	unsigned int pos = irqd_to_hwirq(data);
 
-	mcp_set_bit(mcp, MCP_GPINTEN, pos, false);
+	mcp->irq_en &= ~BIT(pos);
 	gpiochip_disable_irq(gc, pos);
 }
 
@@ -481,7 +481,7 @@ static void mcp23s08_irq_unmask(struct irq_data *data)
 	unsigned int pos = irqd_to_hwirq(data);
 
 	gpiochip_enable_irq(gc, pos);
-	mcp_set_bit(mcp, MCP_GPINTEN, pos, true);
+	mcp->irq_en |= BIT(pos);
 }
 
 static int mcp23s08_irq_set_type(struct irq_data *data, unsigned int type)
@@ -527,6 +527,8 @@ static void mcp23s08_irq_bus_unlock(struct irq_data *data)
 {
 	struct gpio_chip *gc = irq_data_get_irq_chip_data(data);
 	struct mcp23s08 *mcp = gpiochip_get_data(gc);
+
+	mcp_write(mcp, MCP_GPINTEN, mcp->irq_en);
 
 	regcache_cache_only(mcp->regmap, false);
 	regcache_sync(mcp->regmap);

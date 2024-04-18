@@ -29,6 +29,7 @@ struct mcp23s08 {
 
 	u16			irq_rise;
 	u16			irq_fall;
+	u16			irq_en;
 	int			irq;
 	bool			irq_controller;
 	int			cached_gpio;
