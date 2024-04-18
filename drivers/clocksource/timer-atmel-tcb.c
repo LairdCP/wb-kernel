@@ -145,7 +145,6 @@ static unsigned long notrace tc_delay_timer_read32(void)
 
 struct tc_clkevt_device {
 	struct clock_event_device	clkevt;
-	struct clk			*clk;
 	u32				rate;
 	void __iomem			*regs;
 };
@@ -164,8 +163,6 @@ static int tc_shutdown(struct clock_event_device *d)
 
 	writel(0xff, regs + ATMEL_TC_REG(2, IDR));
 	writel(ATMEL_TC_CLKDIS, regs + ATMEL_TC_REG(2, CCR));
-	if (!clockevent_state_detached(d))
-		clk_disable(tcd->clk);
 
 	return 0;
 }
@@ -177,8 +174,6 @@ static int tc_set_oneshot(struct clock_event_device *d)
 
 	if (clockevent_state_oneshot(d) || clockevent_state_periodic(d))
 		tc_shutdown(d);
-
-	clk_enable(tcd->clk);
 
 	/* count up to RC, then irq and stop */
 	writel(timer_clock | ATMEL_TC_CPCSTOP | ATMEL_TC_WAVE |
@@ -200,7 +195,6 @@ static int tc_set_periodic(struct clock_event_device *d)
 	/* By not making the gentime core emulate periodic mode on top
 	 * of oneshot, we get lower overhead and improved accuracy.
 	 */
-	clk_enable(tcd->clk);
 
 	/* count up to RC, then irq and restart */
 	writel(timer_clock | ATMEL_TC_WAVE | ATMEL_TC_WAVESEL_UP_AUTO,
@@ -266,7 +260,6 @@ static int __init setup_clkevents(struct atmel_tc *tc, int divisor_idx)
 		return ret;
 
 	clkevt.regs = tc->regs;
-	clkevt.clk = t2_clk;
 
 	if (bits == 32) {
 		timer_clock = divisor_idx;
@@ -282,13 +275,11 @@ static int __init setup_clkevents(struct atmel_tc *tc, int divisor_idx)
 		timer_clock = ATMEL_TC_TIMER_CLOCK5;
 	}
 
-	clk_disable(t2_clk);
-
 	clkevt.clkevt.cpumask = cpumask_of(0);
 
 	ret = request_irq(irq, ch2_irq, IRQF_TIMER, "tc_clkevt", &clkevt);
 	if (ret) {
-		clk_unprepare(t2_clk);
+		clk_disable_unprepare(t2_clk);
 		if (bits != 32)
 			clk_disable_unprepare(tc->slow_clk);
 		return ret;
