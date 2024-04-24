@@ -7,6 +7,8 @@
  * Contact: Luciano Coelho <luciano.coelho@nokia.com>
  */
 
+#include <linux/interrupt.h>
+#include <linux/module.h>
 #include <linux/mmc/sdio_func.h>
 #include <linux/mmc/host.h>
 #include <linux/gpio.h>
