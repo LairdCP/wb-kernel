@@ -346,8 +346,9 @@ void process_deferred_events(struct cc33xx *wl)
 
 		event_data = &event_node->event_data;
 
-		print_hex_dump(KERN_DEBUG, "Deferred event dump:",
-			       DUMP_PREFIX_OFFSET, 4, 4, event_data, 64, false);
+		if (unlikely(cc33xx_debug_level & DEBUG_EVENT))
+			print_hex_dump(KERN_DEBUG, "Deferred event dump:",
+				       DUMP_PREFIX_OFFSET, 4, 4, event_data, 64, false);
 
 		vector = le32_to_cpu(event_node->event_data.events_vector);
 		cc33xx_debug(DEBUG_EVENT, "MBOX vector: 0x%x", vector);
