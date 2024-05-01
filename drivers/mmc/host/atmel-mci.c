@@ -350,8 +350,7 @@ struct atmel_mci {
 	void __iomem		*regs;
 
 	struct scatterlist	*sg;
-	struct sg_mapping_iter	miter;
-	unsigned int		pio_offset;
+	struct sg_mapping_iter	sg_miter;
 	unsigned int		*buffer;
 	unsigned int		buf_size;
 	dma_addr_t		buf_phys_addr;
@@ -1074,11 +1073,10 @@ static u32 atmci_prepare_data(struct atmel_mci *host, struct mmc_data *data)
 
 	data->error = -EINPROGRESS;
 
-	sg_miter_start(&host->miter, data->sg, data->sg_len,
-		data->flags & MMC_DATA_READ ?
-			SG_MITER_TO_SG : SG_MITER_FROM_SG);
-
-	sg_miter_next(&host->miter);
+	sg_miter_start(&host->sg_miter, data->sg, data->sg_len,
+		SG_MITER_ATOMIC |
+		(data->flags & MMC_DATA_READ ?
+			SG_MITER_TO_SG : SG_MITER_FROM_SG));
 
 	host->sg = NULL;
 	host->data = data;
@@ -1086,7 +1084,6 @@ static u32 atmci_prepare_data(struct atmel_mci *host, struct mmc_data *data)
 
 	iflags = ATMCI_DATA_ERROR_FLAGS;
 
-	host->pio_offset = 0;
 	if (data->flags & MMC_DATA_READ)
 		iflags |= ATMCI_RXRDY;
 	else
@@ -1267,8 +1264,6 @@ atmci_submit_data_dma(struct atmel_mci *host, struct mmc_data *data)
 
 static void atmci_stop_transfer(struct atmel_mci *host)
 {
-	sg_miter_stop(&host->miter);
-
 	dev_dbg(&host->pdev->dev,
 	        "(%s) set pending xfer complete\n", __func__);
 	atmci_set_pending(host, EVENT_XFER_COMPLETE);
@@ -2021,38 +2016,49 @@ unlock:
 
 static void atmci_read_data_pio(struct atmel_mci *host)
 {
-	struct sg_mapping_iter	*mit = &host->miter;
-	unsigned int		offset = host->pio_offset;
+	struct sg_mapping_iter	*sg_miter = &host->sg_miter;
+	unsigned int		offset = 0;
 	struct mmc_data		*data = host->data;
 	u32			value;
 	u32			status;
 	unsigned int		nbytes = 0;
+	unsigned int 		cnt;
+	bool 			done;
 
-	do {
+	done = !sg_miter_next(sg_miter);
+
+	while (!done) {
+		unsigned int remaining = sg_miter->length - offset;
 		value = atmci_readl(host, ATMCI_RDR);
-		if (likely(offset + 4 <= mit->length)) {
-			put_unaligned(value, (u32 *)(mit->addr + offset));
+		if (likely(remaining >= 4)) {
+			put_unaligned(value, (u32 *)(sg_miter->addr + offset));
 
 			offset += 4;
-			nbytes += 4;
 
-			if (offset == mit->length) {
-				if (!sg_miter_next(mit))
-					goto done;
+			if (offset >= sg_miter->length) {
+				done = !sg_miter_next(sg_miter);
 
+				nbytes += offset;
 				offset = 0;
 			}
-		} else {
-			unsigned int remaining = mit->length - offset;
-			memcpy(mit->addr + offset, &value, remaining);
-			nbytes += remaining;
-
-			if (!sg_miter_next(mit))
-				goto done;
-
-			offset = 4 - remaining;
-			memcpy(mit->addr, (u8 *)&value + remaining, offset);
+		} else if (unlikely(!remaining)) {
+			done = !sg_miter_next(sg_miter);
 			nbytes += offset;
+			offset = 0;
+		} else {
+			cnt = 0;
+			do {
+				memcpy(sg_miter->addr + offset, (u8 *)&value + cnt, remaining);
+
+				offset += remaining;
+				cnt += remaining;
+
+				done = !sg_miter_next(sg_miter);
+
+				nbytes += offset;
+				offset = 0;
+				remaining = min(sg_miter->length, cnt);
+			} while (cnt < sizeof(u32) && !done);
 		}
 
 		status = atmci_readl(host, ATMCI_SR);
@@ -2060,62 +2066,73 @@ static void atmci_read_data_pio(struct atmel_mci *host)
 			atmci_writel(host, ATMCI_IDR, (ATMCI_NOTBUSY | ATMCI_RXRDY
 						| ATMCI_DATA_ERROR_FLAGS));
 			host->data_status = status;
-			data->bytes_xfered += nbytes;
-			return;
+			break;
 		}
-	} while (status & ATMCI_RXRDY);
+		if (!(status & ATMCI_RXRDY))
+			break;
+	}
 
-	host->pio_offset = offset;
-	data->bytes_xfered += nbytes;
+	sg_miter->consumed = offset;
+	sg_miter_stop(sg_miter);
 
-	return;
+	data->bytes_xfered += nbytes + offset;
 
-done:
-	atmci_writel(host, ATMCI_IDR, ATMCI_RXRDY);
-	atmci_writel(host, ATMCI_IER, ATMCI_NOTBUSY);
-	data->bytes_xfered += nbytes;
-	smp_wmb();
-	atmci_set_pending(host, EVENT_XFER_COMPLETE);
+	if (done) {
+		atmci_writel(host, ATMCI_IDR, ATMCI_RXRDY);
+		atmci_writel(host, ATMCI_IER, ATMCI_NOTBUSY);
+		smp_wmb();
+		atmci_set_pending(host, EVENT_XFER_COMPLETE);
+	}
 }
 
 static void atmci_write_data_pio(struct atmel_mci *host)
 {
-	struct sg_mapping_iter	*mit = &host->miter;
-	unsigned int		offset = host->pio_offset;
+	struct sg_mapping_iter	*sg_miter = &host->sg_miter;
+	unsigned int		offset = 0;
 	struct mmc_data		*data = host->data;
 	u32			value;
 	u32			status;
 	unsigned int		nbytes = 0;
+	unsigned int 		cnt;
+	bool 			done;
 
-	do {
-		if (likely(offset + 4 <= mit->length)) {
-			value = get_unaligned((u32 *)(mit->addr + offset));
+	done = !sg_miter_next(sg_miter);
+
+	while (!done) {
+		unsigned int remaining = sg_miter->length - offset;
+		if (likely(remaining >= 4)) {
+			value = get_unaligned((u32 *)(sg_miter->addr + offset));
 			atmci_writel(host, ATMCI_TDR, value);
 
 			offset += 4;
-			nbytes += 4;
-			if (offset == mit->length) {
-				if (!sg_miter_next(mit))
-					goto done;
 
+			if (offset >= sg_miter->length) {
+				done = !sg_miter_next(sg_miter);
+
+				nbytes += offset;
 				offset = 0;
 			}
-		} else {
-			unsigned int remaining = mit->length - offset;
-
-			value = 0;
-			memcpy(&value, mit->addr + offset, remaining);
-			nbytes += remaining;
-
-			if (!sg_miter_next(mit)) {
-				atmci_writel(host, ATMCI_TDR, value);
-				goto done;
-			}
-
-			offset = 4 - remaining;
-			memcpy((u8 *)&value + remaining, mit->addr, offset);
-			atmci_writel(host, ATMCI_TDR, value);
+		} else if (unlikely(!remaining)) {
+			done = !sg_miter_next(sg_miter);
 			nbytes += offset;
+			offset = 0;
+		} else {
+			value = 0;
+			cnt = 0;
+			do  {
+				memcpy((u8 *)&value + cnt, sg_miter->addr + offset, remaining);
+
+				offset += remaining;
+				nbytes += remaining;
+				cnt += remaining;
+
+				done = !sg_miter_next(sg_miter);
+
+				nbytes += offset;
+				offset = 0;
+				remaining = min(sg_miter->length, cnt);
+			} while (cnt < sizeof(u32) && !done);
+			atmci_writel(host, ATMCI_TDR, value);
 		}
 
 		status = atmci_readl(host, ATMCI_SR);
@@ -2123,22 +2140,23 @@ static void atmci_write_data_pio(struct atmel_mci *host)
 			atmci_writel(host, ATMCI_IDR, (ATMCI_NOTBUSY | ATMCI_TXRDY
 						| ATMCI_DATA_ERROR_FLAGS));
 			host->data_status = status;
-			data->bytes_xfered += nbytes;
-			return;
+			break;
 		}
-	} while (status & ATMCI_TXRDY);
+		if (!(status & ATMCI_TXRDY))
+			break;
+	}
 
-	host->pio_offset = offset;
-	data->bytes_xfered += nbytes;
+	sg_miter->consumed = offset;
+	sg_miter_stop(sg_miter);
 
-	return;
+	data->bytes_xfered += nbytes + offset;
 
-done:
-	atmci_writel(host, ATMCI_IDR, ATMCI_TXRDY);
-	atmci_writel(host, ATMCI_IER, ATMCI_NOTBUSY);
-	data->bytes_xfered += nbytes;
-	smp_wmb();
-	atmci_set_pending(host, EVENT_XFER_COMPLETE);
+	if (done) {
+		atmci_writel(host, ATMCI_IDR, ATMCI_TXRDY);
+		atmci_writel(host, ATMCI_IER, ATMCI_NOTBUSY);
+		smp_wmb();
+		atmci_set_pending(host, EVENT_XFER_COMPLETE);
+	}
 }
 
 static void atmci_sdio_interrupt(struct atmel_mci *host, u32 status)
