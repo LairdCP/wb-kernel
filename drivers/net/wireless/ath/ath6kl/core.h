@@ -908,6 +908,7 @@ struct ath6kl {
 
 	bool fips_mode;
 	bool allow_off_when_down;
+	atomic_t on_count;
 
 	struct {
 		enum wmi_phy_mode phy_mode;

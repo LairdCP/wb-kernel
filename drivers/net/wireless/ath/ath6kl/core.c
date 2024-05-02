@@ -264,6 +264,8 @@ int ath6kl_core_init(struct ath6kl *ar, enum ath6kl_htc_type htc_type)
 		ath6kl_recovery_init(ar);
 	}
 
+	atomic_inc(&ar->on_count);
+
 	ath6kl_cfg80211_off(ar);
 
 	rtnl_unlock();

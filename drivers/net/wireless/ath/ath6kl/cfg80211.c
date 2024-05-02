@@ -2557,6 +2557,9 @@ int ath6kl_cfg80211_off(struct ath6kl *ar)
 	if (!ar->allow_off_when_down)
 		return 0;
 
+	if (atomic_dec_return(&ar->on_count) > 0)
+		return 0;
+
 	ath6kl_recovery_suspend(ar);
 	ret = ath6kl_cfg80211_suspend(ar, ATH6KL_CFG_SUSPEND_CUTPOWER, NULL);
 
@@ -2568,6 +2571,9 @@ int ath6kl_cfg80211_on(struct ath6kl *ar)
 	int ret;
 
 	if (!ar->allow_off_when_down)
+		return 0;
+
+	if (atomic_inc_return(&ar->on_count) > 1)
 		return 0;
 
 	ret = ath6kl_cfg80211_resume(ar);
