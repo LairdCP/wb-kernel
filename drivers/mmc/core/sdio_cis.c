@@ -345,7 +345,7 @@ static int sdio_read_cis(struct mmc_card *card, struct sdio_func *func)
 						tpl_code, tpl_link, this->data,
 						tpl_link);
 				else
-					pr_warn_ratelimited(FMT("unknown"),
+					pr_debug_ratelimited(FMT("unknown"),
 						mmc_hostname(card->host),
 						tpl_code, tpl_link, this->data,
 						tpl_link);
