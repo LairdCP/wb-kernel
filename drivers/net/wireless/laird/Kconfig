@@ -161,10 +161,6 @@ config QCA_CLD_WLAN
 
 if QCA_CLD_WLAN
 
-config SUPPORT_P2P_BY_ONE_INTF_WLAN 
-	bool "Enable P2P by one interface feature"
-	default y
-
 config QCACLD_WLAN_LFR3
 	bool "Enable the WLAN Legacy Fast Roaming feature Version 3"
 
