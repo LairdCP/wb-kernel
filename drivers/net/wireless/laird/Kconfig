@@ -103,7 +103,7 @@ config LRD_MWIFIEX_NX61X
 		Sona NX611 Wi-Fi module
 
 if LRD_MWIFIEX_NX61X
-choice
+choice 
 	prompt "Driver debug log integration"
 	default LRD_NX61X_DEBUG_DEFAULT
 
@@ -161,22 +161,15 @@ config QCA_CLD_WLAN
 
 if QCA_CLD_WLAN
 
-config SUPPORT_IFTYPE_P2P_DEVICE_VIF
-	bool "Support P2P Device VIF"
-	default y
-
-config SUPPORT_P2P_BY_ONE_INTF_WLAN
-	bool "Support P2P by wlan interface"
-	depends on !SUPPORT_IFTYPE_P2P_DEVICE_VIF
+config SUPPORT_P2P_BY_ONE_INTF_WLAN 
+	bool "Enable P2P by one interface feature"
 	default y
 
 config QCACLD_WLAN_LFR3
 	bool "Enable the WLAN Legacy Fast Roaming feature Version 3"
-	default y
 
 config PRIMA_WLAN_OKC
 	bool "Enable the Prima WLAN Opportunistic Key Caching feature"
-	default y
 
 config PRIMA_WLAN_11AC_HIGH_TP
 	bool "Enable the Prima WLAN 802.11ac High Throughput option (depends upon kernel support)"
