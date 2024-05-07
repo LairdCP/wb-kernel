@@ -368,6 +368,22 @@ static struct ieee80211_supported_band cc33xx_band_2ghz = {
 	.n_iftype_data = ARRAY_SIZE(iftype_data_2ghz),
 };
 
+static const u8 he_if_types_ext_capa_sta[] = {
+	 [0] = WLAN_EXT_CAPA1_EXT_CHANNEL_SWITCHING,
+	 [2] = WLAN_EXT_CAPA3_MULTI_BSSID_SUPPORT,
+	 [7] = WLAN_EXT_CAPA8_OPMODE_NOTIF,
+	 [9] = WLAN_EXT_CAPA10_TWT_REQUESTER_SUPPORT,
+};
+
+static const struct wiphy_iftype_ext_capab he_iftypes_ext_capa[] = {
+	{
+		.iftype = NL80211_IFTYPE_STATION,
+		.extended_capabilities = he_if_types_ext_capa_sta,
+		.extended_capabilities_mask = he_if_types_ext_capa_sta,
+		.extended_capabilities_len = sizeof(he_if_types_ext_capa_sta),
+	},
+};
+
 /* 5 GHz data rates for cc33xx */
 static struct ieee80211_rate cc33xx_rates_5ghz[] = {
 	{ .bitrate = 60,
@@ -1238,11 +1254,18 @@ static void wlcore_save_freed_pkts_addr(struct cc33xx *wl,
 	rcu_read_unlock();
 }
 
+static void cc33xx_finalize_recovery(struct cc33xx *wl)
+{
+	wl->state = WLCORE_STATE_ON;
+	cc33xx_notice("Recovery complete");
+}
+
 static void cc33xx_recovery_work(struct work_struct *work)
 {
 	struct cc33xx *wl = container_of(work, struct cc33xx, recovery_work);
 	struct cc33xx_vif *wlvif;
 	struct ieee80211_vif *vif;
+	u8 active_interfaces = wl->ap_count + wl->sta_count;
 
 	cc33xx_notice("Recovery work");
 
@@ -1257,9 +1280,6 @@ static void cc33xx_recovery_work(struct work_struct *work)
 		return;
 	}
 
-	wl->state = WLCORE_STATE_RESTARTING;
-	set_bit(CC33XX_FLAG_RECOVERY_IN_PROGRESS, &wl->flags);
-	
 	mutex_lock(&wl->mutex);
 	while (!list_empty(&wl->wlvif_list)) {
 		wlvif = list_first_entry(&wl->wlvif_list,
@@ -1268,6 +1288,24 @@ static void cc33xx_recovery_work(struct work_struct *work)
 
 		if (test_bit(WLVIF_FLAG_STA_ASSOCIATED, &wlvif->flags))
 			ieee80211_connection_loss(vif);
+
+		if (test_bit(WLVIF_FLAG_AP_STARTED, &wlvif->flags)) {
+			struct ieee80211_sta *sta;
+			const u8 *addr;
+			int link_index;
+
+			for_each_set_bit(link_index, wlvif->ap.sta_hlid_map, CC33XX_MAX_LINKS) {
+				addr = wl->links[link_index].addr;
+
+				rcu_read_lock();
+				sta = ieee80211_find_sta(vif, addr);
+				if (sta) {
+					cc33xx_info("remove sta %d", link_index);
+					ieee80211_report_low_ack(sta, 0);
+				}
+				rcu_read_unlock();
+			}
+		}
 
 		__cc33xx_op_remove_interface(wl, vif, false);
 	}
@@ -1285,6 +1323,9 @@ static void cc33xx_recovery_work(struct work_struct *work)
 	mutex_lock(&wl->mutex);
 	clear_bit(CC33XX_FLAG_RECOVERY_IN_PROGRESS, &wl->flags);
 	mutex_unlock(&wl->mutex);
+
+	if(!active_interfaces)
+		cc33xx_finalize_recovery(wl);
 }
 
 static void irq_deferred_work(struct work_struct *work)
@@ -2117,7 +2158,8 @@ static void cc33xx_turn_off(struct cc33xx *wl)
 	 * this must be before the cancel_work calls below, so that the work
 	 * functions don't perform further work.
 	 */
-	wl->state = WLCORE_STATE_OFF;
+	if (wl->state == WLCORE_STATE_ON)
+		wl->state = WLCORE_STATE_OFF;
 
 	/*
 	 * Use the nosync variant to disable interrupts, so the mutex could be
@@ -2641,6 +2683,11 @@ static int cc33xx_op_add_interface(struct ieee80211_hw *hw,
 		wl->ap_count++;
 	else
 		wl->sta_count++;
+
+	if ((wl->state == WLCORE_STATE_RESTARTING) &&
+	    (wl->ap_count + wl->sta_count) == vif_count.counter){
+		cc33xx_finalize_recovery(wl);
+	}
 
 out:
 	mutex_unlock(&wl->mutex);
@@ -5763,6 +5810,12 @@ static int cc33xx_init_ieee80211(struct cc33xx *wl)
 
 		cc33xx_band_5ghz.iftype_data = NULL;
 		cc33xx_band_5ghz.n_iftype_data = 0;
+	}
+	else
+	{
+		wl->hw->wiphy->iftype_ext_capab = he_iftypes_ext_capa;
+		wl->hw->wiphy->num_iftype_ext_capab =
+			ARRAY_SIZE(he_iftypes_ext_capa);
 	}
 
 	/*

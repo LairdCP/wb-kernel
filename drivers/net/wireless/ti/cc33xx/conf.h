@@ -18,7 +18,7 @@ struct cc33xx_conf_header {
 } __attribute__((__packed__));
 
 #define CC33XX_CONF_MAGIC	0x10e100ca
-#define CC33XX_CONF_VERSION	0x01070069
+#define CC33XX_CONF_VERSION	0x01070070
 #define CC33XX_CONF_MASK	0x0000ffff
 #define CC33X_CONF_SIZE	(sizeof(struct cc33xx_conf_file))
 

@@ -376,7 +376,10 @@ int cc33xx_init_fw(struct cc33xx *wl)
 	cc33xx_debug(DEBUG_MAC80211, "11a is %ssupported",
 		     wl->enable_11a ? "" : "not ");
 
-	wl->state = WLCORE_STATE_ON;
+	if (wl->state != WLCORE_STATE_RESTARTING){
+		wl->state = WLCORE_STATE_ON;
+	}
+	
 	ret = 0;
 	goto out;
 

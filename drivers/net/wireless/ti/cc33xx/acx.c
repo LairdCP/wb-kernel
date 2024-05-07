@@ -1476,7 +1476,7 @@ int wlcore_acx_get_tx_rate(struct cc33xx *wl, struct cc33xx_vif *wlvif,
 {
 	struct acx_preamble_and_tx_rate *acx;
 	int ret;
-	cc33xx_debug(DEBUG_ACX, "acx set tx rate");
+	cc33xx_debug(DEBUG_ACX, "acx get tx rate");
 
 	acx = kzalloc(sizeof(*acx), GFP_KERNEL);
 	if (!acx) {
