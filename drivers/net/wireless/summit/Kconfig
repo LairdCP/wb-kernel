@@ -1,5 +1,5 @@
-config WLAN_VENDOR_LAIRD
-	bool "Laird Connectivity WLAN devices"
+config WLAN_VENDOR_SUMMIT
+	bool "Summit WLAN devices"
 	default y
 	help
 	  If you have a wireless card belonging to this class, say Y.
@@ -9,7 +9,7 @@ config WLAN_VENDOR_LAIRD
 	  the questions about  cards. If you say Y, you will be asked for
 	  your specific card in the following questions.
 
-if WLAN_VENDOR_LAIRD
+if WLAN_VENDOR_SUMMIT
 
 config LRDMWL
 	tristate "60 Series driver (mac80211 compatible)"
@@ -17,7 +17,7 @@ config LRDMWL
 	help
 		Select to build the driver supporting the:
 
-		Laird Connectivity 60 Series Wi-Fi module
+		ezurio 60 Series Wi-Fi module
 
 		This driver uses the kernel's mac80211 subsystem.
 
@@ -35,7 +35,7 @@ config LRDMWL_PCIE
 	help
 		Select to build the driver supporting the:
 
-		Laird Connectivity 60 Series Wi-Fi module for PCIE
+		ezurio 60 Series Wi-Fi module for PCIE
 
 		This driver uses the kernel's mac80211 subsystem.
 
@@ -51,7 +51,7 @@ config LRDMWL_SDIO
 	help
 		Select to build the driver supporting the:
 
-		Laird Connectivity 60 Series Wi-Fi module for SDIO
+		ezurio 60 Series Wi-Fi module for SDIO
 
 		This driver uses the kernel's mac80211 subsystem.
 
@@ -67,7 +67,7 @@ config LRDMWL_USB
 	help
 		Select to build the driver supporting the:
 
-		Laird Connectivity 60 Series Wi-Fi module for USB
+		ezurio 60 Series Wi-Fi module for USB
 
 		This driver uses the kernel's mac80211 subsystem.
 
@@ -83,7 +83,7 @@ config LRDMWL_FIPS
 
 endif # LRDMWL
 
-config LRD_MWIFIEX
+config SUMMIT_MWIFIEX
 	tristate "Sona Series driver (cfg80211 compatible)"
 	depends on CFG80211
 	help
@@ -94,59 +94,59 @@ config LRD_MWIFIEX
 		say M here and read <file:Documentation/kbuild/modules.txt>.  The
 		modules will be called moal and mlan.
 
-if LRD_MWIFIEX
-config LRD_MWIFIEX_NX61X
+if SUMMIT_MWIFIEX
+config SUMMIT_MWIFIEX_NX61X
 	bool "Sona NX611 driver"
 	depends on MMC
 	select FW_LOADER
 	help
 		Sona NX611 Wi-Fi module
 
-if LRD_MWIFIEX_NX61X
+if SUMMIT_MWIFIEX_NX61X
 choice 
 	prompt "Driver debug log integration"
-	default LRD_NX61X_DEBUG_DEFAULT
+	default SUMMIT_NX61X_DEBUG_DEFAULT
 
-config LRD_NX61X_DEBUG_NONE
+config SUMMIT_NX61X_DEBUG_NONE
 	bool "None"
 	help
 		No debug logs integrated
 
-config LRD_NX61X_DEBUG_DEFAULT
+config SUMMIT_NX61X_DEBUG_DEFAULT
 	bool "Typical"
 	help
 		Typical level of logs integrated
 
-config LRD_NX61X_DEBUG_ALL
+config SUMMIT_NX61X_DEBUG_ALL
 	bool "All"
 	help
 		All debug logs integrated
 endchoice
-endif # LRD_MWIFIEX_NX61X
+endif # SUMMIT_MWIFIEX_NX61X
 
-config LRD_MWIFIEX_8997
+config SUMMIT_MWIFIEX_8997
 	bool "8997 driver for manufacturing"
 	help
 		8997 Wi-Fi module for manufacturing purposes only
 
-if LRD_MWIFIEX_8997
-config LRD_MWIFIEX_8997_PCIE
+if SUMMIT_MWIFIEX_8997
+config SUMMIT_MWIFIEX_8997_PCIE
 	bool "PCIE Bus"
 	depends on PCI
 	select FW_LOADER
 	help
 		PCIe Wi-Fi module
 
-config LRD_MWIFIEX_8997_SDIO
+config SUMMIT_MWIFIEX_8997_SDIO
 	bool "SDIO Bus"
 	depends on MMC
 	select FW_LOADER
 	help
 		SDIO Wi-Fi module
-endif # LRD_MWIFIEX_8997
+endif # SUMMIT_MWIFIEX_8997
 
 
-endif # LRD_MWIFIEX
+endif # SUMMIT_MWIFIEX
 
 config QCA_CLD_WLAN
 	tristate "Qualcomm Atheros CLD WLAN module"
@@ -219,4 +219,4 @@ config DPTRACE_ENABLE
 
 endif # QCA_CLD_WLAN
 
-endif # WLAN_VENDOR_LAIRD
+endif # WLAN_VENDOR_SUMMIT

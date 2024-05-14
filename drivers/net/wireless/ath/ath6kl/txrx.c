@@ -372,7 +372,7 @@ netdev_tx_t ath6kl_data_tx(struct sk_buff *skb, struct net_device *dev)
 
 	if (ar->fips_mode) {
 		// note, may return a different skb
-		if (laird_data_tx(&skb, dev))
+		if (kfips_data_tx(&skb, dev))
 			goto fail_tx;
 	}
 
@@ -436,7 +436,7 @@ netdev_tx_t ath6kl_data_tx(struct sk_buff *skb, struct net_device *dev)
 		}
 
 		ret = ath6kl_wmi_data_hdr_add(ar->wmi, skb,
-				DATA_MSGTYPE, flags, LAIRD_HDR_TYPE,
+				DATA_MSGTYPE, flags, KFIPS_HDR_TYPE,
 				meta_ver,
 				meta, vif->fw_vif_idx);
 
@@ -1556,7 +1556,7 @@ void ath6kl_rx(struct htc_target *target, struct htc_packet *packet)
 
 	if (ar->fips_mode) {
 		int res;
-		res = laird_data_rx(&skb);
+		res = kfips_data_rx(&skb);
 		if (res < 0) {
 			/* failed -- delete packet */
 			dev_kfree_skb(skb);

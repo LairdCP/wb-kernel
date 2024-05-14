@@ -609,7 +609,7 @@ static int wiphy_verify_combinations(struct wiphy *wiphy)
 
 		c = &wiphy->iface_combinations[i];
 
-#ifndef _REMOVE_LAIRD_MODS_
+#ifndef _REMOVE_SUMMIT_MODS_
 #else
 		/*
 		 * Combinations with just one interface aren't real,
@@ -1388,7 +1388,7 @@ void cfg80211_init_wdev(struct wireless_dev *wdev)
 	/* allow mac80211 to determine the timeout */
 	wdev->ps_timeout = -1;
 
-#ifndef _REMOVE_LAIRD_MODS_
+#ifndef _REMOVE_SUMMIT_MODS_
 		if (wdev->iftype == NL80211_IFTYPE_P2P_CLIENT && !wdev->use_4addr)
 			wdev->netdev->priv_flags |= IFF_DONT_BRIDGE;
 #else

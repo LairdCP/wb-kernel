@@ -203,16 +203,19 @@ static const struct ath6kl_hw hw_list[] = {
  * Use value of zero to disable keepalive support
  * Default: 60 seconds
  */
-//#define WLAN_CONFIG_KEEP_ALIVE_INTERVAL 60
-//Laird: Change the default keep alive to 9 seconds for LAIRD.
-//TODO: Have this change come from the SDK
+
+/*
+#define WLAN_CONFIG_KEEP_ALIVE_INTERVAL 60
+Summit: Change the default keep alive to 9 seconds
+TODO: Have this change come from the SDK
+*/
 #define WLAN_CONFIG_KEEP_ALIVE_INTERVAL 9
 
 /*
  * This configuration item sets the value of disconnect timeout
- * Firmware delays sending the disconnec event to the host for this
+ * Firmware delays sending the disconnect event to the host for this
  * timeout after is gets disconnected from the current AP.
- * If the firmware successly roams within the disconnect timeout
+ * If the firmware successfully roams within the disconnect timeout
  * it sends a new connect event
  */
 #define WLAN_CONFIG_DISCONNECT_TIMEOUT 10

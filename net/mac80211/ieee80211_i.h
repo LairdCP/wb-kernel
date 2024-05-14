@@ -120,7 +120,7 @@ struct ieee80211_bss {
 	/* Keep track of what bits of information we have valid info for. */
 	u8 valid_data;
 
-#ifndef _REMOVE_LAIRD_MODS_
+#ifndef _REMOVE_SUMMIT_MODS_
 	// scaled averaged signal level
 	s32 avg_signal;
 #endif
@@ -560,7 +560,7 @@ struct ieee80211_if_managed {
 	struct wiphy_delayed_work ml_reconf_work;
 	u16 removed_links;
 
-#ifndef _REMOVE_LAIRD_MODS_
+#ifndef _REMOVE_SUMMIT_MODS_
 	struct {
 		int enabled;
 		int ipv4;

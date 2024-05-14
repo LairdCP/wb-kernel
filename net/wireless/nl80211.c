@@ -9333,32 +9333,34 @@ static int nl80211_trigger_scan(struct sk_buff *skb, struct genl_info *info)
 			nla_get_u16(info->attrs[NL80211_ATTR_MEASUREMENT_DURATION]);
 		request->duration_mandatory =
 			nla_get_flag(info->attrs[NL80211_ATTR_MEASUREMENT_DURATION_MANDATORY]);
-#ifndef _REMOVE_LAIRD_MODS_
-		{
-			// support configuration of scan timing
-			struct {
-				// note, duration is first for backward compatability
-				u16 duration;
-				u16 passive_channel_time;
-				u16 probe_delay_time;
-				u16 scan_suspend_time;
-			} *laird_scan_data;
-			if (nla_len(info->attrs[NL80211_ATTR_MEASUREMENT_DURATION]) ==
-				sizeof(*laird_scan_data))
-			{
-				laird_scan_data =
-					nla_data(info->attrs[NL80211_ATTR_MEASUREMENT_DURATION]);
-				// note, duration was already populated above
-				request->passive_channel_time =
-					laird_scan_data->passive_channel_time;
-				request->probe_delay_time =
-					laird_scan_data->probe_delay_time;
-				request->scan_suspend_time =
-					laird_scan_data->scan_suspend_time;
-			}
-		}
-#endif
 	}
+
+#ifndef _REMOVE_SUMMIT_MODS_
+	if (info->attrs[NL80211_ATTR_MEASUREMENT_DURATION]) {
+		// support configuration of scan timing
+		struct {
+			// note, duration is first for backward compatability
+			u16 duration;
+			u16 passive_channel_time;
+			u16 probe_delay_time;
+			u16 scan_suspend_time;
+		} *scan_data;
+
+		if (nla_len(info->attrs[NL80211_ATTR_MEASUREMENT_DURATION]) ==
+			sizeof(*scan_data))
+		{
+			scan_data =
+				nla_data(info->attrs[NL80211_ATTR_MEASUREMENT_DURATION]);
+			// note, duration was already populated above
+			request->passive_channel_time =
+				scan_data->passive_channel_time;
+			request->probe_delay_time =
+				scan_data->probe_delay_time;
+			request->scan_suspend_time =
+				scan_data->scan_suspend_time;
+		}
+	}
+#endif
 
 	err = nl80211_check_scan_flags(wiphy, wdev, request, info->attrs,
 				       false);

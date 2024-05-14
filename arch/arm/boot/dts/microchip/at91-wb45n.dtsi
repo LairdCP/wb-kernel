@@ -2,15 +2,15 @@
 /*
  * at91-wb45n.dtsi - Device Tree include file for WB45NBT CPU module
  *
- *  Copyright (C) 2018-2020 Laird Connectivity
+ *  Copyright (C) 2018-2020 Ezurio
  *
  */
 
 #include "at91sam9g25.dtsi"
 
 / {
-	model = "Laird Workgroup Bridge 45N - Atmel AT91SAM (dt)";
-	compatible = "laird,wb45n", "laird,wbxx", "atmel,at91sam9x5", "atmel,at91sam9";
+	model = "Summit Workgroup Bridge 45N - Atmel AT91SAM (dt)";
+	compatible = "summit,wb45n", "atmel,at91sam9x5", "atmel,at91sam9";
 
 	chosen {
 		stdout-path = "serial0:115200n8";

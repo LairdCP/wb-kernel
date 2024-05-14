@@ -29,7 +29,7 @@
 #include "bmi.h"
 #include "target.h"
 
-#include "laird_kfips.h"
+#include "kfips.h"
 
 #define MAX_ATH6KL                        1
 #define ATH6KL_MAX_RX_BUFFERS             16
@@ -912,23 +912,23 @@ struct ath6kl {
 
 	struct {
 		enum wmi_phy_mode phy_mode;
-		u8 num_channels;
 		u16 channel_list[WMI_MAX_CHANNELS];
+		u8 num_channels;
 		u8 htcap_2ghz_set;
 		u8 htcap_5ghz_set;
 		struct wmi_set_htcap_cmd htcap_params_2ghz;
 		struct wmi_set_htcap_cmd htcap_params_5ghz;
-		char AP_Name[17];
-		unsigned char AP_IP[4];
+		char ap_name[17];
+		unsigned char ap_ip[4];
 
 		bool profile_initialized;
 		u16 fg_start_period;
 		u16 fg_end_period;
 		u16 pas_chdwell_time;
-		u8 scan_ctrl_flags;
 		u16 bmiss_time;
+		u8 scan_ctrl_flags;
 		u8 roam_delta;
-	} laird;
+	} summit_ext;
 };
 
 static inline struct ath6kl *ath6kl_priv(struct net_device *dev)

@@ -684,13 +684,24 @@ static int ath6kl_cfg80211_connect(struct wiphy *wiphy, struct net_device *dev,
 		sme->bg_scan_period = DEFAULT_BG_SCAN_PERIOD;
 	}
 
-	// Laird: Use scan parameters from host provided profile data where relevant.
-	// Parameters will be zero if not initialized by the host, resulting in default values
-	ath6kl_wmi_scanparams_cmd(ar->wmi, vif->fw_vif_idx, ar->laird.fg_start_period, ar->laird.fg_end_period,
-				  sme->bg_scan_period, 0, 0, ar->laird.pas_chdwell_time, 3, ar->laird.scan_ctrl_flags, 0, 0);
+	/*
+	Summit: Use scan parameters from host provided profile
+	data where relevant.
+	Parameters will be zero if not initialized by the host,
+	resulting in default values
+	*/
+	ath6kl_wmi_scanparams_cmd(ar->wmi, vif->fw_vif_idx,
+				  ar->summit_ext.fg_start_period,
+				  ar->summit_ext.fg_end_period,
+				  sme->bg_scan_period,
+				  0, 0,
+				  ar->summit_ext.pas_chdwell_time,
+				  3,
+				  ar->summit_ext.scan_ctrl_flags,
+				  0, 0);
 
-	// Laird: Update roam parameters if available
-	lrd_update_roam_params(ar,vif->fw_vif_idx);
+	/* Summit: Update roam parameters if available */
+	summit_update_roam_params(ar, vif->fw_vif_idx);
 
 	up(&ar->sem);
 
@@ -804,9 +815,9 @@ void ath6kl_cfg80211_connect_event(struct ath6kl_vif *vif, u16 channel,
 	u8 *assoc_resp_ie = assoc_info + beacon_ie_len + assoc_req_len +
 	    assoc_resp_ie_offset;
 
-#ifdef CONFIG_ATH6KL_LAIRD_FIPS
+#ifdef CONFIG_ATH6KL_FIPS
 	if (ar->fips_mode) {
-		laird_connect_event();
+		kfips_connect_event();
 	}
 #endif
 
@@ -1230,7 +1241,7 @@ static int ath6kl_cfg80211_add_key(struct wiphy *wiphy, struct net_device *ndev,
 	key->cipher = params->cipher;
 
 	if (ar->fips_mode) {
-		laird_addkey(ndev, key_index, pairwise, mac_addr,
+		kfips_addkey(ndev, key_index, pairwise, mac_addr,
 			     key->key, key->key_len, key->seq,
 			     key->seq_len);
 	}
@@ -1335,7 +1346,7 @@ static int ath6kl_cfg80211_del_key(struct wiphy *wiphy, struct net_device *ndev,
 	vif->keys[key_index].key_len = 0;
 
 	if (ar->fips_mode)
-		laird_delkey(ndev, key_index);
+		kfips_delkey(ndev, key_index);
 
 	return ath6kl_wmi_deletekey_cmd(ar->wmi, vif->fw_vif_idx, key_index);
 }
@@ -1564,8 +1575,8 @@ static int ath6kl_cfg80211_set_power_mgmt(struct wiphy *wiphy,
 		return -EIO;
 	}
 
-	// Laird: Configure PM parameters as required by Laird firmware
-	lrd_update_pm_params(ar, vif->fw_vif_idx);
+	// Configure PM parameters as required by firmware
+	summit_update_pm_params(ar, vif->fw_vif_idx);
 
 	return 0;
 }
@@ -4099,8 +4110,8 @@ int ath6kl_cfg80211_init(struct ath6kl *ar)
 
 	ar->wiphy->regulatory_flags = REGULATORY_WIPHY_SELF_MANAGED;
 
-	ath6kl_wmi_lrd_init_channels(ar);
-	lrd_set_vendor_commands(wiphy);
+	summit_ath6kl_wmi_init_channels(ar);
+	summit_set_vendor_commands(wiphy);
 
 	ret = wiphy_register(wiphy);
 	if (ret < 0) {

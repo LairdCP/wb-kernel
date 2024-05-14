@@ -8291,7 +8291,7 @@ struct brcmf_cfg80211_info *brcmf_cfg80211_attach(struct brcmf_pub *drvr,
 	ndev->ieee80211_ptr = &vif->wdev;
 	SET_NETDEV_DEV(ndev, wiphy_dev(cfg->wiphy));
 
-	// Laird - Configure regdomain if provided in settings
+	// Summit - Configure regdomain if provided in settings
 	//   Required for 4373/43439, optional for 4343/4339
 	//   Note - Configuration provided as country code except for "ETSI" pseudocode
 	if (strlen(drvr->settings->regdomain) != 0) {

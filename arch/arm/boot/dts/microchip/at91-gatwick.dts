@@ -2,16 +2,17 @@
 /*
  * at91-gatwick.dts - Device Tree file for the Gatwick board
  *
- *  Copyright (C) 2018 Laird
+ *  Copyright (C) 2018 Ezurio
  *
  */
 /dts-v1/;
+
 #include "at91-wb50n.dtsi"
 #include <dt-bindings/input/input.h>
 
 / {
-	model = "Laird Workgroup Bridge 50N - Project Gatwick";
-	compatible = "laird,gatwick", "laird,wb50n", "atmel,sama5d31", "atmel,sama5d3", "atmel,sama5";
+	model = "Summit Workgroup Bridge 50N - Project Gatwick";
+	compatible = "summit,gatwick", "summit,wb50n", "atmel,sama5d31", "atmel,sama5d3", "atmel,sama5";
 
 	gpio-keys {
 		compatible = "gpio-keys";
@@ -71,10 +72,16 @@
 
 &pinctrl {
 	board {
+		pinctrl_usb_vbus: usb_vbus {
+			atmel,pins =
+				<AT91_PIOA 2 AT91_PERIPH_GPIO AT91_PINCTRL_NONE>,
+				<AT91_PIOA 4 AT91_PERIPH_GPIO AT91_PINCTRL_DEGLITCH>;
+		};
+
 		pinctrl_key_gpio: key_gpio_0 {
 		  atmel,pins =
 			  <AT91_PIOE 31 AT91_PERIPH_GPIO AT91_PINCTRL_PULL_UP_DEGLITCH>; /* PE31 GPIO with pullup deglitch */
-	  };
+		};
 	};
 };
 
@@ -87,17 +94,27 @@
 };
 
 &dbgu {
+	atmel,use-dma-rx;
+	atmel,use-dma-tx;
+
 	status = "okay";
 };
 
 /* FTDI USART */
 &usart0 {
+	atmel,use-dma-rx;
+	atmel,use-dma-tx;
+
 	status = "okay";
 };
 
 /* GPS USART */
 &usart1 {
 	pinctrl-0 = <&pinctrl_usart1>;
+
+	atmel,use-dma-rx;
+	atmel,use-dma-tx;
+
 	status = "okay";
 };
 
@@ -112,8 +129,13 @@
 };
 
 &usb1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_usb_vbus>;
+
+	num-ports = <3>;
+	atmel,vbus-gpio = <&pioA 2 GPIO_ACTIVE_LOW>;
+
 	status = "okay";
-	/delete-property/atmel,oc-gpio;
 };
 
 &usb2 {

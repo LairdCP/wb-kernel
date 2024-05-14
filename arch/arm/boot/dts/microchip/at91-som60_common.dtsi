@@ -2,9 +2,9 @@
 /*
  * at91-som60_common.dtsi - Device Tree include common file for the SOM60 module
  *
- *  Copyright (C) 2018-2020 Laird Connectivity,
- *		  2018 Ben Whitten <ben.whitten@lairdconnect.com>
- *		  2018 Boris Krasnovskiy <boris.krasnovskiy@lairdconnect.com>
+ *  Copyright (C) 2018-2020 Ezurio,
+ *		  2018 Ben Whitten <ben.whitten@ezurio.com>
+ *		  2018 Boris Krasnovskiy <boris.krasnovskiy@ezurio.com>
  *
  */
 #include "sama5d36.dtsi"
@@ -31,7 +31,7 @@
 	};
 
 	fs_mem {
-		compatible = "laird,fs_mem";
+		compatible = "summit,fs_mem";
 		memory-region = <&fs_reserved>;
 	};
 

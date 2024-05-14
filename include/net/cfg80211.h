@@ -2542,7 +2542,7 @@ struct cfg80211_scan_request {
 	u32 n_6ghz_params;
 	struct cfg80211_scan_6ghz_params *scan_6ghz_params;
 
-#ifndef _REMOVE_LAIRD_MODS_
+#ifndef _REMOVE_SUMMIT_MODS_
 	u16 passive_channel_time;
 	u16 probe_delay_time;
 	u16 scan_suspend_time;

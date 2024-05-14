@@ -65,15 +65,16 @@ config ATH6KL_REGDOMAIN
 
 	  If unsure, say N.
 
-config ATH6KL_LAIRD_FIPS
-	bool "Atheros ath6kl based Laird Connectivity FIPS support"
+config ATH6KL_FIPS
+	bool "Atheros ath6kl FIPS support"
 	depends on ATH6KL
-	select CRYPTO
+	depends on CRYPTO_FIPS
+	depends on CRYPTO
 	select CRYPTO_AES
 	select CRYPTO_CCM
 	help
 	  Enabling this makes it possible to enable FIPS mode while using
-	  Laird software, firmware, and hardware.  This requires kernel
+	  software, firmware, and hardware. This requires kernel
 	  cryptography support for AES-CCM.
 	  Note: FIPS mode requires a FIPS validated Kernel Cryptographic module.
 

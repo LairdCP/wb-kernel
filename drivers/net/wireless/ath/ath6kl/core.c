@@ -81,7 +81,7 @@ int ath6kl_core_init(struct ath6kl *ar, enum ath6kl_htc_type htc_type)
 	struct wireless_dev *wdev;
 	int ret = 0, i;
 
-#ifdef CONFIG_ATH6KL_LAIRD_FIPS
+#ifdef CONFIG_ATH6KL_FIPS
 	ar->fips_mode = fips_enabled && fips_wifi_enabled;
 #endif
 
@@ -351,11 +351,11 @@ struct ath6kl *ath6kl_core_create(struct device *dev)
 
 	memcpy(ar->ap_country_code, DEF_AP_COUNTRY_CODE, 3);
 
-	ar->laird.phy_mode = 0;  //init to zero (invalid) so we can tell if we receive a mode later
-	ar->laird.num_channels = 0;
-	memset(ar->laird.channel_list, 0, sizeof(u16) * WMI_MAX_CHANNELS);
-	memset(&(ar->laird.htcap_params_2ghz), 0, sizeof(struct wmi_set_htcap_cmd));
-	memset(&(ar->laird.htcap_params_5ghz), 0, sizeof(struct wmi_set_htcap_cmd));
+	ar->summit_ext.phy_mode = 0;  //init to zero (invalid) so we can tell if we receive a mode later
+	ar->summit_ext.num_channels = 0;
+	memset(ar->summit_ext.channel_list, 0, sizeof(u16) * WMI_MAX_CHANNELS);
+	memset(&(ar->summit_ext.htcap_params_2ghz), 0, sizeof(struct wmi_set_htcap_cmd));
+	memset(&(ar->summit_ext.htcap_params_5ghz), 0, sizeof(struct wmi_set_htcap_cmd));
 
 	return ar;
 }
@@ -392,7 +392,7 @@ EXPORT_SYMBOL(ath6kl_core_cleanup);
 
 void ath6kl_core_destroy(struct ath6kl *ar)
 {
-	laird_deinit();
+	kfips_deinit();
 	ath6kl_cfg80211_destroy(ar);
 }
 EXPORT_SYMBOL(ath6kl_core_destroy);

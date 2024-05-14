@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019 Laird Connectivity Inc.
+ * Copyright (c) 2019 Ezurio Inc.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -14,7 +14,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Laird: Single Station 802.11 data packets using Kernel Crypto */
+/* Kfips: Single Station 802.11 data packets using Kernel Crypto */
 
 
 #include <crypto/aes.h>
@@ -27,7 +27,7 @@
 
 #include "aead_api.h"
 
-#include "laird_kfips.h"
+#include "kfips.h"
 
 #define CCM_AAD_LEN	32
 #define is_ethertype(type_or_len)	((type_or_len) >= 0x0600)
@@ -42,7 +42,7 @@ struct _llc_snap_hdr {
 
 static const unsigned char llc_snap[] = { 0xaa, 0xaa, 0x03, 0x00, 0x00, 0x00 };
 
-struct laird_wlanhdr {
+struct kfips_wlanhdr {
 	u8 fc[2];
 #define FC0_FTYPE      (3<<2)
 #define FC0_FTYPE_DATA (2<<2)
@@ -59,7 +59,7 @@ struct laird_wlanhdr {
 #define SEQ0_FRAG (0xF)
 } __packed;
 
-struct laird_wlanhdr_qos {
+struct kfips_wlanhdr_qos {
 	u8 fc[2];
 	__le16 dur;
 	u8 addr1[6];
@@ -72,14 +72,14 @@ struct laird_wlanhdr_qos {
 } __packed;
 #define WLANHDR_QOS_PAD 2
 
-static int wlanhdrlen(struct laird_wlanhdr *hdr);
+static int wlanhdrlen(struct kfips_wlanhdr *hdr);
 
 typedef u64 frag_pn_t;
 
 // encryption pn from packet ((u64)-1 if not encrypted)
 static frag_pn_t frag_pn_from_skb(struct sk_buff *skb)
 {
-	struct laird_wlanhdr *wh = (void*)skb->data;
+	struct kfips_wlanhdr *wh = (void*)skb->data;
 	u8 *iv;
 	frag_pn_t pn;
 	if ( (wh->fc[1] & FC1_PROTECTED) == 0)
@@ -94,7 +94,7 @@ static frag_pn_t frag_pn_from_skb(struct sk_buff *skb)
 	return pn;
 }
 
-#define LAIRD_SIMULT_REASSEMBLE_BUFS	16
+#define KFIPS_SIMULT_REASSEMBLE_BUFS	16
 
 // sequence id for matching fragments
 // 0 indicates an invalid/empty entry
@@ -127,12 +127,12 @@ static int seqid_is_next(seqid_t seq1, seqid_t seq2)
 static seqid_t seqid_from_skb(struct sk_buff *skb)
 {
 	seqid_t seqid;
-	struct laird_wlanhdr *hdr = (void*)skb->data;
+	struct kfips_wlanhdr *hdr = (void*)skb->data;
 	int is_qos;
 	if (skb->len < sizeof(*hdr)) return 0;
 	is_qos = hdr->fc[0] & FC0_STYPE_QOS;
 	if (is_qos) {
-		struct laird_wlanhdr_qos *hdrq = (void*)hdr;
+		struct kfips_wlanhdr_qos *hdrq = (void*)hdr;
 		if (skb->len < sizeof(*hdrq)) return 0;
 		seqid = 2<<8 | (hdrq->qos[0] & QOS0_TID);
 	} else {
@@ -153,18 +153,18 @@ typedef struct {
 } frag_entry_t;
 
 static struct {
-	frag_entry_t frag[LAIRD_SIMULT_REASSEMBLE_BUFS]; // array of fragments
+	frag_entry_t frag[KFIPS_SIMULT_REASSEMBLE_BUFS]; // array of fragments
 	int index; // next index to insert at
 } _rdata;
 
 static int index_next(int index)
 {
-	return (index + 1) % LAIRD_SIMULT_REASSEMBLE_BUFS;
+	return (index + 1) % KFIPS_SIMULT_REASSEMBLE_BUFS;
 }
 
 static int index_prev(int index)
 {
-	return (index - 1 + LAIRD_SIMULT_REASSEMBLE_BUFS) % LAIRD_SIMULT_REASSEMBLE_BUFS;
+	return (index - 1 + KFIPS_SIMULT_REASSEMBLE_BUFS) % KFIPS_SIMULT_REASSEMBLE_BUFS;
 }
 
 static void frag_entry_create(frag_entry_t *fd, struct sk_buff *skb, seqid_t seqid)
@@ -183,7 +183,7 @@ static void frag_entry_free(frag_entry_t *fd)
 
 /*======================================================================*/
 // return matching fragment entry if one exists
-static frag_entry_t *lairdReassemblyArraySearch(seqid_t seqid)
+static frag_entry_t *kfipsReassemblyArraySearch(seqid_t seqid)
 {
 	int i;
 	int index;
@@ -191,7 +191,7 @@ static frag_entry_t *lairdReassemblyArraySearch(seqid_t seqid)
 	// note, need to search all entries
 	// as there may be holes when frags complete out of order
 	index = _rdata.index;
-	for (i=LAIRD_SIMULT_REASSEMBLE_BUFS; i--; ) {
+	for (i=KFIPS_SIMULT_REASSEMBLE_BUFS; i--; ) {
 		index = index_prev(index);
 		if (seqid_is_same_seq(_rdata.frag[index].seqid, seqid)) {
 			// found a match
@@ -203,7 +203,7 @@ static frag_entry_t *lairdReassemblyArraySearch(seqid_t seqid)
 
 // create a new frag (delete old matching frag)
 // always save to newest frag entry
-static int lairdReassemblyNewFrag(frag_entry_t *frag, struct sk_buff *skb, seqid_t seqid)
+static int kfipsReassemblyNewFrag(frag_entry_t *frag, struct sk_buff *skb, seqid_t seqid)
 {
 	if (frag) {
 		frag_entry_free(frag); // free the old entry if a match was found
@@ -225,11 +225,11 @@ static int lairdReassemblyNewFrag(frag_entry_t *frag, struct sk_buff *skb, seqid
 
 // append the skb payload to frag, if it is the next fragment
 #define FC1_FRAG_MATCH (FC1_TODS|FC1_FROMDS|FC1_PROTECTED)
-static int lairdReassemblyAppendFrag(frag_entry_t *frag, struct sk_buff *from_skb, seqid_t seqid)
+static int kfipsReassemblyAppendFrag(frag_entry_t *frag, struct sk_buff *from_skb, seqid_t seqid)
 {
 	struct sk_buff *to_skb;
-	struct laird_wlanhdr *to_hdr;
-	struct laird_wlanhdr *from_hdr;
+	struct kfips_wlanhdr *to_hdr;
+	struct kfips_wlanhdr *from_hdr;
 	char* destPtr;
 	char* srcPtr;
 	int len;
@@ -297,14 +297,14 @@ static int lairdReassemblyAppendFrag(frag_entry_t *frag, struct sk_buff *from_sk
 	return 0;
 }
 
-DEFINE_SPINLOCK(laird_defrag_spinlock);
+DEFINE_SPINLOCK(kfips_defrag_spinlock);
 
 // if an error is returned, the caller still owns the skb
 //
 // if an error does not occur, the incoming skb is consumed
 // if the incoming skb does not complete a fragment, *skbin = NULL
 // if the incoming skb completes a fragment, *skbin returns a different skb
-static int lairdReassemblyProcess(struct sk_buff **skbin)
+static int kfipsReassemblyProcess(struct sk_buff **skbin)
 {
 	struct sk_buff *skb = *skbin;
 	frag_entry_t *frag;
@@ -324,28 +324,28 @@ static int lairdReassemblyProcess(struct sk_buff **skbin)
 		return -1;
 	}
 
-	spin_lock_bh(&laird_defrag_spinlock);
+	spin_lock_bh(&kfips_defrag_spinlock);
 
-	frag = lairdReassemblyArraySearch(seqid);
+	frag = kfipsReassemblyArraySearch(seqid);
 	if (seqid_is_first_frag(seqid)) {
-		res = lairdReassemblyNewFrag(frag, skb, seqid);
+		res = kfipsReassemblyNewFrag(frag, skb, seqid);
 		if (res) {
-			spin_unlock_bh(&laird_defrag_spinlock);
+			spin_unlock_bh(&kfips_defrag_spinlock);
 			return res;
 		}
 		// the skb is now held by the reassembly code
 		*skbin = NULL;
-		spin_unlock_bh(&laird_defrag_spinlock);
+		spin_unlock_bh(&kfips_defrag_spinlock);
 		return 0;
 	}
 	if (!frag) {
 		// no match found, discard fragment, return as error
-		spin_unlock_bh(&laird_defrag_spinlock);
+		spin_unlock_bh(&kfips_defrag_spinlock);
 		return -1;
 	}
-	res = lairdReassemblyAppendFrag(frag, skb, seqid);
+	res = kfipsReassemblyAppendFrag(frag, skb, seqid);
 	if (res < 0) {
-		spin_unlock_bh(&laird_defrag_spinlock);
+		spin_unlock_bh(&kfips_defrag_spinlock);
 		return res;
 	}
 	// fragment was consumed
@@ -353,39 +353,39 @@ static int lairdReassemblyProcess(struct sk_buff **skbin)
 	if (res) {
 		// defragmentation is not complete
 		*skbin = NULL;
-		spin_unlock_bh(&laird_defrag_spinlock);
+		spin_unlock_bh(&kfips_defrag_spinlock);
 		return 0;
 	}
 	// defragmentation is complete, return the packet
 	*skbin = frag->skb;
 	frag->skb = NULL;
 	frag_entry_free(frag);
-	spin_unlock_bh(&laird_defrag_spinlock);
+	spin_unlock_bh(&kfips_defrag_spinlock);
 	return 0;
 }
 
 
-static int lairdReassemblyPurgeAll(void)
+static int kfipsReassemblyPurgeAll(void)
 {
 	int index;
 
-	spin_lock_bh(&laird_defrag_spinlock);
-	for(index=0; index<LAIRD_SIMULT_REASSEMBLE_BUFS; index++) {
+	spin_lock_bh(&kfips_defrag_spinlock);
+	for(index = 0; index < KFIPS_SIMULT_REASSEMBLE_BUFS; index++) {
 		frag_entry_free(&_rdata.frag[index]);
 	}
-	spin_unlock_bh(&laird_defrag_spinlock);
+	spin_unlock_bh(&kfips_defrag_spinlock);
 	return 0;
 }
 
 // remove encrypted fragments on key change
-static int lairdReassemblyPurgeKeyChange(int keyidx)
+static int kfipsReassemblyPurgeKeyChange(int keyidx)
 {
 	int index;
 
-	spin_lock_bh(&laird_defrag_spinlock);
-	for(index=0; index<LAIRD_SIMULT_REASSEMBLE_BUFS; index++) {
+	spin_lock_bh(&kfips_defrag_spinlock);
+	for(index=0; index<KFIPS_SIMULT_REASSEMBLE_BUFS; index++) {
 		frag_entry_t *fd = &_rdata.frag[index];
-		struct laird_wlanhdr *wh;
+		struct kfips_wlanhdr *wh;
 		u8 *iv;
 		if (!fd->skb)
 			continue;
@@ -397,27 +397,27 @@ static int lairdReassemblyPurgeKeyChange(int keyidx)
 			continue;
 		frag_entry_free(&_rdata.frag[index]);
 	}
-	spin_unlock_bh(&laird_defrag_spinlock);
+	spin_unlock_bh(&kfips_defrag_spinlock);
 	return 0;
 }
 
-typedef u64 lrd_seq_t;
+typedef u64 kfips_seq_t;
 typedef struct {
 	int refcount;
 	u8 key[16];
 	int keylen;
-	lrd_seq_t rsc;
-	lrd_seq_t rscqos[16];
+	kfips_seq_t rsc;
+	kfips_seq_t rscqos[16];
 	u64 tsc;
 	struct crypto_aead *tfm;
-} lrd_key_t;
+} kfips_key_t;
 
 
 // call without spinlock (tfm alloc is non-atomic)
-static lrd_key_t *lrd_key_malloc(const u8 *key, int keylen)
+static kfips_key_t *kfips_key_malloc(const u8 *key, int keylen)
 {
 	struct crypto_aead *tfm;
-	lrd_key_t *pk;
+	kfips_key_t *pk;
 
 	if (!keylen)
 		return NULL;
@@ -441,7 +441,7 @@ static lrd_key_t *lrd_key_malloc(const u8 *key, int keylen)
 }
 
 // should be called with spinlock
-static void lrd_key_unref(lrd_key_t *pk)
+static void kfips_key_unref(kfips_key_t *pk)
 {
 	if (pk && --pk->refcount < 0) {
 		aead_key_free(pk->tfm);
@@ -452,25 +452,25 @@ static void lrd_key_unref(lrd_key_t *pk)
 
 
 typedef struct {
-	lrd_key_t *pcur; // current key
-} lrd_key_index_t;
+	kfips_key_t *pcur; // current key
+} kfips_key_index_t;
 
 typedef struct {
 	u8 addr[6];
 	int len;
-} lrd_bssid_info_t;
+} kfips_bssid_info_t;
 
 static struct {
-	lrd_key_index_t ki[4];
+	kfips_key_index_t ki[4];
 	u8 tx_index;
-	lrd_bssid_info_t bssid_info;
+	kfips_bssid_info_t bssid_info;
 } __glob;
 
-DEFINE_SPINLOCK(laird_key_spinlock);
+DEFINE_SPINLOCK(kfips_key_spinlock);
 
 /* set the user priority (up) to be used, -1 for non-wmm packets */
 /* note: skb is an ethernet packet */
-static int laird_skb_up(struct sk_buff *skb)
+static int kfips_skb_up(struct sk_buff *skb)
 {
 	struct ethhdr *eth_hdr;
 	__be16 type;
@@ -499,7 +499,7 @@ static int laird_skb_up(struct sk_buff *skb)
 }
 
 // build associated data and return length
-static int ecr_set_aad(struct laird_wlanhdr *hdr, u8 *aad, u8 *b_0)
+static int ecr_set_aad(struct kfips_wlanhdr *hdr, u8 *aad, u8 *b_0)
 {
 	int aadlen = 22;
 	u8 up = 0;
@@ -510,7 +510,7 @@ static int ecr_set_aad(struct laird_wlanhdr *hdr, u8 *aad, u8 *b_0)
 	aad[2+20] = hdr->seq[0] & SEQ0_FRAG;
 	aad[2+21] = 0;
 	if (hdr->fc[0] & FC0_STYPE_QOS) {
-		struct laird_wlanhdr_qos *hdrq = (void*)hdr;
+		struct kfips_wlanhdr_qos *hdrq = (void*)hdr;
 		// note, for SPP A-MSDU support, aad includes QOS0_AMSDU
 		aad[2+22] = hdrq->qos[0] & QOS0_TID;
 		aad[2+23] = 0;
@@ -534,7 +534,7 @@ static int ecr_set_aad(struct laird_wlanhdr *hdr, u8 *aad, u8 *b_0)
 	return aadlen;
 }
 
-static int wlanhdrlen(struct laird_wlanhdr *hdr)
+static int wlanhdrlen(struct kfips_wlanhdr *hdr)
 {
 	if (hdr->fc[0] & FC0_STYPE_QOS) {
 		return sizeof(*hdr) + 2 + WLANHDR_QOS_PAD;
@@ -543,12 +543,12 @@ static int wlanhdrlen(struct laird_wlanhdr *hdr)
 }
 
 // return non-zero if the transmit encryption key is set
-static int laird_using_encrypt(void)
+static int kfips_using_encrypt(void)
 {
-	lrd_key_t *pk;
+	kfips_key_t *pk;
 	u8 tx_index;
 	int res = 0;
-	spin_lock_bh(&laird_key_spinlock);
+	spin_lock_bh(&kfips_key_spinlock);
 	tx_index = __glob.tx_index;
 	if (tx_index < 4) {
 		pk = __glob.ki[tx_index].pcur;
@@ -556,25 +556,25 @@ static int laird_using_encrypt(void)
 			res = 1;
 		}
 	}
-	spin_unlock_bh(&laird_key_spinlock);
+	spin_unlock_bh(&kfips_key_spinlock);
 	return res;
 }
 
-static int laird_skb_encrypt(struct sk_buff *skb)
+static int kfips_skb_encrypt(struct sk_buff *skb)
 {
-	struct laird_wlanhdr *wlan_hdr = (void*)skb->data;
+	struct kfips_wlanhdr *wlan_hdr = (void*)skb->data;
 	u8 b_0[AES_BLOCK_SIZE];
 	u8 aad[CCM_AAD_LEN];
 	int aadlen;
 	u8 *iv;
 	u8 *pdata;
 	u8 *pmic;
-	lrd_key_t *pk;
+	kfips_key_t *pk;
 	u64 tsc;
 	u8 tx_index;
 	int res;
 
-	spin_lock_bh(&laird_key_spinlock);
+	spin_lock_bh(&kfips_key_spinlock);
 	tx_index = __glob.tx_index;
 	if (tx_index < 4) {
 		pk = __glob.ki[tx_index].pcur;
@@ -585,7 +585,7 @@ static int laird_skb_encrypt(struct sk_buff *skb)
 	} else {
 		pk = NULL;
 	}
-	spin_unlock_bh(&laird_key_spinlock);
+	spin_unlock_bh(&kfips_key_spinlock);
 
 	if (!pk) {
 		// no key for transmit
@@ -611,22 +611,22 @@ static int laird_skb_encrypt(struct sk_buff *skb)
 		// encrypt failure
 	}
 
-	spin_lock_bh(&laird_key_spinlock);
-	lrd_key_unref(pk);
-	spin_unlock_bh(&laird_key_spinlock);
+	spin_lock_bh(&kfips_key_spinlock);
+	kfips_key_unref(pk);
+	spin_unlock_bh(&kfips_key_spinlock);
 
 	return res;
 }
 
 
-static int laird_skb_replay_check(struct laird_wlanhdr *wlan_hdr, lrd_key_t *pk)
+static int kfips_skb_replay_check(struct kfips_wlanhdr *wlan_hdr, kfips_key_t *pk)
 {
 	u8 *iv = (u8*)(wlan_hdr + 1);
-	lrd_seq_t pn;
-	lrd_seq_t *prsc;
+	kfips_seq_t pn;
+	kfips_seq_t *prsc;
 
 	if (wlan_hdr->fc[0] & FC0_STYPE_QOS) {
-		struct laird_wlanhdr_qos *hdrq = (void*)wlan_hdr;
+		struct kfips_wlanhdr_qos *hdrq = (void*)wlan_hdr;
 		iv += 2 + WLANHDR_QOS_PAD;
 		prsc = &pk->rscqos[hdrq->qos[0] & QOS0_TID];
 	} else {
@@ -645,9 +645,9 @@ static int laird_skb_replay_check(struct laird_wlanhdr *wlan_hdr, lrd_key_t *pk)
 	return 0;
 }
 
-static int laird_skb_decrypt(struct sk_buff *skb)
+static int kfips_skb_decrypt(struct sk_buff *skb)
 {
-	struct laird_wlanhdr *wlan_hdr = (void*)skb->data;
+	struct kfips_wlanhdr *wlan_hdr = (void*)skb->data;
 	u8 *iv = (u8*)wlan_hdr + wlanhdrlen(wlan_hdr);
 	u8 b_0[AES_BLOCK_SIZE];
 	u8 aad[CCM_AAD_LEN];
@@ -656,13 +656,13 @@ static int laird_skb_decrypt(struct sk_buff *skb)
 	u8 *pmic;
 	int res;
 
-	lrd_key_t *pk = NULL;
+	kfips_key_t *pk = NULL;
 
-	spin_lock_bh(&laird_key_spinlock);
+	spin_lock_bh(&kfips_key_spinlock);
 	pk = __glob.ki[iv[3]>>6].pcur;
 	if (pk)
 		pk->refcount++;
-	spin_unlock_bh(&laird_key_spinlock);
+	spin_unlock_bh(&kfips_key_spinlock);
 
 	if (!pk) {
 		return -EINVAL;
@@ -678,27 +678,27 @@ static int laird_skb_decrypt(struct sk_buff *skb)
 	if (res) {
 		// decrypt failure
 	} else {
-		res = laird_skb_replay_check(wlan_hdr, pk);
+		res = kfips_skb_replay_check(wlan_hdr, pk);
 		if (res) {
 			// replay failure
 		}
 	}
 
-	spin_lock_bh(&laird_key_spinlock);
-	lrd_key_unref(pk);
-	spin_unlock_bh(&laird_key_spinlock);
+	spin_lock_bh(&kfips_key_spinlock);
+	kfips_key_unref(pk);
+	spin_unlock_bh(&kfips_key_spinlock);
 
 	return res;
 }
 
-int laird_data_tx(struct sk_buff **skbin, struct net_device *dev)
+int kfips_data_tx(struct sk_buff **skbin, struct net_device *dev)
 {
 	struct ath6kl *ar = ath6kl_priv(dev);
 	struct ath6kl_vif *vif = netdev_priv(dev);
 	int wmm = ar->wmi->is_wmm_enabled;
 	struct sk_buff *skb = *skbin;
 	struct ethhdr *eth_hdr;
-	struct laird_wlanhdr *wlan_hdr;
+	struct kfips_wlanhdr *wlan_hdr;
 	struct _llc_snap_hdr *llc_hdr;
 	u16 type;
 	int res = 0;
@@ -714,7 +714,7 @@ int laird_data_tx(struct sk_buff **skbin, struct net_device *dev)
 
 	if (type == ETH_P_PAE) {
 		// EAPOL packet -- may be sent encrypted or unencrypted
-		do_encrypt = laird_using_encrypt();
+		do_encrypt = kfips_using_encrypt();
 	}
 
 	if (skb_cloned(skb) ||
@@ -733,7 +733,7 @@ int laird_data_tx(struct sk_buff **skbin, struct net_device *dev)
 		eth_hdr = (struct ethhdr *) skb->data;
 	}
 
-	size = sizeof(struct laird_wlanhdr) - sizeof(struct ethhdr);
+	size = sizeof(struct kfips_wlanhdr) - sizeof(struct ethhdr);
 
 	if (is_ethertype(type)) {
 		llc_hdr = ((struct _llc_snap_hdr *)(eth_hdr + 1)) - 1;
@@ -743,7 +743,7 @@ int laird_data_tx(struct sk_buff **skbin, struct net_device *dev)
 	}
 	if (ar->wmi->is_wmm_enabled) {
 		size += 2 + WLANHDR_QOS_PAD;
-		up = laird_skb_up(skb);
+		up = kfips_skb_up(skb);
 	}
 
 	if (do_encrypt) {
@@ -762,7 +762,7 @@ int laird_data_tx(struct sk_buff **skbin, struct net_device *dev)
 	}
 	skb_push(skb, size);
 
-	wlan_hdr = (struct laird_wlanhdr *) skb->data;
+	wlan_hdr = (struct kfips_wlanhdr *) skb->data;
 	{
 		u8 da[6];
 		memcpy(da, &eth_hdr->h_dest, 6);
@@ -778,7 +778,7 @@ int laird_data_tx(struct sk_buff **skbin, struct net_device *dev)
 	wlan_hdr->seq[0] = 0;
 	wlan_hdr->seq[1] = 0;
 	if (ar->wmi->is_wmm_enabled) {
-		struct laird_wlanhdr_qos *hdrq = (void*)wlan_hdr;
+		struct kfips_wlanhdr_qos *hdrq = (void*)wlan_hdr;
 		hdrq->qos[0] = up;
 		hdrq->qos[1] = 0;
 	}
@@ -791,7 +791,7 @@ int laird_data_tx(struct sk_buff **skbin, struct net_device *dev)
 	}
 
 	if (do_encrypt) {
-		res = laird_skb_encrypt(skb);
+		res = kfips_skb_encrypt(skb);
 		if (res) {
 			// encryption failure
 			goto fail;
@@ -815,17 +815,17 @@ fail:
 }
 
 
-int laird_data_rx(struct sk_buff **skbin)
+int kfips_data_rx(struct sk_buff **skbin)
 {
 	struct sk_buff *skb = *skbin;
-	struct laird_wlanhdr *wlan_hdr;
+	struct kfips_wlanhdr *wlan_hdr;
 	int res = 0;
 	u8 *pm;
 	int mlen;
 
 	int do_decrypt, is_qos, hdrlen, fragNum, is_amsdu;
 
-	if (skb->len < sizeof(struct laird_wlanhdr)) {
+	if (skb->len < sizeof(struct kfips_wlanhdr)) {
 		return -EINVAL;
 	}
 
@@ -851,7 +851,7 @@ int laird_data_rx(struct sk_buff **skbin)
 	}
 
 	if (is_qos) {
-		struct laird_wlanhdr_qos *hdrq = (void*)wlan_hdr;
+		struct kfips_wlanhdr_qos *hdrq = (void*)wlan_hdr;
 		if (hdrq->qos[0] & QOS0_AMSDU) {
 			is_amsdu = 1;
 			if (!do_decrypt) {
@@ -879,12 +879,12 @@ int laird_data_rx(struct sk_buff **skbin)
 	}
 
 	if (!do_decrypt) {
-		if (laird_using_encrypt()) {
+		if (kfips_using_encrypt()) {
 			// transmit key is set, all receive should be encrypted
 			return -EINVAL;
 		}
 	} else {
-		res = laird_skb_decrypt(skb);
+		res = kfips_skb_decrypt(skb);
 		if (res) {
 			// decrypt failure
 			return -EINVAL;
@@ -936,7 +936,7 @@ int laird_data_rx(struct sk_buff **skbin)
 		if (is_amsdu) {
 			return -EINVAL;
 		}
-		res = lairdReassemblyProcess(skbin);
+		res = kfipsReassemblyProcess(skbin);
 		if (res < 0) {
 			/* The skb was consumed by reassembly */
 			return -EINVAL;
@@ -969,9 +969,9 @@ int laird_data_rx(struct sk_buff **skbin)
 	return 1; // caller continues packet processing
 }
 
-static lrd_seq_t _laird_seq(const u8 *leseq, int leseqlen)
+static kfips_seq_t _kfips_seq(const u8 *leseq, int leseqlen)
 {
-	lrd_seq_t seq;
+	kfips_seq_t seq;
 	seq = 0;
 	if (!leseq || leseqlen != 6) return seq;
 	while (leseqlen) {
@@ -982,14 +982,14 @@ static lrd_seq_t _laird_seq(const u8 *leseq, int leseqlen)
 }
 
 
-void laird_addkey(struct net_device *ndev, u8 key_index,
+void kfips_addkey(struct net_device *ndev, u8 key_index,
 						 bool pairwise,
 						 const u8 * mac_addr,
 						 const u8 * key, int keylen,
 						 const u8 * seq, int seqlen)
 {
-	lrd_key_index_t *ki;
-	lrd_key_t *pk;
+	kfips_key_index_t *ki;
+	kfips_key_t *pk;
 	int do_frag_purge = 1;
 
 	if (key_index >= 4)
@@ -1000,30 +1000,30 @@ void laird_addkey(struct net_device *ndev, u8 key_index,
 		return;
 
 	// allocate before the spinlock, delete if unused
-	pk = lrd_key_malloc(key, keylen);
+	pk = kfips_key_malloc(key, keylen);
 
-	spin_lock_bh(&laird_key_spinlock);
+	spin_lock_bh(&kfips_key_spinlock);
 
 	if (pairwise)
 		__glob.tx_index = key_index;
 	ki = &__glob.ki[key_index & 3];
 	if (keylen == 0) {
 		// deleting the key
-		lrd_key_unref(ki->pcur);
+		kfips_key_unref(ki->pcur);
 		ki->pcur = NULL;
 	} else {
-		lrd_key_t *pcur = ki->pcur;
+		kfips_key_t *pcur = ki->pcur;
 		if (pcur && (0 == memcmp(pcur->key, key, 16))) {
 			; // key is unchanged -- ignore, replay attempt?
-			lrd_key_unref(pk);
+			kfips_key_unref(pk);
 			do_frag_purge = 0;
 		} else {
-			lrd_key_unref(ki->pcur);
+			kfips_key_unref(ki->pcur);
 			// create new key
 			ki->pcur = pk;
 			if (ki->pcur) {
 				int i;
-				pk->rsc = _laird_seq(seq, seqlen);
+				pk->rsc = _kfips_seq(seq, seqlen);
 				for (i=0; i<16; i++) pk->rscqos[i] = pk->rsc;
 				memcpy(pk->key, key, keylen);
 				pk->keylen = keylen;
@@ -1031,31 +1031,31 @@ void laird_addkey(struct net_device *ndev, u8 key_index,
 		}
 	}
 
-	spin_unlock_bh(&laird_key_spinlock);
+	spin_unlock_bh(&kfips_key_spinlock);
 
 	if (do_frag_purge)
-		lairdReassemblyPurgeKeyChange(key_index);
+		kfipsReassemblyPurgeKeyChange(key_index);
 }
 
-void laird_delkey(struct net_device *ndev, u8 key_index)
+void kfips_delkey(struct net_device *ndev, u8 key_index)
 {
-	laird_addkey(ndev, key_index, 0, NULL, NULL, 0, NULL, 0);
+	kfips_addkey(ndev, key_index, 0, NULL, NULL, 0, NULL, 0);
 }
 
-void laird_deinit(void)
-{
-	int i;
-
-	lairdReassemblyPurgeAll();
-
-	for (i = 0; i < 4; i++)
-		laird_delkey(NULL, i);
-}
-
-void laird_connect_event(void)
+void kfips_deinit(void)
 {
 	int i;
-	lairdReassemblyPurgeAll();
+
+	kfipsReassemblyPurgeAll();
+
 	for (i = 0; i < 4; i++)
-		laird_delkey(NULL, i);
+		kfips_delkey(NULL, i);
+}
+
+void kfips_connect_event(void)
+{
+	int i;
+	kfipsReassemblyPurgeAll();
+	for (i = 0; i < 4; i++)
+		kfips_delkey(NULL, i);
 }

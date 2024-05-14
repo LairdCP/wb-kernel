@@ -1,9 +1,9 @@
 /*
- * at91-ig60.dts - Device Tree file for Laird IG60, based on SOM60x2 module
+ * at91-ig60.dts - Device Tree file for IG60, based on SOM60x2 module
  *
- *  Copyright (C) 2018 Laird Connectivity,
- *		  2018 Ben Whitten <ben.whitten@lairdconnect.com>
- *		  2018 Boris Krasnovskiy <boris.krasnovskiy@lairdconnect.com>
+ *  Copyright (C) 2018 Ezurio,
+ *		  2018 Ben Whitten <ben.whitten@ezurio.com>
+ *		  2018 Boris Krasnovskiy <boris.krasnovskiy@ezurio.com>
  *
  * Licensed under GPLv2 or later.
  */
@@ -14,8 +14,8 @@
 #include "at91-ig60.dtsi"
 
 / {
-	model = "Laird IG60";
-	compatible = "laird,ig60", "atmel,sama5d36", "atmel,sama5d3", "atmel,sama5";
+	model = "Summit IG60";
+	compatible = "summit,ig60", "atmel,sama5d36", "atmel,sama5d3", "atmel,sama5";
 };
 
 &dbgu {

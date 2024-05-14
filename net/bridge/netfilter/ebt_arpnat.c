@@ -23,7 +23,7 @@
  *      Fixed DHCP relay operation it's now correctly sends client MAC to DHCP server
  *      Fixed arpnat procfs
  *
- *      Boris Krasnovskiy <boris.krasnovskiy@lairdconnect.com>
+ *      Boris Krasnovskiy <boris.krasnovskiy@ezurio.com>
  */
 
 //#define DEBUG

@@ -540,7 +540,7 @@ struct brcmf_mp_device *brcmf_get_module_param(struct device *dev,
 	settings->ignore_probe_fail = !!brcmf_ignore_probe_fail;
 #endif
 
-	// Laird - Copy regulory domain module parameter, subject to
+	// Summit - Copy regulory domain module parameter, subject to
 	// override by DT
 	strlcpy(settings->regdomain, brcmf_regdomain, BRCMF_REGDOMAIN_LEN);
 
@@ -575,7 +575,7 @@ struct brcmf_mp_device *brcmf_get_module_param(struct device *dev,
 		brcmf_acpi_probe(dev, bus_type, settings);
 	}
 	else {
-		// Laird - of overrides pdata if both exist
+		// Summit - of overrides pdata if both exist
 		brcmf_of_probe(dev, bus_type, settings);
 	}
 	return settings;

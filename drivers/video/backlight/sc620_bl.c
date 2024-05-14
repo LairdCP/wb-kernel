@@ -1,7 +1,7 @@
 /*
  * Semtech SC620 Backlight Driver
  * 
- *  Copyright (C) 2018-2020 Laird Connectivity
+ *  Copyright (C) 2018-2020 Ezurio
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -227,5 +227,5 @@ static struct i2c_driver sc620_driver = {
 module_i2c_driver(sc620_driver);
 
 MODULE_DESCRIPTION("Semtech SC620 Backlight driver");
-MODULE_AUTHOR("Boris Krasnovskiy <boris.krasnovskiy@lairdconnect.com>");
+MODULE_AUTHOR("Boris Krasnovskiy <boris.krasnovskiy@ezurio.com>");
 MODULE_LICENSE("GPL");

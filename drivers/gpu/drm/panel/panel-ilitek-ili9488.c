@@ -421,6 +421,6 @@ static struct spi_driver ili9488_driver = {
 };
 module_spi_driver(ili9488_driver);
 
-MODULE_AUTHOR("Boris Krasnovskiy <boris.krasnovskiy@lairdconnect.com>");
+MODULE_AUTHOR("Boris Krasnovskiy <boris.krasnovskiy@ezurio.com>");
 MODULE_DESCRIPTION("ILI9488 LCD panel driver");
 MODULE_LICENSE("GPL v2");

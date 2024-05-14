@@ -2117,7 +2117,7 @@ static u64 ieee80211_handle_pwr_constr(struct ieee80211_link_data *link,
 	int pwr_level_cisco, pwr_level_80211h;
 	int new_ap_level;
 
-#ifndef _REMOVE_LAIRD_MODS_
+#ifndef _REMOVE_SUMMIT_MODS_
 	// BZ12222: process 802.11d/h even if SM/RM capabilities are not set
 	if (country_ie) {
 #else
@@ -2137,7 +2137,7 @@ static u64 ieee80211_handle_pwr_constr(struct ieee80211_link_data *link,
 			max_t(int, 0, chan_pwr - pwr_reduction_80211h);
 	}
 
-#ifndef _REMOVE_LAIRD_MODS_
+#ifndef _REMOVE_SUMMIT_MODS_
 	// BZ12222: 802.11h TPC (pwr_constr_ie) takes precedence over Cisco TPC
 	if (has_80211h_pwr && pwr_constr_ie)
 		; // do not process cisco_dtpc_ie
@@ -2151,7 +2151,7 @@ static u64 ieee80211_handle_pwr_constr(struct ieee80211_link_data *link,
 	}
 
 	if (!has_80211h_pwr && !has_cisco_pwr)
-#ifndef _REMOVE_LAIRD_MODS_
+#ifndef _REMOVE_SUMMIT_MODS_
 		// BZ1222: TPC elements removed, restore original power level
 		new_ap_level = IEEE80211_UNSET_POWER_LEVEL;
 	else
@@ -6946,7 +6946,7 @@ static int ieee80211_prep_connection(struct ieee80211_sub_if_data *sdata,
 	bool mlo;
 	int err;
 
-#ifndef _REMOVE_LAIRD_MODS_
+#ifndef _REMOVE_SUMMIT_MODS_
 	if (sdata->vif.type == NL80211_IFTYPE_STATION) {
 		/* new connection, reset DMS state */
 		/* TBD: add a command to enable DMS */

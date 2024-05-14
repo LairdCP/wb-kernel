@@ -123,7 +123,7 @@ void brcmf_of_probe(struct device *dev, enum brcmf_bus_type bus_type,
 
 	of_get_mac_address(np, settings->mac);
 
-	// Laird - Get regdomain/country code string if it exists
+	// Summit - Get regdomain/country code string if it exists
 	if (of_property_read_string(np, "laird,regdomain", &domain) == 0)
 		strlcpy(settings->regdomain, domain, BRCMF_REGDOMAIN_LEN);
 

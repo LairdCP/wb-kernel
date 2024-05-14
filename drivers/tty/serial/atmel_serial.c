@@ -2971,7 +2971,7 @@ static int atmel_serial_probe(struct platform_device *pdev)
 		goto err_add_port;
 
 	atmel_port->wakeup_on_empty = of_property_read_bool(np,
-		"laird,wakeup-on-empty");
+		"summit,wakeup-on-empty");
 
 	device_init_wakeup(&pdev->dev, 1);
 	platform_set_drvdata(pdev, atmel_port);

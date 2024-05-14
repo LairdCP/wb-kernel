@@ -2208,7 +2208,7 @@ struct wmi_delba_event {
 	__le16 reason_code;
 } __packed;
 
-#ifdef CONFIG_ATH6KL_LAIRD_FIPS
+#ifdef CONFIG_ATH6KL_FIPS
 /* WMI_ALLOW_AGGR_CMDID
  * Configures tid's to allow ADDBA negotiations
  * on each tid, in each direction
@@ -2221,7 +2221,7 @@ struct wmi_allow_aggr_cmd {
 			    * bit position indicates tid
 			    */
 } __packed;
-#endif /* CONFIG_ATH6KL_LAIRD_FIPS */
+#endif /* CONFIG_ATH6KL_FIPS */
 
 #define PEER_NODE_JOIN_EVENT		0x00
 #define PEER_NODE_LEAVE_EVENT		0x01
@@ -2733,7 +2733,7 @@ int ath6kl_wmi_channel_params_cmd(struct wmi *wmi, u8 if_idx, u8 scan_param,
 								u8 phy_mode, u8 num_channels, u16 *channel_list);
 int ath6kl_wmi_send_buf_cmd(struct wmi *wmi, u8 if_idx, enum wmi_cmd_id cmd_id,
 							u32 size, u8 *buf);
-void lrd_ath6kl_wmi_send_radio_mode(struct wmi *wmi, u8 if_idx);
+void summit_ath6kl_wmi_send_radio_mode(struct wmi *wmi, u8 if_idx);
 
 /* AP mode uAPSD */
 int ath6kl_wmi_ap_set_apsd(struct wmi *wmi, u8 if_idx, u8 enable);
@@ -2806,6 +2806,6 @@ void ath6kl_wmi_shutdown(struct wmi *wmi);
 void ath6kl_wmi_reset(struct wmi *wmi);
 int ath6kl_get_txpower(struct wiphy *wiphy, int *dbm);
 
-extern void ath6kl_wmi_lrd_init_channels(struct ath6kl *ar);
+void summit_ath6kl_wmi_init_channels(struct ath6kl *ar);
 
 #endif /* WMI_H */

@@ -1116,7 +1116,7 @@ int cfg80211_change_iface(struct cfg80211_registered_device *rdev,
 		return -EOPNOTSUPP;
 
 	if (ntype != otype) {
-#ifndef _REMOVE_LAIRD_MODS_
+#ifndef _REMOVE_SUMMIT_MODS_
 		/* if it's part of a bridge, reject changing type to ibss */
 		if (netif_is_bridge_port(dev) &&
 		     ntype == NL80211_IFTYPE_P2P_CLIENT)
@@ -1179,7 +1179,7 @@ int cfg80211_change_iface(struct cfg80211_registered_device *rdev,
 	if (!err) {
 		dev->priv_flags &= ~IFF_DONT_BRIDGE;
 		switch (ntype) {
-#ifdef _REMOVE_LAIRD_MODS_
+#ifdef _REMOVE_SUMMIT_MODS_
 		case NL80211_IFTYPE_STATION:
 			if (dev->ieee80211_ptr->use_4addr)
 				break;
@@ -1190,7 +1190,7 @@ int cfg80211_change_iface(struct cfg80211_registered_device *rdev,
 		case NL80211_IFTYPE_ADHOC:
 			dev->priv_flags |= IFF_DONT_BRIDGE;
 			break;
-#ifndef _REMOVE_LAIRD_MODS_
+#ifndef _REMOVE_SUMMIT_MODS_
 		case NL80211_IFTYPE_STATION:
 #endif
 		case NL80211_IFTYPE_P2P_GO:

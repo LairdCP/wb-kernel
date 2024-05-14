@@ -172,6 +172,6 @@ sphinx_*/
 /rust-project.json
 
 # lrdmwl
-drivers/net/wireless/laird/lrdmwl
-drivers/net/wireless/laird/mwifiex
-drivers/net/wireless/laird/qcacld
+drivers/net/wireless/summit/*
+!drivers/net/wireless/summit/Makefile
+!drivers/net/wireless/summit/Kconfig

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018, Laird
+ * Copyright (c) 2018, Ezurio
  *
  */
 
@@ -29,7 +29,7 @@ struct mem_region {
 	size_t size;
 };
 
-static int laird_fs_map_memory(struct mem_region *mem, struct device *dev,
+static int fs_map_memory(struct mem_region *mem, struct device *dev,
 				const char *name, int i)
 {
 	struct device_node *np;
@@ -56,7 +56,7 @@ static int laird_fs_map_memory(struct mem_region *mem, struct device *dev,
 	return 0;
 }
 
-static int laird_fs_insertkey(struct fscrypt_key *fscrypt_key)
+static int fs_insertkey(struct fscrypt_key *fscrypt_key)
 {
 	key_ref_t key_ref;
 
@@ -78,7 +78,7 @@ static int laird_fs_insertkey(struct fscrypt_key *fscrypt_key)
 	return 0;
 }
 
-static int laird_fs_keyring_init(void)
+static int fs_keyring_init(void)
 {
 	builtin_fs_keys =
 		keyring_alloc("_builtin_fs_keys",
@@ -94,16 +94,16 @@ static int laird_fs_keyring_init(void)
 	return 0;
 }
 
-static int laird_fs_probe(struct platform_device *pdev)
+static int fs_probe(struct platform_device *pdev)
 {
 	int				rc;
 	struct mem_key	*key;
 	struct mem_region *region;
 	struct fscrypt_key fscrypt_key;
 
-	dev_info(&pdev->dev, "In the Laird FS probe\n");
+	dev_info(&pdev->dev, "In the Summit FS probe\n");
 
-	rc = laird_fs_keyring_init();
+	rc = fs_keyring_init();
 	if (rc) {
 		dev_err(&pdev->dev, "Can't allocate builtin fs keyring\n");
 		return rc;
@@ -113,7 +113,7 @@ static int laird_fs_probe(struct platform_device *pdev)
 	if (!region)
 		return -ENOMEM;
 
-	rc = laird_fs_map_memory(region, &pdev->dev, "memory-region", 0);
+	rc = fs_map_memory(region, &pdev->dev, "memory-region", 0);
 	if (rc)
 		return rc;
 
@@ -121,26 +121,26 @@ static int laird_fs_probe(struct platform_device *pdev)
 	fscrypt_key.mode = 0;
 	fscrypt_key.size = sizeof(key->key);
 	memcpy(fscrypt_key.raw, key->key, sizeof(key->key));
-	rc = laird_fs_insertkey(&fscrypt_key);
+	rc = fs_insertkey(&fscrypt_key);
 	if (rc)
 		return rc;
-#ifdef CONFIG_LAIRD_FS_EVM_KEY
+#ifdef CONFIG_SUMMIT_FS_EVM_KEY
 	rc = evm_set_key(key->key, sizeof(key->key));
 #endif
 	return rc;
 }
 
-static const struct of_device_id laird_fs_match_table[] = {
-	{ .compatible = "laird,fs_mem", },
+static const struct of_device_id fs_match_table[] = {
+	{ .compatible = "summit,fs_mem", },
 	{}
 };
 
-static struct platform_driver laird_fs_driver = {
+static struct platform_driver fs_driver = {
 	.driver	= {
-		.name		= "laird-fs-mem",
-		.of_match_table	= laird_fs_match_table,
+		.name		= "summit-fs-mem",
+		.of_match_table	= fs_match_table,
 	},
-	.probe		= laird_fs_probe,
+	.probe		= fs_probe,
 };
-builtin_platform_driver(laird_fs_driver);
+builtin_platform_driver(fs_driver);
 

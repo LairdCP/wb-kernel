@@ -4521,7 +4521,7 @@ struct brcmf_sdio *brcmf_sdio_probe(struct brcmf_sdio_dev *sdiodev)
 
 	/* ...and initialize clock/power states */
 	bus->clkstate = CLK_SDONLY;
-	// Laird - Make idle configurable for platforms that can't handle radio in sleep state
+	// Summit - Make idle configurable for platforms that can't handle radio in sleep state
 	//bus->idletime = BRCMF_IDLE_INTERVAL;
 	bus->idletime = bus->sdiodev->settings->idle_interval;
 	bus->idleclock = BRCMF_IDLE_ACTIVE;

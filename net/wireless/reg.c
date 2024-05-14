@@ -999,7 +999,7 @@ static int query_regdb(const char *alpha2)
 	return -ENODATA;
 }
 
-#ifndef _REMOVE_LAIRD_MODS_
+#ifndef _REMOVE_SUMMIT_MODS_
 int check_regdb(const char *alpha2)
 {
 	const struct fwdb_header *hdr = regdb;
@@ -1599,7 +1599,7 @@ static u32 map_regdom_flags(u32 rd_flags)
 	if (rd_flags & NL80211_RRF_NO_IR_ALL)
 		channel_flags |= IEEE80211_CHAN_NO_IR;
 	if (rd_flags & NL80211_RRF_DFS)
-#ifndef _REMOVE_LAIRD_MODS_
+#ifndef _REMOVE_SUMMIT_MODS_
 		channel_flags |= (IEEE80211_CHAN_RADAR | IEEE80211_CHAN_NO_IR);
 #else
 		channel_flags |= IEEE80211_CHAN_RADAR;
@@ -3685,7 +3685,7 @@ int regulatory_hint_found_beacon(struct wiphy *wiphy,
 	bool processing;
 
 	if (beacon_chan->beacon_found ||
-#ifndef _REMOVE_LAIRD_MODS_
+#ifndef _REMOVE_SUMMIT_MODS_
 #else
 	    beacon_chan->flags & IEEE80211_CHAN_RADAR ||
 #endif
@@ -3880,7 +3880,7 @@ static int reg_set_rd_driver(const struct ieee80211_regdomain *rd,
 	const struct ieee80211_regdomain *tmp;
 	struct wiphy *request_wiphy;
 
-#ifdef _REMOVE_LAIRD_MODS_
+#ifdef _REMOVE_SUMMIT_MODS_
 	if (is_world_regdom(rd->alpha2))
 		return -EINVAL;
 #endif
@@ -3902,7 +3902,7 @@ static int reg_set_rd_driver(const struct ieee80211_regdomain *rd,
 	if (!driver_request->intersect) {
 		ASSERT_RTNL();
 		wiphy_lock(request_wiphy);
-		#ifdef _REMOVE_LAIRD_MODS_
+		#ifdef _REMOVE_SUMMIT_MODS_
 		/* BZ16330 */
 		if (request_wiphy->regd) {
 			wiphy_unlock(request_wiphy);
@@ -3916,13 +3916,13 @@ static int reg_set_rd_driver(const struct ieee80211_regdomain *rd,
 			return PTR_ERR(regd);
 		}
 
-		#ifndef _REMOVE_LAIRD_MODS_
+		#ifndef _REMOVE_SUMMIT_MODS_
 		/* BZ16330 */
 		tmp = get_wiphy_regdom(request_wiphy);
 		#endif
 
 		rcu_assign_pointer(request_wiphy->regd, regd);
-		#ifndef _REMOVE_LAIRD_MODS_
+		#ifndef _REMOVE_SUMMIT_MODS_
 		/* BZ16330 */
 		if (tmp)
 			rcu_free_regdom(tmp);

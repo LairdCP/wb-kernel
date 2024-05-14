@@ -435,16 +435,16 @@ config LATTICE_ECP3_CONFIG
 
 	  If unsure, say N.
 
-config LAIRD_FS
-	bool "Laird FS Key injector"
+config SUMMIT_FS
+	bool "Summit FS Key injector"
 	select KEYS
 	help
 	  This driver is in charge of injecting the FS key for encrypted
 	  filesystems.
 
-config LAIRD_FS_EVM_KEY
+config SUMMIT_FS_EVM_KEY
 	bool "EVM key support"
-	depends on LAIRD_FS && EVM
+	depends on SUMMIT_FS && EVM
 	help
 	  Enable support for loading the EVM key.
 

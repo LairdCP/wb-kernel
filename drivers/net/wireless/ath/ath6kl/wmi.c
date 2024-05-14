@@ -75,12 +75,9 @@ static const u8 up_to_ac[] = {
 	WMM_AC_VO,
 };
 
-/* Laird build number is 32bit value.  Parsed in the form w.x.y.z.
+/* Summit build number is 32bit value.  Parsed in the form w.x.y.z.
  */
-#define LAIRD_BUILD_NUMBER 0x03050500
-
-static void __lrd_set_AP_Name(struct wmi *wmi, const char *apname);
-static void __lrd_set_AP_IP(struct wmi *wmi, const char *apip);
+#define SUMMIT_BUILD_NUMBER 0x03050500
 
 enum { // keep this list in sync with the one from ath_access.c from the SDK
 	GETVERSION=0,
@@ -94,7 +91,7 @@ enum { // keep this list in sync with the one from ath_access.c from the SDK
 #define AIRONET_CCX_IE   0x85
 #define AIRONET_AP_IP_IE 0x95
 
-static struct country_code_to_enum_rd LrdCountries[] = {
+static struct country_code_to_enum_rd summitCountries[] = {
 	//6003
 	{0x800 + 368, NO_ENUMRD, "IQ"},
 	{0x800 + 566, NO_ENUMRD, "NG"},
@@ -106,7 +103,6 @@ static struct country_code_to_enum_rd LrdCountries[] = {
 	//Both
 	{0x800 + 104, NO_ENUMRD, "MM"},
 };
-
 
 void ath6kl_wmi_set_control_ep(struct wmi *wmi, enum htc_endpoint_id ep_id)
 {
@@ -875,6 +871,37 @@ int ath6kl_wmi_set_roam_mode_cmd(struct wmi *wmi, enum wmi_roam_mode mode)
 				   NO_SYNC_WMIFLAG);
 }
 
+/*	Summit Extention: Set AP Name to support Cisco CCX
+	apname is a pointer to the location in the IE where the AP name
+	is located.  Some of the Cisco docs indicate this is 16 bytes
+	without null termination, so our version is 17 in length with
+	the last being 0x00.
+
+	if apname is NULL, clear our saved copy of the apname
+*/
+static void summit_set_ap_name(struct wmi *wmi, const char *apname)
+{
+	struct ath6kl *ar = wmi->parent_dev;
+
+	if (!apname)
+		memset(ar->summit_ext.ap_name, 0, sizeof(ar->summit_ext.ap_name));
+	else
+		memcpy(ar->summit_ext.ap_name, apname, sizeof(ar->summit_ext.ap_name) - 1);
+}
+
+/* 	Summit Extention: Set AP IP to support Cisco CCX
+	if apip is NULL, clear our saved copy of the AP IP address
+*/
+static void summit_set_ap_ip(struct wmi *wmi, const char *apip)
+{
+	struct ath6kl *ar = wmi->parent_dev;
+
+	if (!apip)
+		memset(ar->summit_ext.ap_ip, 0, sizeof(ar->summit_ext.ap_ip));
+	else
+		memcpy(ar->summit_ext.ap_ip, apip, sizeof(ar->summit_ext.ap_ip));
+}
+
 static int ath6kl_wmi_connect_event_rx(struct wmi *wmi, u8 *datap, int len,
 				       struct ath6kl_vif *vif)
 {
@@ -934,8 +961,8 @@ static int ath6kl_wmi_connect_event_rx(struct wmi *wmi, u8 *datap, int len,
 	peie = ev->assoc_info + ev->beacon_ie_len + ev->assoc_req_len +
 	    ev->assoc_resp_len;
 
-	__lrd_set_AP_Name(wmi, NULL); // clear existing
-	__lrd_set_AP_IP(wmi, NULL);  // clear existing
+	summit_set_ap_name(wmi, NULL); // clear existing
+	summit_set_ap_ip(wmi, NULL);  // clear existing
 	while (pie < peie) {
 		switch (*pie) {
 		case WLAN_EID_VENDOR_SPECIFIC:
@@ -948,10 +975,10 @@ static int ath6kl_wmi_connect_event_rx(struct wmi *wmi, u8 *datap, int len,
 			}
 			break;
 		case AIRONET_CCX_IE:
-			__lrd_set_AP_Name(wmi, pie+12);
+			summit_set_ap_name(wmi, pie + 12);
 			break;
 		case AIRONET_AP_IP_IE:
-			__lrd_set_AP_IP(wmi, pie+6);
+			summit_set_ap_ip(wmi, pie + 6);
 			break;
 		}
 
@@ -974,10 +1001,10 @@ ath6kl_regd_find_country(u16 countryCode)
 {
 	int i;
 
-	//Check Laird Extensions
-	for (i = 0; i < ARRAY_SIZE(LrdCountries); i++) {
-		if (LrdCountries[i].countryCode == countryCode)
-			return &LrdCountries[i];
+	/* Check Summit Extensions */
+	for (i = 0; i < ARRAY_SIZE(summitCountries); i++) {
+		if (summitCountries[i].countryCode == countryCode)
+			return &summitCountries[i];
 	}
 
 	for (i = 0; i < ARRAY_SIZE(allCountries); i++) {
@@ -1009,10 +1036,10 @@ ath6kl_regd_find_country_by_rd(u16 regdmn)
 {
 	int i;
 
-	//Check Laird Extensions
-	for (i = 0; i < ARRAY_SIZE(LrdCountries); i++) {
-		if (LrdCountries[i].regDmnEnum == regdmn)
-			return &LrdCountries[i];
+	//Check Summit Extensions
+	for (i = 0; i < ARRAY_SIZE(summitCountries); i++) {
+		if (summitCountries[i].regDmnEnum == regdmn)
+			return &summitCountries[i];
 	}
 
 	for (i = 0; i < ARRAY_SIZE(allCountries); i++) {
@@ -1064,8 +1091,8 @@ static int ath6kl_wmi_disconnect_event_rx(struct wmi *wmi, u8 *datap, int len,
 	struct wmi_disconnect_event *ev;
 	wmi->traffic_class = 100;
 
-	__lrd_set_AP_Name(wmi, NULL); // clear existing
-	__lrd_set_AP_IP(wmi, NULL);  // clear existing
+	summit_set_ap_name(wmi, NULL); // clear existing
+	summit_set_ap_ip(wmi, NULL);  // clear existing
 
 	if (len < sizeof(struct wmi_disconnect_event))
 		return -EINVAL;
@@ -1963,7 +1990,7 @@ int ath6kl_wmi_connect_cmd(struct wmi *wmi, u8 if_idx,
 	if (bssid != NULL)
 		memcpy(cc->bssid, bssid, ETH_ALEN);
 
-	lrd_ath6kl_wmi_send_radio_mode(wmi, if_idx);
+	summit_ath6kl_wmi_send_radio_mode(wmi, if_idx);
 
 	ret = ath6kl_wmi_cmd_send(wmi, if_idx, skb, WMI_CONNECT_CMDID,
 				  NO_SYNC_WMIFLAG);
@@ -1993,7 +2020,7 @@ int ath6kl_wmi_reconnect_cmd(struct wmi *wmi, u8 if_idx, u8 *bssid,
 	if (bssid != NULL)
 		memcpy(cc->bssid, bssid, ETH_ALEN);
 
-	lrd_ath6kl_wmi_send_radio_mode(wmi, if_idx);
+	summit_ath6kl_wmi_send_radio_mode(wmi, if_idx);
 
 	ret = ath6kl_wmi_cmd_send(wmi, if_idx, skb, WMI_RECONNECT_CMDID,
 				  NO_SYNC_WMIFLAG);
@@ -2075,7 +2102,7 @@ int ath6kl_wmi_beginscan_cmd(struct wmi *wmi, u8 if_idx,
 	struct ath6kl_vif *vif = ath6kl_get_vif_by_index(ar, if_idx);
 
 	if(vif && vif->sme_state != SME_CONNECTED)
-		lrd_ath6kl_wmi_send_radio_mode(wmi, if_idx);
+		summit_ath6kl_wmi_send_radio_mode(wmi, if_idx);
 
 	if (!test_bit(ATH6KL_FW_CAPABILITY_STA_P2PDEV_DUPLEX,
 		      ar->fw_capabilities)) {
@@ -3989,7 +4016,7 @@ static int ath6kl_wmi_proc_events_vif(struct wmi *wmi, u16 if_idx, u16 cmd_id,
 		return ath6kl_wmi_connect_event_rx(wmi, datap, len, vif);
 	case WMI_DISCONNECT_EVENTID:
 		ath6kl_dbg(ATH6KL_DBG_WMI, "WMI_DISCONNECT_EVENTID\n");
-		lrd_ath6kl_wmi_send_radio_mode(wmi, if_idx);
+		summit_ath6kl_wmi_send_radio_mode(wmi, if_idx);
 		return ath6kl_wmi_disconnect_event_rx(wmi, datap, len, vif);
 	case WMI_TKIP_MICERR_EVENTID:
 		ath6kl_dbg(ATH6KL_DBG_WMI, "WMI_TKIP_MICERR_EVENTID\n");
@@ -4004,7 +4031,7 @@ static int ath6kl_wmi_proc_events_vif(struct wmi *wmi, u16 if_idx, u16 cmd_id,
 	case WMI_SCAN_COMPLETE_EVENTID:
 		ath6kl_dbg(ATH6KL_DBG_WMI, "WMI_SCAN_COMPLETE_EVENTID\n");
 		if(vif->sme_state != SME_CONNECTED)
-			lrd_ath6kl_wmi_send_radio_mode(wmi, if_idx);
+			summit_ath6kl_wmi_send_radio_mode(wmi, if_idx);
 		return ath6kl_wmi_scan_complete_rx(wmi, datap, len, vif);
 	case WMI_REPORT_STATISTICS_EVENTID:
 		ath6kl_dbg(ATH6KL_DBG_WMI, "WMI_REPORT_STATISTICS_EVENTID\n");
@@ -4106,7 +4133,7 @@ static int ath6kl_wmi_proc_events(struct wmi *wmi, struct sk_buff *skb)
 	case WMI_REGDOMAIN_EVENTID:
 		ath6kl_dbg(ATH6KL_DBG_WMI, "WMI_REGDOMAIN_EVENTID\n");
 		if(vif && vif->sme_state != SME_CONNECTED)
-			lrd_ath6kl_wmi_send_radio_mode(wmi, if_idx);
+			summit_ath6kl_wmi_send_radio_mode(wmi, if_idx);
 		ath6kl_wmi_regdomain_event(wmi, datap, len);
 		break;
 	case WMI_PSTREAM_TIMEOUT_EVENTID:
@@ -4266,26 +4293,26 @@ int ath6kl_wmi_send_buf_cmd(struct wmi *wmi, u8 if_idx, enum wmi_cmd_id cmd_id,
 	return ret;
 }
 
-void lrd_ath6kl_wmi_send_radio_mode(struct wmi *wmi, u8 if_idx)
+void summit_ath6kl_wmi_send_radio_mode(struct wmi *wmi, u8 if_idx)
 {
 	struct ath6kl *ar;
 
 	ar = wmi->parent_dev;
 
-	//If phy_mode == 0, then we haven't set this information yet so don't send
-	if(ar->laird.phy_mode == 0)
+	/* If phy_mode == 0, then we haven't set this information yet so don't send */
+	if (!ar->summit_ext.phy_mode)
 		return;
 
-	if (ar->laird.htcap_2ghz_set) {
+	if (ar->summit_ext.htcap_2ghz_set) {
 		ath6kl_wmi_send_buf_cmd(wmi, if_idx, WMI_SET_HT_CAP_CMDID, sizeof(struct wmi_set_htcap_cmd),
-								(u8*)&(ar->laird.htcap_params_2ghz));
+								(u8*)&(ar->summit_ext.htcap_params_2ghz));
 	}
-	if (ar->laird.htcap_5ghz_set) {
+	if (ar->summit_ext.htcap_5ghz_set) {
 		ath6kl_wmi_send_buf_cmd(wmi, if_idx, WMI_SET_HT_CAP_CMDID, sizeof(struct wmi_set_htcap_cmd),
-								(u8*)&(ar->laird.htcap_params_5ghz));
+								(u8*)&(ar->summit_ext.htcap_params_5ghz));
 	}
-	ath6kl_wmi_channel_params_cmd(wmi, if_idx, 0, ar->laird.phy_mode, ar->laird.num_channels,
-								ar->laird.channel_list);
+	ath6kl_wmi_channel_params_cmd(wmi, if_idx, 0, ar->summit_ext.phy_mode, ar->summit_ext.num_channels,
+								ar->summit_ext.channel_list);
 }
 
 enum {
@@ -4407,13 +4434,13 @@ static int ath6kl_genl_wmi_passthru (struct sk_buff *skb_2, struct genl_info *in
 					struct wmi_set_htcap_cmd *htcap = (struct wmi_set_htcap_cmd*)p;
 					if(htcap->band == NL80211_BAND_2GHZ)
 					{
-						memcpy(&ar->laird.htcap_params_2ghz, htcap, sizeof(struct wmi_set_htcap_cmd));
-						ar->laird.htcap_2ghz_set = 1;
+						memcpy(&ar->summit_ext.htcap_params_2ghz, htcap, sizeof(struct wmi_set_htcap_cmd));
+						ar->summit_ext.htcap_2ghz_set = 1;
 					}
 					else if(htcap->band == NL80211_BAND_5GHZ)
 					{
-						memcpy(&ar->laird.htcap_params_5ghz, htcap, sizeof(struct wmi_set_htcap_cmd));
-						ar->laird.htcap_5ghz_set = 1;
+						memcpy(&ar->summit_ext.htcap_params_5ghz, htcap, sizeof(struct wmi_set_htcap_cmd));
+						ar->summit_ext.htcap_5ghz_set = 1;
 					}
 					}
 					break;
@@ -4481,11 +4508,12 @@ static int _lrd_chan_allowed(u16 chan)
 	return 1;
 }
 
-static void _lrd_set_channel_list(struct ath6kl *ar,
-									  u8 num_channels, u16 *channel)
+static void summit_set_channel_list(struct ath6kl *ar,
+									u8 num_channels, u16 *channel)
 {
-	u16 *out_channel = ar->laird.channel_list;
+	u16 *out_channel = ar->summit_ext.channel_list;
 	u8 out_num_channels = 0;
+
 	if (num_channels > WMI_MAX_CHANNELS)
 		num_channels = 0; // force back to default channels;
 	if (num_channels != 0) {
@@ -4498,10 +4526,10 @@ static void _lrd_set_channel_list(struct ath6kl *ar,
 		}
 	}
 	if (out_num_channels == 0 && channel != defchan) {
-		_lrd_set_channel_list(ar, ARRAY_SIZE(defchan), defchan);
+		summit_set_channel_list(ar, ARRAY_SIZE(defchan), defchan);
 		return;
 	}
-	ar->laird.num_channels = out_num_channels;
+	ar->summit_ext.num_channels = out_num_channels;
 }
 
 
@@ -4531,11 +4559,11 @@ static int ath6kl_genl_set_phy_mode(struct sk_buff *skb_2, struct genl_info *inf
 			printk("error while receiving data\n");
 		else
 		{
-			ar->laird.phy_mode = params->phy_mode;
-			_lrd_set_channel_list(ar, params->num_channels,
-									  params->channel_list);
-			ath6kl_wmi_channel_params_cmd(wmi, 0, 0, ar->laird.phy_mode, ar->laird.num_channels,
-										ar->laird.channel_list);
+			ar->summit_ext.phy_mode = params->phy_mode;
+			summit_set_channel_list(ar, params->num_channels,
+									params->channel_list);
+			ath6kl_wmi_channel_params_cmd(wmi, 0, 0, ar->summit_ext.phy_mode, ar->summit_ext.num_channels,
+										ar->summit_ext.channel_list);
 		}
 	}
 	else
@@ -4579,21 +4607,21 @@ static int ath6kl_genl_get_value (struct sk_buff *skb_2, struct genl_info *info)
 		switch (*c)
 		{
 			case GETVERSION:
-				rc = nla_put_s32( skb, ATHEROS_ATTR_MSG, LAIRD_BUILD_NUMBER );
+				rc = nla_put_s32( skb, ATHEROS_ATTR_MSG, SUMMIT_BUILD_NUMBER );
 				break;
 			case GETTXPOWER:
 				ath6kl_get_txpower( ar->wiphy, c);
 				rc = nla_put_s32( skb, ATHEROS_ATTR_MSG, *c );
 				break;
 			case GETAPNAME:
-				rc = nla_put_string(skb, ATHEROS_ATTR_MSG, ar->laird.AP_Name);
+				rc = nla_put_string(skb, ATHEROS_ATTR_MSG, ar->summit_ext.ap_name);
 				break;
 			case GETAPIP:
 				rc = nla_put_s32(skb, ATHEROS_ATTR_MSG,
-						ar->laird.AP_IP[0] << 24 |
-						ar->laird.AP_IP[1] << 16 |
-						ar->laird.AP_IP[2] << 8 |
-						ar->laird.AP_IP[3]);
+						ar->summit_ext.ap_ip[0] << 24 |
+						ar->summit_ext.ap_ip[1] << 16 |
+						ar->summit_ext.ap_ip[2] <<  8 |
+						ar->summit_ext.ap_ip[3]);
 				break;
 			case GETFWSTR:
 				snprintf(fwStr, 80, "%s fw %s api %d%s",
@@ -4781,53 +4809,12 @@ void ath6kl_wmi_shutdown(struct wmi *wmi)
 	kfree(wmi);
 }
 
-/*
-	apname is a pointer to the location in the ie where the AP name
-	is located.  Some of the Cisco docs indicate this is 16 bytes
-	without null termination, so our version is 17 in length with
-	the last being 0x00.
-
-	if apname is NULL, clear our saved copy of the apname
-*/
-static void __lrd_set_AP_Name(struct wmi *wmi, const char *apname)
-{
-	struct ath6kl *ar;
-	ar = wmi->parent_dev;
-
-	if (apname==NULL)
-	{
-		memset(ar->laird.AP_Name, 0, 17);
-	}
-	else
-	{
-		memcpy(ar->laird.AP_Name, apname, 16);
-	}
-}
-
-/*
-	if apip is NULL, clear our saved copy of the AP IP address
-*/
-static void __lrd_set_AP_IP(struct wmi *wmi, const char *apip)
-{
-	struct ath6kl *ar;
-	ar = wmi->parent_dev;
-
-	if (apip==NULL)
-	{
-		memset(ar->laird.AP_IP, 0, 4);
-	}
-	else
-	{
-		memcpy(ar->laird.AP_IP, apip, 4);
-	}
-}
-
 // set default channels and phy-mode
-void ath6kl_wmi_lrd_init_channels(struct ath6kl *ar)
+void summit_ath6kl_wmi_init_channels(struct ath6kl *ar)
 {
-	if (ar->laird.phy_mode == 0) {
-		_lrd_set_channel_list(ar, 0, NULL);
-		ar->laird.phy_mode = WMI_11AG_MODE;
+	if (ar->summit_ext.phy_mode == 0) {
+		summit_set_channel_list(ar, 0, NULL);
+		ar->summit_ext.phy_mode = WMI_11AG_MODE;
 	}
 }
 

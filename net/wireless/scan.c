@@ -2022,7 +2022,7 @@ struct cfg80211_inform_single_bss_data {
 	u8 bssid_index;
 };
 
-#ifndef _REMOVE_LAIRD_MODS_
+#ifndef _REMOVE_SUMMIT_MODS_
 // add regulatory hint for bonded non-DFS/RADAR channels
 // needed to clear the NO_IR flag for AP creation
 // note, this routine only handles 5GHz, 40MHz and 80MHz channels
@@ -2173,7 +2173,7 @@ cfg80211_inform_single_bss_data(struct wiphy *wiphy,
 			if (data->capability & WLAN_CAPABILITY_ESS)
 				regulatory_hint_found_beacon(wiphy, channel,
 							     gfp);
-#ifndef _REMOVE_LAIRD_MODS_
+#ifndef _REMOVE_SUMMIT_MODS_
 			// add regulatory hint for 5GHz bonded channels (40/80MHz)
 			if (data->capability & WLAN_CAPABILITY_ESS)
 				_hint_found_beacon_bonded(wiphy, channel, gfp, data->ie, data->ielen);
@@ -2942,7 +2942,7 @@ cfg80211_inform_single_bss_frame_data(struct wiphy *wiphy,
 	} else {
 		if (capability & WLAN_CAPABILITY_ESS)
 			regulatory_hint_found_beacon(wiphy, channel, gfp);
-#ifndef _REMOVE_LAIRD_MODS_
+#ifndef _REMOVE_SUMMIT_MODS_
 		// add regulatory hint for 5GHz bonded channels (40/80MHz)
 		if (capability & WLAN_CAPABILITY_ESS)
 			_hint_found_beacon_bonded(wiphy, channel, gfp, variable, ielen);

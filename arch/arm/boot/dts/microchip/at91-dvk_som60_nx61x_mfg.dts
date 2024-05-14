@@ -2,9 +2,7 @@
 /*
  * at91-dvk_som60_nx61x_mfg.dts - Device Tree file for the som60 based Sona NX61X mfg platform
  *
- *  Copyright (C) 2020 Laird Connectivity,
- *
- * Licensed under GPLv2 or later.
+ *  Copyright (C) 2020 Ezurio,
  */
 
 /dts-v1/;
@@ -25,6 +23,6 @@
 };
 
 / {
-	model = "Laird NX61X MFG";
-	compatible = "laird,nx61x-som60", "laird,som60", "atmel,sama5d36", "atmel,sama5d3", "atmel,sama5";
+	model = "Summit NX61X MFG";
+	compatible = "summit,nx61x-som60", "summit,som60", "atmel,sama5d36", "atmel,sama5d3", "atmel,sama5";
 };

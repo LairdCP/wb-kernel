@@ -717,8 +717,8 @@ struct ieee80211_hw *ieee80211_alloc_hw_nm(size_t priv_data_len,
 		wiphy_ext_feature_set(wiphy,
 				      NL80211_EXT_FEATURE_SCAN_MIN_PREQ_CONTENT);
 
-#ifndef _REMOVE_LAIRD_MODS_
-		/* LAIRD: indicate that scan timing is configurable */
+#ifndef _REMOVE_SUMMIT_MODS_
+		/* indicate that scan timing is configurable */
 		wiphy_ext_feature_set(wiphy, NL80211_EXT_FEATURE_SET_SCAN_DWELL);
 #endif
 	}
@@ -1295,7 +1295,7 @@ int ieee80211_register_hw(struct ieee80211_hw *hw)
 	if (hw->queues > IEEE80211_MAX_QUEUES)
 		hw->queues = IEEE80211_MAX_QUEUES;
 
-#ifndef _REMOVE_LAIRD_MODS_
+#ifndef _REMOVE_SUMMIT_MODS_
 	local->workqueue =
 		alloc_ordered_workqueue("%s", WQ_HIGHPRI, wiphy_name(local->hw.wiphy));
 #else

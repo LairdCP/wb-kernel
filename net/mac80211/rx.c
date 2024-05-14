@@ -2544,7 +2544,7 @@ bool ieee80211_is_our_addr(struct ieee80211_sub_if_data *sdata,
 	return false;
 }
 
-#ifndef _REMOVE_LAIRD_MODS_
+#ifndef _REMOVE_SUMMIT_MODS_
 /* DMS: auto-detect DMS ipv4 and DMS ipv6 packets */
 static void ieee80211_dms_detect(struct ieee80211_rx_data *rx)
 {
@@ -2600,7 +2600,7 @@ static bool ieee80211_dms_allowed(struct ieee80211_rx_data *rx)
 	}
 	return true;
 }
-#endif /* _REMOVE_LAIRD_MODS_ */
+#endif /* _REMOVE_SUMMIT_MODS_ */
 
 /*
  * requires that rx->skb is a frame with ethernet header
@@ -3031,7 +3031,7 @@ __ieee80211_rx_h_amsdu(struct ieee80211_rx_data *rx, u8 data_offset)
 	ieee80211_rx_result res;
 	struct ethhdr ethhdr;
 	const u8 *check_da = ethhdr.h_dest, *check_sa = ethhdr.h_source;
-#ifndef _REMOVE_LAIRD_MODS_
+#ifndef _REMOVE_SUMMIT_MODS_
 	int check_dms = 0;
 #endif
 
@@ -3047,7 +3047,7 @@ __ieee80211_rx_h_amsdu(struct ieee80211_rx_data *rx, u8 data_offset)
 			if (!rx->sta ||
 			    !test_sta_flag(rx->sta, WLAN_STA_TDLS_PEER))
 				check_sa = NULL;
-#ifndef _REMOVE_LAIRD_MODS_
+#ifndef _REMOVE_SUMMIT_MODS_
 			/* DMS: check for DMS receives, if A-MSDU is from our AP */
 			if (rx->sdata->u.mgd.dms.enabled) {
 				if (ether_addr_equal(hdr->addr2, rx->link->u.mgd.bssid))
@@ -3114,7 +3114,7 @@ __ieee80211_rx_h_amsdu(struct ieee80211_rx_data *rx, u8 data_offset)
 		if (!ieee80211_frame_allowed(rx, fc))
 			goto free;
 
-#ifndef _REMOVE_LAIRD_MODS_
+#ifndef _REMOVE_SUMMIT_MODS_
 		/* DMS: detect DMS packets */
 		if (check_dms)
 			ieee80211_dms_detect(rx);
@@ -3229,7 +3229,7 @@ ieee80211_rx_h_data(struct ieee80211_rx_data *rx)
 	if (!ieee80211_frame_allowed(rx, fc))
 		return RX_DROP_MONITOR;
 
-#ifndef _REMOVE_LAIRD_MODS_
+#ifndef _REMOVE_SUMMIT_MODS_
 	if (!ieee80211_dms_allowed(rx)) {
 		/* DMS: drop normal multicast that are being DMS delivered */
 		return RX_DROP_MONITOR;

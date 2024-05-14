@@ -5,7 +5,7 @@
  * A simple DT based driver to provide access to GPIO functionality
  * to user-space via sysfs.
  *
- * Copyright (C) 2021 Boris Krasnovskiy <boris.krasnovskiy@lairdconnect.com>
+ * Copyright (C) 2021 Boris Krasnovskiy <boris.krasnovskiy@ezurio.com>
  * Copyright (C) 2013 Pantelis Antoniou <panto@antoniou-consulting.com>
  *
  */

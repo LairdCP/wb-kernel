@@ -29,7 +29,7 @@
 #define IEEE80211_CHANNEL_TIME (HZ / 33)
 #define IEEE80211_PASSIVE_CHANNEL_TIME (HZ / 9)
 
-#ifndef _REMOVE_LAIRD_MODS_
+#ifndef _REMOVE_SUMMIT_MODS_
 static inline int __get_PROBE_DELAY(struct cfg80211_scan_request *scan_req)
 {
 	int msec = scan_req->probe_delay_time;
@@ -65,7 +65,7 @@ static inline int __get_SUSPEND_TIME(struct cfg80211_scan_request *scan_req)
 		return (HZ * msec + 999) / 1000;
 	return 0; // caller will fill in default
 }
-#endif /* _REMOVE_LAIRD_MODS_ */
+#endif /* _REMOVE_SUMMIT_MODS_ */
 
 void ieee80211_rx_bss_put(struct ieee80211_local *local,
 			  struct ieee80211_bss *bss)
@@ -218,13 +218,13 @@ ieee80211_bss_info_update(struct ieee80211_local *local,
 	bool signal_valid;
 	struct ieee80211_sub_if_data *scan_sdata;
 
-#ifndef _REMOVE_LAIRD_MODS_
+#ifndef _REMOVE_SUMMIT_MODS_
 // averaging of the signal level of received beacon/probe rsp
-// the cumulative value (avg_signal) is multiplied by LAIRD_SCALE
-// averaging subtracts off 1/LAIRD_AVG before adding the new signal
+// the cumulative value (avg_signal) is multiplied by SUMMIT_SCALE
+// averaging subtracts off 1/SUMMIT_AVG before adding the new signal
 // note, not using EWMA routines since values are signed
-#define LAIRD_AVG	(8)
-#define LAIRD_SCALE (8*(LAIRD_AVG))
+#define SUMMIT_AVG	(8)
+#define SUMMIT_SCALE (8 * SUMMIT_AVG)
 	s32 signal = rx_status->signal;
 
 	cbss = cfg80211_get_bss(local->hw.wiphy,
@@ -237,14 +237,16 @@ ieee80211_bss_info_update(struct ieee80211_local *local,
 	if (cbss) {
 		struct ieee80211_bss *bss = (void *)cbss->priv;
 		if (bss->avg_signal) {
-			bss->avg_signal += (signal * (LAIRD_SCALE/LAIRD_AVG))
-				- ((bss->avg_signal + (LAIRD_AVG/2)) / LAIRD_AVG);
+			bss->avg_signal += (signal * (SUMMIT_SCALE / SUMMIT_AVG))
+				- ((bss->avg_signal + (SUMMIT_AVG / 2)) / SUMMIT_AVG);
 			signal = bss->avg_signal;
-			if (signal >= 0) signal += LAIRD_SCALE/2;
-			else signal -= LAIRD_SCALE/2;
-			signal /= LAIRD_SCALE;
+			if (signal >= 0)
+				signal += SUMMIT_SCALE / 2;
+			else
+				signal -= SUMMIT_SCALE / 2;
+			signal /= SUMMIT_SCALE;
 		} else {
-			bss->avg_signal = signal * LAIRD_SCALE;
+			bss->avg_signal = signal * SUMMIT_SCALE;
 		}
 		cfg80211_put_bss(local->hw.wiphy, cbss);
 	}
@@ -253,13 +255,13 @@ ieee80211_bss_info_update(struct ieee80211_local *local,
 	if (rx_status->flag & RX_FLAG_NO_SIGNAL_VAL)
 		bss_meta.signal = 0; /* invalid signal indication */
 	else if (ieee80211_hw_check(&local->hw, SIGNAL_DBM))
-#ifndef _REMOVE_LAIRD_MODS_
+#ifndef _REMOVE_SUMMIT_MODS_
 		bss_meta.signal = signal * 100;
 #else
 		bss_meta.signal = rx_status->signal * 100;
 #endif
 	else if (ieee80211_hw_check(&local->hw, SIGNAL_UNSPEC))
-#ifndef _REMOVE_LAIRD_MODS_
+#ifndef _REMOVE_SUMMIT_MODS_
 		bss_meta.signal = (signal * 100) / local->hw.max_signal;
 #else
 		bss_meta.signal = (rx_status->signal * 100) / local->hw.max_signal;
@@ -765,7 +767,7 @@ static int __ieee80211_start_scan(struct ieee80211_sub_if_data *sdata,
 	struct ieee80211_local *local = sdata->local;
 	bool hw_scan = local->ops->hw_scan;
 	int rc;
-#ifndef _REMOVE_LAIRD_MODS_
+#ifndef _REMOVE_SUMMIT_MODS_
 	// need scan_req for fetching next_delay duration values
 	struct cfg80211_scan_request *scan_req = req;
 #endif
@@ -872,7 +874,7 @@ static int __ieee80211_start_scan(struct ieee80211_sub_if_data *sdata,
 		/* We need to ensure power level is at max for scanning. */
 		ieee80211_hw_config(local, 0);
 
-#ifndef _REMOVE_LAIRD_MODS_
+#ifndef _REMOVE_SUMMIT_MODS_
 		 if ((req->channels[0]->flags & IEEE80211_CHAN_NO_IR) ||
 		     !local->scan_req->wdev ||
 		    ((req->channels[0]->flags & IEEE80211_CHAN_RADAR) &&
@@ -936,7 +938,7 @@ static int __ieee80211_start_scan(struct ieee80211_sub_if_data *sdata,
 
 static unsigned long
 ieee80211_scan_get_channel_time(struct ieee80211_channel *chan
-#ifndef _REMOVE_LAIRD_MODS_
+#ifndef _REMOVE_SUMMIT_MODS_
 								, struct cfg80211_scan_request *scan_req
 #endif
 	)
@@ -945,7 +947,7 @@ ieee80211_scan_get_channel_time(struct ieee80211_channel *chan
 	 * TODO: channel switching also consumes quite some time,
 	 * add that delay as well to get a better estimation
 	 */
-#ifndef _REMOVE_LAIRD_MODS_
+#ifndef _REMOVE_SUMMIT_MODS_
 	if ((chan->flags & IEEE80211_CHAN_NO_IR) || !scan_req->wdev ||
 	   ((chan->flags & IEEE80211_CHAN_RADAR) && scan_req->wdev->iftype != NL80211_IFTYPE_STATION))
 #else
@@ -1003,7 +1005,7 @@ static void ieee80211_scan_state_decision(struct ieee80211_local *local,
 	 */
 
 	bad_latency = time_after(jiffies +
-#ifndef _REMOVE_LAIRD_MODS_
+#ifndef _REMOVE_SUMMIT_MODS_
 				 ieee80211_scan_get_channel_time(next_chan, scan_req),
 #else
 				 ieee80211_scan_get_channel_time(next_chan),
@@ -1106,7 +1108,7 @@ set_channel:
 	 * In any case, it is not necessary for a passive scan.
 	 */
 
-#ifndef _REMOVE_LAIRD_MODS_
+#ifndef _REMOVE_SUMMIT_MODS_
 	if ((chan->flags & IEEE80211_CHAN_NO_IR) || !scan_req->wdev ||
 	   ((chan->flags & IEEE80211_CHAN_RADAR) && scan_req->wdev->iftype != NL80211_IFTYPE_STATION) ||
 #else
@@ -1128,7 +1130,7 @@ set_channel:
 static void ieee80211_scan_state_suspend(struct ieee80211_local *local,
 					 unsigned long *next_delay)
 {
-#ifndef _REMOVE_LAIRD_MODS_
+#ifndef _REMOVE_SUMMIT_MODS_
 	struct cfg80211_scan_request *scan_req;
 	scan_req = rcu_dereference_protected(local->scan_req,
 					     lockdep_is_held(&local->mtx));
@@ -1141,7 +1143,7 @@ static void ieee80211_scan_state_suspend(struct ieee80211_local *local,
 	/* disable PS */
 	ieee80211_offchannel_return(local);
 
-#ifndef _REMOVE_LAIRD_MODS_
+#ifndef _REMOVE_SUMMIT_MODS_
 	*next_delay = __get_SUSPEND_TIME(scan_req);
 	if (!*next_delay) // fall through to default value if zero
 #endif
