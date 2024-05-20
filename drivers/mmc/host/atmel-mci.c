@@ -667,16 +667,17 @@ atmci_of_init(struct platform_device *pdev)
 			continue;
 		}
 
+		/* Enables skipping SDIO function only nodes */
+		if (of_property_read_u32(cnp, "bus-width",
+		                         &pdata->slot[slot_id].bus_width))
+			continue;
+
 		if (slot_id >= ATMCI_MAX_NR_SLOTS) {
 			dev_warn(&pdev->dev, "can't have more than %d slots\n",
 			         ATMCI_MAX_NR_SLOTS);
 			of_node_put(cnp);
 			break;
 		}
-
-		if (of_property_read_u32(cnp, "bus-width",
-		                         &pdata->slot[slot_id].bus_width))
-			pdata->slot[slot_id].bus_width = 1;
 
 		pdata->slot[slot_id].detect_pin =
 			devm_fwnode_gpiod_get(&pdev->dev, of_fwnode_handle(cnp),
