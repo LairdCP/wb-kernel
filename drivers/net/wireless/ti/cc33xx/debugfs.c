@@ -413,12 +413,12 @@ static const struct file_operations radar_debug_mode_ops = {
 	.llseek = default_llseek,
 };
 
-static inline void cc33xx_debugfs_add_files_helper(struct dentry *moddir)
+static inline void cc33xx_debugfs_add_files_helper(struct cc33xx *wl, struct dentry *moddir)
 {
 	DEBUGFS_ADD(radar_debug_mode, moddir);
 }
 #else
-static inline void cc33xx_debugfs_add_files_helper(struct dentry *moddir) {}
+static inline void cc33xx_debugfs_add_files_helper(struct cc33xx *wl, struct dentry *moddir) {}
 #endif /* CFG80211_CERTIFICATION_ONUS */
 
 
@@ -2354,7 +2354,7 @@ int cc33xx_debugfs_add_files(struct cc33xx *wl,
 
 	DEBUGFS_ADD(conf, moddir);
 	DEBUGFS_ADD(radar_detection, moddir);
-	cc33xx_debugfs_add_files_helper(moddir);
+	cc33xx_debugfs_add_files_helper(wl, moddir);
 	DEBUGFS_ADD(dynamic_fw_traces, moddir);
 
 	return 0;
