@@ -77,7 +77,7 @@ static const u8 up_to_ac[] = {
 
 /* Summit build number is 32bit value.  Parsed in the form w.x.y.z.
  */
-#define SUMMIT_BUILD_NUMBER 0x0C00000A
+#define SUMMIT_BUILD_NUMBER 0x0C00000B
 
 enum { // keep this list in sync with the one from ath_access.c from the SDK
 	GETVERSION=0,
