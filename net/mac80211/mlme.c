@@ -236,6 +236,7 @@ ieee80211_determine_chantype(struct ieee80211_sub_if_data *sdata,
 	u32 ht_cfreq;
 
 	memset(chandef, 0, sizeof(struct cfg80211_chan_def));
+	memset(&vht_chandef, 0, sizeof(struct cfg80211_chan_def));
 	chandef->chan = channel;
 	chandef->width = NL80211_CHAN_WIDTH_20_NOHT;
 	chandef->center_freq1 = channel->center_freq;
@@ -312,12 +313,11 @@ ieee80211_determine_chantype(struct ieee80211_sub_if_data *sdata,
 
 		mlme_dbg(sdata, "40 MHz not supported\n");
 
-		/* 40 MHz (and 80 MHz) must be supported for 5GHZ VHT
-			unless peer allows operating mode notification. If so a 20MHz 
-			station can ask from peer to lower bandwidth. */
+		/* 40 MHz (and 80 MHz) must be supported for 5GHZ VHT 
+			unless this is a 20MHz-only HE device */
 		if (channel->band != NL80211_BAND_2GHZ){
 				ret = IEEE80211_CONN_DISABLE_40MHZ;
-		}else{
+		} else {
 				ret = IEEE80211_CONN_DISABLE_VHT;
 				/* also mark 40 MHz disabled */
 				ret |= IEEE80211_CONN_DISABLE_40MHZ;
@@ -4868,7 +4868,7 @@ static int ieee80211_prep_channel(struct ieee80211_sub_if_data *sdata,
 	int ret;
 	u32 i;
 	bool have_80mhz;
-	bool operating_mode_notif_capable = false;
+	bool is_20mhzonly_he;
 
 	rcu_read_lock();
 
@@ -5018,7 +5018,7 @@ static int ieee80211_prep_channel(struct ieee80211_sub_if_data *sdata,
 	}
 
 
-	/* Allow VHT if at least one channel on the sband supports 80 MHz */
+	/* Allow VHT if at least one channel on the sband supports 80 MHz or this is a 20MHz-Only HE STA */
 	have_80mhz = false;
 	for (i = 0; i < sband->n_channels; i++) {
 		if (sband->channels[i].flags & (IEEE80211_CHAN_DISABLED |
@@ -5028,15 +5028,16 @@ static int ieee80211_prep_channel(struct ieee80211_sub_if_data *sdata,
 		have_80mhz = true;
 		break;
 	}
-	
-	//get operating mode notification capable element
-	const u8* extended_cap_ie = ieee80211_bss_get_ie(cbss,WLAN_EID_EXT_CAPABILITY);
-	if ( (extended_cap_ie)  && (extended_cap_ie[1] >= 8) && 
-			(extended_cap_ie[9] & WLAN_EXT_CAPA8_OPMODE_NOTIF))
-			operating_mode_notif_capable = true;
 
-	if ((!have_80mhz) && (!operating_mode_notif_capable)) {
-		sdata_info(sdata, "80 MHz not supported nor operating mode notification capable, disabling VHT\n");
+	is_20mhzonly_he = false;
+	if (ieee80211_get_he_iftype_cap(sband,
+					 ieee80211_vif_type_p2p(&sdata->vif))) {
+		if (!(sband->ht_cap.cap & IEEE80211_HT_CAP_SUP_WIDTH_20_40))
+			is_20mhzonly_he = true;
+	}
+	
+	if (!have_80mhz && !is_20mhzonly_he) {
+		sdata_info(sdata, "80 MHz not supported and not 20MHz-Only HE STA, disabling VHT\n");
 		*conn_flags |= IEEE80211_CONN_DISABLE_VHT;
 	}
 
