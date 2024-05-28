@@ -74,10 +74,6 @@ module_param_string(regdomain, brcmf_regdomain,
 		    BRCMF_REGDOMAIN_LEN, 0400);
 MODULE_PARM_DESC(regdomain, "Regulatory domain/country code");
 
-static int brcmf_idle_interval = BRCMF_IDLE_INTERVAL;
-module_param_named(idle_interval, brcmf_idle_interval, int, 0400);
-MODULE_PARM_DESC(idle_interval, "SDIO idle interval");
-
 #ifdef DEBUG
 /* always succeed brcmf_bus_started() */
 static int brcmf_ignore_probe_fail;
@@ -535,7 +531,6 @@ struct brcmf_mp_device *brcmf_get_module_param(struct device *dev,
 	settings->fcmode = brcmf_fcmode;
 	settings->roamoff = !!brcmf_roamoff;
 	settings->iapp = !!brcmf_iapp_enable;
-	settings->idle_interval = brcmf_idle_interval;
 #ifdef DEBUG
 	settings->ignore_probe_fail = !!brcmf_ignore_probe_fail;
 #endif

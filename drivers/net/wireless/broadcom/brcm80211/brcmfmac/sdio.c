@@ -321,8 +321,7 @@ struct rte_console {
 #define BRCMF_IDLE_ACTIVE	0	/* Do not request any SD clock change
 					 * when idle
 					 */
-// Moved to common.h to support override
-//#define BRCMF_IDLE_INTERVAL	1
+#define BRCMF_IDLE_INTERVAL	1
 
 #define KSO_WAIT_US 50
 #define MAX_KSO_ATTEMPTS (PMU_MAX_TRANSITION_DLY/KSO_WAIT_US)
@@ -4521,12 +4520,8 @@ struct brcmf_sdio *brcmf_sdio_probe(struct brcmf_sdio_dev *sdiodev)
 
 	/* ...and initialize clock/power states */
 	bus->clkstate = CLK_SDONLY;
-	// Summit - Make idle configurable for platforms that can't handle radio in sleep state
-	//bus->idletime = BRCMF_IDLE_INTERVAL;
-	bus->idletime = bus->sdiodev->settings->idle_interval;
+	bus->idletime = BRCMF_IDLE_INTERVAL;
 	bus->idleclock = BRCMF_IDLE_ACTIVE;
-	if (bus->idletime != BRCMF_IDLE_INTERVAL)
-		brcmf_info("bus idle time set to %d\n", bus->idletime);
 
 	/* SR state */
 	bus->sr_enabled = false;
