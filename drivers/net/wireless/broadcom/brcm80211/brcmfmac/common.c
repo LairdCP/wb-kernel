@@ -628,12 +628,12 @@ struct brcmf_mp_device *brcmf_get_module_param(struct device *dev,
 	settings->disable_6ghz = !!brcmf_disable_6ghz;
 	settings->pkt_prio = !!brcmf_pkt_prio_enable;
 
+	if (bus_type == BRCMF_BUSTYPE_SDIO)
+		settings->bus.sdio.txglomsz = brcmf_sdiod_txglomsz;
+
 	// Summit - Copy regulory domain module parameter, subject to
 	// override by DT
 	strlcpy(settings->regdomain, brcmf_regdomain, BRCMF_REGDOMAIN_LEN);
-
-	if (bus_type == BRCMF_BUSTYPE_SDIO)
-		settings->bus.sdio.txglomsz = brcmf_sdiod_txglomsz;
 
 	/* See if there is any device specific platform data configured */
 	found = false;
