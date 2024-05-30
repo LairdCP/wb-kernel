@@ -10581,7 +10581,7 @@ struct brcmf_cfg80211_info *brcmf_cfg80211_attach(struct brcmf_pub *drvr,
 	SET_NETDEV_DEV(ndev, wiphy_dev(cfg->wiphy));
 
 	// Summit - Configure regdomain if provided in settings
-	//   Required for 4373/43439, optional for 4343/4339
+	//   Required for 55573/4373/43439, optional for 4343/4339
 	//   Note - Configuration provided as country code except for "ETSI" pseudocode
 	if (strlen(drvr->settings->regdomain) != 0) {
 		struct brcmf_fil_country_le ccreq;
@@ -10592,6 +10592,7 @@ struct brcmf_cfg80211_info *brcmf_cfg80211_attach(struct brcmf_pub *drvr,
 		if (!strcmp("ETSI", drvr->settings->regdomain)) {
 			switch (drvr->bus_if->chip) {
 			case CY_CC_4373_CHIP_ID:
+			case CY_CC_55572_CHIP_ID:
 				strcpy(ccreq.country_abbrev, "DE");
 				break;
 			case BRCM_CC_4339_CHIP_ID:
@@ -10633,7 +10634,8 @@ struct brcmf_cfg80211_info *brcmf_cfg80211_attach(struct brcmf_pub *drvr,
 		}
 		brcmf_info("Using regulatory domain %s\n", drvr->settings->regdomain);
 	} else if (drvr->bus_if->chip == CY_CC_4373_CHIP_ID
-			|| drvr->bus_if->chip == CY_CC_43439_CHIP_ID) {
+			|| drvr->bus_if->chip == CY_CC_43439_CHIP_ID
+			|| drvr->bus_if->chip == CY_CC_55572_CHIP_ID) {
 		brcmf_err("Regulatory domain not configured, aborting!\n");
 		goto wiphy_out;
 	}
