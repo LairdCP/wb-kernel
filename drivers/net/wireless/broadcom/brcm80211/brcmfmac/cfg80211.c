@@ -8929,7 +8929,7 @@ static int brcmf_construct_chaninfo(struct brcmf_cfg80211_info *cfg,
 			band = wiphy->bands[NL80211_BAND_2GHZ];
 		} else if (ch.band == BRCMU_CHAN_BAND_5G) {
 			band = wiphy->bands[NL80211_BAND_5GHZ];
-		} else if ((ch.band == BRCMU_CHAN_BAND_6G)) {
+		} else if (ch.band == BRCMU_CHAN_BAND_6G) {
 			if (brcmf_feat_is_6ghz_enabled(ifp)) {
 				band = wiphy->bands[NL80211_BAND_6GHZ];
 			} else {
