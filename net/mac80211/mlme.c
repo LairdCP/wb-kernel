@@ -216,6 +216,24 @@ static int ecw2cw(int ecw)
 	return (1 << ecw) - 1;
 }
 
+static bool ieee80211_is_20mhzonly_he(struct ieee80211_sub_if_data *sdata, struct ieee80211_supported_band *sband)
+{
+	const struct ieee80211_sta_he_cap * he_cap;
+
+	he_cap = ieee80211_get_he_iftype_cap_vif(sband, &sdata->vif);
+	if (!he_cap)
+		return false;
+
+	if (sband->band == NL80211_BAND_2GHZ) {
+		if (!(he_cap->he_cap_elem.phy_cap_info[0] & IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_40MHZ_IN_2G))
+			return true;
+	}
+	else if (!(he_cap->he_cap_elem.phy_cap_info[0] & IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_40MHZ_80MHZ_IN_5G))
+		return true;
+	
+	return false;
+}
+
 static ieee80211_conn_flags_t
 ieee80211_determine_chantype(struct ieee80211_sub_if_data *sdata,
 			     struct ieee80211_link_data *link,
@@ -232,7 +250,7 @@ ieee80211_determine_chantype(struct ieee80211_sub_if_data *sdata,
 {
 	struct cfg80211_chan_def vht_chandef;
 	struct ieee80211_sta_ht_cap sta_ht_cap;
-	ieee80211_conn_flags_t ret;
+	ieee80211_conn_flags_t ret = 0;
 	u32 ht_cfreq;
 
 	memset(chandef, 0, sizeof(struct cfg80211_chan_def));
@@ -312,23 +330,21 @@ ieee80211_determine_chantype(struct ieee80211_sub_if_data *sdata,
 	} else {
 
 		mlme_dbg(sdata, "40 MHz not supported\n");
+		ret = IEEE80211_CONN_DISABLE_40MHZ;
 
-		/* 40 MHz (and 80 MHz) must be supported for 5GHZ VHT 
-			unless this is a 20MHz-only HE device */
-		if (channel->band != NL80211_BAND_2GHZ){
-				ret = IEEE80211_CONN_DISABLE_40MHZ;
-		} else {
-				ret = IEEE80211_CONN_DISABLE_VHT;
-				/* also mark 40 MHz disabled */
-				ret |= IEEE80211_CONN_DISABLE_40MHZ;
+		/*
+		 * 40 MHz (and 80 MHz) must be supported for VHT
+		 * unless this is a 20MHz-only HE device
+		 */
+		if (!ieee80211_is_20mhzonly_he(sdata, sband)) {
+			ret |= IEEE80211_CONN_DISABLE_VHT;
+			goto out;
 		}
-			
-		goto out;
 	}
 
 	if (!vht_oper || !sband->vht_cap.vht_supported) {
 		mlme_dbg(sdata, "VHT operation missing / VHT not supported\n");
-		ret = IEEE80211_CONN_DISABLE_VHT;
+		ret |= IEEE80211_CONN_DISABLE_VHT;
 		goto out;
 	}
 
@@ -352,7 +368,7 @@ ieee80211_determine_chantype(struct ieee80211_sub_if_data *sdata,
 			if (!(conn_flags & IEEE80211_CONN_DISABLE_HE))
 				sdata_info(sdata,
 					   "HE AP VHT information is invalid, disabling HE\n");
-			ret = IEEE80211_CONN_DISABLE_HE | IEEE80211_CONN_DISABLE_EHT;
+			ret |= IEEE80211_CONN_DISABLE_HE | IEEE80211_CONN_DISABLE_EHT;
 			goto out;
 		}
 	} else if (!ieee80211_chandef_vht_oper(&sdata->local->hw,
@@ -362,7 +378,7 @@ ieee80211_determine_chantype(struct ieee80211_sub_if_data *sdata,
 		if (!(conn_flags & IEEE80211_CONN_DISABLE_VHT))
 			sdata_info(sdata,
 				   "AP VHT information is invalid, disabling VHT\n");
-		ret = IEEE80211_CONN_DISABLE_VHT;
+		ret |= IEEE80211_CONN_DISABLE_VHT;
 		goto out;
 	}
 
@@ -370,22 +386,26 @@ ieee80211_determine_chantype(struct ieee80211_sub_if_data *sdata,
 		if (!(conn_flags & IEEE80211_CONN_DISABLE_VHT))
 			sdata_info(sdata,
 				   "AP VHT information is invalid, disabling VHT\n");
-		ret = IEEE80211_CONN_DISABLE_VHT;
+		ret |= IEEE80211_CONN_DISABLE_VHT;
 		goto out;
 	}
 
-	if (cfg80211_chandef_identical(chandef, &vht_chandef)) {
-		ret = 0;
+	if (cfg80211_chandef_identical(chandef, &vht_chandef))
 		goto out;
-	}
 
 	if (!cfg80211_chandef_compatible(chandef, &vht_chandef)) {
 		if (!(conn_flags & IEEE80211_CONN_DISABLE_VHT))
 			sdata_info(sdata,
 				   "AP VHT information doesn't match HT, disabling VHT\n");
-		ret = IEEE80211_CONN_DISABLE_VHT;
+		ret |= IEEE80211_CONN_DISABLE_VHT;
 		goto out;
 	}
+
+	/*
+	* Stay with original HT compatible chandef if 20MHz-only HE device
+	*/
+	if (ieee80211_is_20mhzonly_he(sdata, sband))
+		goto out;
 
 	*chandef = vht_chandef;
 
@@ -406,7 +426,7 @@ ieee80211_determine_chantype(struct ieee80211_sub_if_data *sdata,
 			if (!(conn_flags & IEEE80211_CONN_DISABLE_EHT))
 				sdata_info(sdata,
 					   "AP EHT information is invalid, disabling EHT\n");
-			ret = IEEE80211_CONN_DISABLE_EHT;
+			ret |= IEEE80211_CONN_DISABLE_EHT;
 			goto out;
 		}
 
@@ -414,7 +434,7 @@ ieee80211_determine_chantype(struct ieee80211_sub_if_data *sdata,
 			if (!(conn_flags & IEEE80211_CONN_DISABLE_EHT))
 				sdata_info(sdata,
 					   "AP EHT information is incompatible, disabling EHT\n");
-			ret = IEEE80211_CONN_DISABLE_EHT;
+			ret |= IEEE80211_CONN_DISABLE_EHT;
 			goto out;
 		}
 
@@ -446,8 +466,12 @@ out:
 	    cfg80211_chandef_identical(chandef, &link->conf->chandef))
 		return ret;
 
-	/* don't print the message below for VHT mismatch if VHT is disabled */
-	if (ret & IEEE80211_CONN_DISABLE_VHT)
+	/*
+	 * don't print the message below for VHT mismatch if VHT is disabled
+	 * or if this is a 20MH-only HE device
+	 */
+	if ((ret & IEEE80211_CONN_DISABLE_VHT) || 
+		ieee80211_is_20mhzonly_he(sdata, sband))
 		vht_chandef = *chandef;
 
 	/*
@@ -5029,12 +5053,7 @@ static int ieee80211_prep_channel(struct ieee80211_sub_if_data *sdata,
 		break;
 	}
 
-	is_20mhzonly_he = false;
-	if (ieee80211_get_he_iftype_cap(sband,
-					 ieee80211_vif_type_p2p(&sdata->vif))) {
-		if (!(sband->ht_cap.cap & IEEE80211_HT_CAP_SUP_WIDTH_20_40))
-			is_20mhzonly_he = true;
-	}
+	is_20mhzonly_he = ieee80211_is_20mhzonly_he(sdata, sband);
 	
 	if (!have_80mhz && !is_20mhzonly_he) {
 		sdata_info(sdata, "80 MHz not supported and not 20MHz-Only HE STA, disabling VHT\n");
