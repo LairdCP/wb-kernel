@@ -846,13 +846,13 @@ int ifx_vndr_cmdstr_offload_config(struct wiphy *wiphy, struct wireless_dev *wde
 	 * send 0x000319 0x1C -
 	 *
 	 */
-	if (cmd_str[1] && (strlen(cmd_str[1]) == 6) &&
+	if ((strlen(cmd_str[1]) == 6) &&
 	    (memcmp(cmd_str[1], "Enable", 6)) == 0 &&
 	    (cmd_val[0] == 0 || cmd_val[0] == 1)) {
 		brcmf_generic_offload_enable(ifp, brcmf_offload_feat, cmd_val[0]);
-	} else if (cmd_str[1] && (strlen(cmd_str[1]) == 7) &&
+	} else if ((strlen(cmd_str[1]) == 7) &&
 		  (memcmp(cmd_str[1], "Profile", 7)) == 0) {
-		if (cmd_str[2]) {
+		if (cmd_str[2][0]) {
 			unsigned int ol_prof;
 
 			if ((strlen(cmd_str[2]) == 6) &&
@@ -868,7 +868,7 @@ int ifx_vndr_cmdstr_offload_config(struct wiphy *wiphy, struct wireless_dev *wde
 				brcmf_err("unknown offload_config Profile attr\n");
 				return -EINVAL;
 			}
-			if (cmd_str[3] && (strlen(cmd_str[3]) == 2) &&
+			if (cmd_str[3][0] && (strlen(cmd_str[3]) == 2) &&
 			    (memcmp(cmd_str[3], "-s", 2)) == 0)
 				brcmf_generic_offload_config(ifp, ~cmd_val[1], ol_prof, cmd_val[0]);
 			else
@@ -907,7 +907,7 @@ int ifx_vndr_cmdstr_mkeep_alive(struct wiphy *wiphy, struct wireless_dev *wdev,
 		brcmf_err("Invalid command format\n");
 		return -EINVAL;
 	}
-	if (cmd_str[1] && (strlen(cmd_str[1]) == 9) &&
+	if ((strlen(cmd_str[1]) == 9) &&
 	    (memcmp(cmd_str[1], "immediate", 9)) == 0) {
 		immed_flag = 1;
 	}
@@ -949,7 +949,7 @@ int ifx_vndr_cmdstr_tko(struct wiphy *wiphy, struct wireless_dev *wdev,
 	/* echo 'tko enable 1 ' | iw dev wlan0 vendor
 	 * send 0x000319 0x1C -
 	 */
-	if (cmd_str[1] && (strlen(cmd_str[1]) == 6) &&
+	if ((strlen(cmd_str[1]) == 6) &&
 	    (memcmp(cmd_str[1], "enable", 6) == 0) &&
 	     (cmd_val[0] == 0 || cmd_val[0] == 1)) {
 		tko_enable = (struct ifx_tko_enable *)tko.data;
