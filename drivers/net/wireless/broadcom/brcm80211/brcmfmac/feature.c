@@ -383,7 +383,7 @@ void brcmf_feat_attach(struct brcmf_pub *drvr)
 		ifp->drvr->feat_flags &= ~drvr->settings->feature_disable;
 	}
 
-	brcmf_feat_wlc_version_overrides(drvr);
+	// brcmf_feat_wlc_version_overrides(drvr);
 	brcmf_feat_firmware_overrides(drvr);
 
 	/* set chip related quirks */
