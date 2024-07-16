@@ -14,6 +14,7 @@
 #include <linux/kernel.h>
 #include <linux/platform_device.h>
 #include <linux/of.h>
+#include <linux/of_gpio.h>
 #include <linux/gpio/consumer.h>
 #include <linux/pinctrl/consumer.h>
 #include <linux/atomic.h>
@@ -79,30 +80,30 @@ static irqreturn_t gpio_of_helper_handler(int irq, void *ptr)
 	return IRQ_HANDLED;
 }
 
-static int gpio_of_entry_create(struct device *dev, struct device_node *node,
+static int gpio_of_entry_create(struct device *dev, struct fwnode_handle *child,
 	struct gpio_entry *entry)
 {
 	enum gpiod_flags gpio_flags;
 	unsigned long irq_flags = 0;
 	int ret;
 
-	ret = of_property_read_string(node, "gpio-name", &entry->name);
+	ret = fwnode_property_read_string(child, "gpio-name", &entry->name);
 	if (ret) {
 		dev_err(dev, "Failed to get name property\n");
 		return ret;
 	}
 
 	/* get the type of the node first */
-	if (of_property_read_bool(node, "input")) {
+	if (fwnode_property_present(child, "input")) {
 		gpio_flags = GPIOD_IN;
-		if (of_property_read_bool(node, "count-falling-edge"))
+		if (fwnode_property_present(child, "count-falling-edge"))
 			irq_flags |= IRQF_TRIGGER_FALLING;
-		if (of_property_read_bool(node, "count-rising-edge"))
+		if (fwnode_property_present(child, "count-rising-edge"))
 			irq_flags |= IRQF_TRIGGER_RISING;
-	} else if (of_property_read_bool(node, "output")) {
-		if (of_property_read_bool(node, "init-high"))
+	} else if (fwnode_property_present(child, "output")) {
+		if (fwnode_property_present(child, "init-high"))
 			gpio_flags = GPIOD_OUT_HIGH;
-		else if (of_property_read_bool(node, "init-low"))
+		else if (fwnode_property_present(child, "init-low"))
 			gpio_flags = GPIOD_OUT_LOW;
 		else {
 			dev_err(dev, "Initial gpio state not specified\n");
@@ -113,15 +114,11 @@ static int gpio_of_entry_create(struct device *dev, struct device_node *node,
 		return -EINVAL;
 	}
 
-	entry->desc = devm_gpiod_get(dev, "gpio", gpio_flags);
+	entry->desc = devm_fwnode_gpiod_get(dev, child,	NULL, gpio_flags,
+		entry->name);
 	if (IS_ERR(entry->desc))
 		return dev_err_probe(dev, PTR_ERR(entry->desc),
 			"Failed to get gpio property of '%s'\n", entry->name);
-
-	ret = gpiod_set_consumer_name(entry->desc, entry->name);
-	if (ret)
-		return dev_err_probe(dev, ret, "Failed to set %s gpio name\n",
-			entry->name);
 
 	/* counter mode requested - need an interrupt */
 	if (irq_flags) {
@@ -145,17 +142,10 @@ static int gpio_of_helper_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct gpio_helper_info *info;
 	struct gpio_entry *entry;
-	struct device_node *pnode = dev->of_node;
-	struct device_node *cnode;
+	struct fwnode_handle *child;
 	struct pinctrl *pinctrl;
 	unsigned i;
 	int ret;
-
-	/* we only support OF */
-	if (!pnode) {
-		dev_err(dev, "No platform of_node!\n");
-		return -ENODEV;
-	}
 
 	pinctrl = devm_pinctrl_get_select_default(dev);
 	if (IS_ERR(pinctrl)) {
@@ -171,7 +161,7 @@ static int gpio_of_helper_probe(struct platform_device *pdev)
 	if (!info)
 		return -ENOMEM;
 
-	info->size = of_get_child_count(pnode);
+	info->size = device_get_child_node_count(dev);
 	info->gpios = devm_kzalloc(dev, sizeof(struct gpio_entry) * info->size,
 		GFP_KERNEL);
 	if (!info->gpios)
@@ -179,8 +169,8 @@ static int gpio_of_helper_probe(struct platform_device *pdev)
 
 	entry = info->gpios;
 
-	for_each_child_of_node(pnode, cnode) {
-		ret = gpio_of_entry_create(dev, cnode, entry);
+	device_for_each_child_node(dev, child) {
+		ret = gpio_of_entry_create(dev, child, entry);
 		if (ret)
 			return ret;
 		++entry;
