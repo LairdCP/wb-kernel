@@ -31,7 +31,7 @@
 		#address-cells = <1>;
 		#size-cells = <0>;
 
-		btn0@pa2 {
+		btn0-pa2 {
 			label = "BTN0";
 			linux,code = <0x100>;		/* BTN0 button */
 			gpios = <&pioA 2 GPIO_ACTIVE_LOW>;
@@ -43,68 +43,68 @@
 	status_leds {
 		compatible = "gpio-leds";
 
-		led@1 {
+		led-1 {
 			label = "ig60:red:power";
 			gpios = <&pioA 29 GPIO_ACTIVE_LOW>;
 			panic-indicator;
 		};
 
-		power_led_green: led@2 {
+		power_led_green: led-2 {
 			label = "ig60:green:power";
 			gpios = <&pioA 17 GPIO_ACTIVE_LOW>;
 			linux,default-trigger = "timer";
 			panic-indicator;
 		};
 
-		led@3 {
+		led-3 {
 			label = "ig60:red:device";
 			gpios = <&pioA 13 GPIO_ACTIVE_LOW>;
 			default-state = "off";
 		};
 
-		led@4 {
+		led-4 {
 			label = "ig60:green:device";
 			gpios = <&pioA 15 GPIO_ACTIVE_LOW>;
 			default-state = "off";
 		};
 
-		led@5 {
+		led-5 {
 			label = "ig60:red:storage";
 			gpios = <&pioA 18 GPIO_ACTIVE_LOW>;
 			default-state = "off";
 		};
 
-		led@6 {
+		led-6 {
 			label = "ig60:green:iot";
 			gpios = <&pioA 25 GPIO_ACTIVE_LOW>;
 			default-state = "off";
 		};
 
-		led@7 {
+		led-7 {
 			label = "ig60:red:signal1";
 			gpios = <&pioA 1 GPIO_ACTIVE_LOW>;
 			default-state = "off";
 		};
 
-		led@8 {
+		led-8 {
 			label = "ig60:green:signal1";
 			gpios = <&pioA 6 GPIO_ACTIVE_LOW>;
 			default-state = "off";
 		};
 
-		led@9 {
+		led-9 {
 			label = "ig60:green:signal2";
 			gpios = <&pioA 16 GPIO_ACTIVE_LOW>;
 			default-state = "off";
 		};
 
-		led@10 {
+		led-10 {
 			label = "ig60:green:signal3";
 			gpios = <&pioA 27 GPIO_ACTIVE_LOW>;
 			default-state = "off";
 		};
 
-		led@11 {
+		led-11 {
 			label = "ig60:green:signal4";
 			gpios = <&pioA 3 GPIO_ACTIVE_LOW>;
 			default-state = "off";
