@@ -14,8 +14,8 @@
 #include "at91-ig60.dtsi"
 
 / {
-	model = "Summit IG60";
-	compatible = "summit,ig60", "atmel,sama5d36", "atmel,sama5d3", "atmel,sama5";
+	model = "Sentrius IG60";
+	compatible = "sentrius,ig60", "atmel,sama5d36", "atmel,sama5d3", "atmel,sama5";
 };
 
 &dbgu {
