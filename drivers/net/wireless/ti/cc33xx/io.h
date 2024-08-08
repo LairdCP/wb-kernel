@@ -28,6 +28,7 @@ void cc33xx_power_off(struct cc33xx *wl);
 int cc33xx_power_on(struct cc33xx *wl);
 int wlcore_translate_addr(struct cc33xx *wl, int addr);
 bool cc33xx_set_block_size(struct cc33xx *wl);
+int wlcore_probe(struct cc33xx *wl, struct platform_device *pdev);
 
 
 #endif /* __IO_H__ */

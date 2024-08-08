@@ -138,6 +138,8 @@ cc33xx_iface_combinations[] = {
 	}
 };
 
+#define CONF_HW_RXTX_RATE_UNSUPPORTED 0xff
+
 static const u8 cc33xx_rate_to_idx_2ghz[] = {
 	CONF_HW_RXTX_RATE_UNSUPPORTED,
 	0,              /* RATE_INDEX_1MBPS */
@@ -190,6 +192,20 @@ static const u8 *cc33xx_band_rate_to_idx[] = {
 	[NL80211_BAND_2GHZ] = cc33xx_rate_to_idx_2ghz,
 	[NL80211_BAND_5GHZ] = cc33xx_rate_to_idx_5ghz
 };
+
+enum {
+	CLOCK_CONFIG_16_2_M	= 1,
+	CLOCK_CONFIG_16_368_M,
+	CLOCK_CONFIG_16_8_M,
+	CLOCK_CONFIG_19_2_M,
+	CLOCK_CONFIG_26_M,
+	CLOCK_CONFIG_32_736_M,
+	CLOCK_CONFIG_33_6_M,
+	CLOCK_CONFIG_38_468_M,
+	CLOCK_CONFIG_52_M,
+
+	NUM_CLOCK_CONFIGS,
+}; 
 
 static const struct cc33xx_clk_cfg cc33xx_clk_table_coex[NUM_CLOCK_CONFIGS] = {
 	[CLOCK_CONFIG_16_2_M]	= { 8,  121, 0, 0, false },
@@ -334,8 +350,9 @@ static struct ieee80211_sband_iftype_data iftype_data_2ghz[] = {{
 		.phy_cap_info[9] =
 			IEEE80211_HE_PHY_CAP9_NON_TRIGGERED_CQI_FEEDBACK |
 			IEEE80211_HE_PHY_CAP9_RX_FULL_BW_SU_USING_MU_WITH_COMP_SIGB |
-			IEEE80211_HE_PHY_CAP9_RX_FULL_BW_SU_USING_MU_WITH_NON_COMP_SIGB |
-			IEEE80211_HE_PHY_CAP9_NOMINAL_PKT_PADDING_16US,
+			IEEE80211_HE_PHY_CAP9_RX_FULL_BW_SU_USING_MU_WITH_NON_COMP_SIGB |				
+			(IEEE80211_HE_PHY_CAP9_NOMINAL_PKT_PADDING_16US << 
+			 IEEE80211_HE_PHY_CAP9_NOMINAL_PKT_PADDING_POS),
 		},
 		/*
 		* Set default Tx/Rx HE MCS NSS Support field.
@@ -433,11 +450,13 @@ static struct ieee80211_channel cc33xx_channels_5ghz[] = {
 	{ .hw_value = 132, .center_freq = 5660, .max_power = CC33XX_MAX_TXPWR },
 	{ .hw_value = 136, .center_freq = 5680, .max_power = CC33XX_MAX_TXPWR },
 	{ .hw_value = 140, .center_freq = 5700, .max_power = CC33XX_MAX_TXPWR },
+	{ .hw_value = 144, .center_freq = 5720, .max_power = CC33XX_MAX_TXPWR },
 	{ .hw_value = 149, .center_freq = 5745, .max_power = CC33XX_MAX_TXPWR },
 	{ .hw_value = 153, .center_freq = 5765, .max_power = CC33XX_MAX_TXPWR },
 	{ .hw_value = 157, .center_freq = 5785, .max_power = CC33XX_MAX_TXPWR },
 	{ .hw_value = 161, .center_freq = 5805, .max_power = CC33XX_MAX_TXPWR },
 	{ .hw_value = 165, .center_freq = 5825, .max_power = CC33XX_MAX_TXPWR },
+	{ .hw_value = 169, .center_freq = 5845, .max_power = CC33XX_MAX_TXPWR },
 };
 
 static struct ieee80211_sband_iftype_data iftype_data_5ghz[] = {{
@@ -499,8 +518,9 @@ static struct ieee80211_sband_iftype_data iftype_data_5ghz[] = {{
 		.phy_cap_info[9] =
 			IEEE80211_HE_PHY_CAP9_NON_TRIGGERED_CQI_FEEDBACK |
 			IEEE80211_HE_PHY_CAP9_RX_FULL_BW_SU_USING_MU_WITH_COMP_SIGB |
-			IEEE80211_HE_PHY_CAP9_RX_FULL_BW_SU_USING_MU_WITH_NON_COMP_SIGB |
-			IEEE80211_HE_PHY_CAP9_NOMINAL_PKT_PADDING_16US,
+			IEEE80211_HE_PHY_CAP9_RX_FULL_BW_SU_USING_MU_WITH_NON_COMP_SIGB |			
+			(IEEE80211_HE_PHY_CAP9_NOMINAL_PKT_PADDING_16US <<
+			 IEEE80211_HE_PHY_CAP9_NOMINAL_PKT_PADDING_POS),
 		},
 		/*
 			* Set default Tx/Rx HE MCS NSS Support field.
@@ -574,6 +594,27 @@ static int cc33xx_set_authorized(struct cc33xx *wl, struct cc33xx_vif *wlvif)
 	return 0;
 }
 
+void wlcore_regdomain_config(struct cc33xx *wl)
+{
+	int ret = 0;
+
+	if (!(wl->quirks & WLCORE_QUIRK_REGDOMAIN_CONF))
+		return;
+
+	mutex_lock(&wl->mutex);
+
+	if (unlikely(wl->state != WLCORE_STATE_ON))
+		goto out;
+
+	if (ret < 0) {
+		cc33xx_queue_recovery_work(wl);
+		goto out;
+	}
+
+out:
+	mutex_unlock(&wl->mutex);
+}
+
 static void cc33xx_reg_notify(struct wiphy *wiphy,
 			      struct regulatory_request *request)
 {
@@ -585,108 +626,6 @@ static void cc33xx_reg_notify(struct wiphy *wiphy,
 		wl->dfs_region = request->dfs_region;
 
 	wlcore_regdomain_config(wl);
-}
-
-static int cc33xx_set_rx_streaming(struct cc33xx *wl,
-				   struct cc33xx_vif *wlvif, bool enable)
-{
-	int ret = 0;
-
-	/* we should hold wl->mutex */
-	ret = cc33xx_acx_ps_rx_streaming(wl, wlvif, enable);
-	if (ret < 0)
-		goto out;
-
-	if (enable)
-		set_bit(WLVIF_FLAG_RX_STREAMING_STARTED, &wlvif->flags);
-	else
-		clear_bit(WLVIF_FLAG_RX_STREAMING_STARTED, &wlvif->flags);
-out:
-	return ret;
-}
-
-/*
- * this function is being called when the rx_streaming interval
- * has beed changed or rx_streaming should be disabled
- */
-int cc33xx_recalc_rx_streaming(struct cc33xx *wl, struct cc33xx_vif *wlvif)
-{
-	int ret = 0;
-	int period = wl->conf.host_conf.rx_streaming.interval;
-
-	/* don't reconfigure if rx_streaming is disabled */
-	if (!test_bit(WLVIF_FLAG_RX_STREAMING_STARTED, &wlvif->flags))
-		goto out;
-
-	/* reconfigure/disable according to new streaming_period */
-	if (period && test_bit(WLVIF_FLAG_STA_ASSOCIATED, &wlvif->flags) &&
-	    (wl->conf.host_conf.rx_streaming.always ||
-	    test_bit(CC33XX_FLAG_SOFT_GEMINI, &wl->flags))) {
-		ret = cc33xx_set_rx_streaming(wl, wlvif, true);
-	} else {
-		ret = cc33xx_set_rx_streaming(wl, wlvif, false);
-		/* don't cancel_work_sync since we might deadlock */
-		del_timer_sync(&wlvif->rx_streaming_timer);
-	}
-out:
-	return ret;
-}
-
-static void cc33xx_rx_streaming_enable_work(struct work_struct *work)
-{
-	int ret;
-	struct cc33xx_vif *wlvif = container_of(work, struct cc33xx_vif,
-						rx_streaming_enable_work);
-	struct cc33xx *wl = wlvif->wl;
-
-	mutex_lock(&wl->mutex);
-
-	if (test_bit(WLVIF_FLAG_RX_STREAMING_STARTED, &wlvif->flags) ||
-	    !test_bit(WLVIF_FLAG_STA_ASSOCIATED, &wlvif->flags) ||
-	    (!wl->conf.host_conf.rx_streaming.always &&
-	    !test_bit(CC33XX_FLAG_SOFT_GEMINI, &wl->flags)))
-		goto out;
-
-	if (!wl->conf.host_conf.rx_streaming.interval)
-		goto out;
-
-	ret = cc33xx_set_rx_streaming(wl, wlvif, true);
-	if (ret < 0)
-		goto out;
-
-	/* stop it after some time of inactivity */
-	mod_timer(&wlvif->rx_streaming_timer, jiffies +
-		msecs_to_jiffies( wl->conf.host_conf.rx_streaming.duration));
-
-out:
-	mutex_unlock(&wl->mutex);
-}
-
-static void cc33xx_rx_streaming_disable_work(struct work_struct *work)
-{
-	int ret;
-	struct cc33xx_vif *wlvif = container_of(work, struct cc33xx_vif,
-						rx_streaming_disable_work);
-	struct cc33xx *wl = wlvif->wl;
-
-	mutex_lock(&wl->mutex);
-
-	if (!test_bit(WLVIF_FLAG_RX_STREAMING_STARTED, &wlvif->flags))
-		goto out;
-
-	ret = cc33xx_set_rx_streaming(wl, wlvif, false);
-	if (ret)
-		goto out;
-
-out:
-	mutex_unlock(&wl->mutex);
-}
-
-static void cc33xx_rx_streaming_timer(struct timer_list *timers)
-{
-	struct cc33xx_vif *wlvif = from_timer(wlvif,timers, rx_streaming_timer);
-	struct cc33xx *wl = wlvif->wl;
-	ieee80211_queue_work(wl->hw, &wlvif->rx_streaming_disable_work);
 }
 
 /* wl->mutex must be taken */
@@ -719,16 +658,13 @@ static void cc33xx_sta_rc_update(struct cc33xx *wl, struct cc33xx_vif *wlvif)
 	 * If we started out as wide, we can change the operation mode. If we
 	 * thought this was a 20mhz AP, we have to reconnect
 	 */
-	if (wlvif->sta.role_chan_type == NL80211_CHAN_HT40MINUS ||
-	    wlvif->sta.role_chan_type == NL80211_CHAN_HT40PLUS)
-		cc33xx_acx_peer_ht_operation_mode(wl, wlvif->sta.hlid, wide);
-	else
+	if (wlvif->sta.role_chan_type != NL80211_CHAN_HT40MINUS &&
+	    wlvif->sta.role_chan_type != NL80211_CHAN_HT40PLUS)
 		ieee80211_connection_loss(cc33xx_wlvif_to_vif(wlvif));
 }
 
 static void wlcore_rc_update_work(struct work_struct *work)
 {
-	int ret;
 	struct cc33xx_vif *wlvif = container_of(work, struct cc33xx_vif,
 						rc_update_work);
 	struct cc33xx *wl = wlvif->wl;
@@ -739,12 +675,7 @@ static void wlcore_rc_update_work(struct work_struct *work)
 	if (unlikely(wl->state != WLCORE_STATE_ON))
 		goto out;
 
-	if (ieee80211_vif_is_mesh(vif)) {
-		ret = cc33xx_acx_set_ht_capabilities(wl, &wlvif->rc_ht_cap,
-						     true, wlvif->sta.hlid);
-		if (ret < 0)
-			goto out;
-	} else {
+	if (!ieee80211_vif_is_mesh(vif)) {
 		cc33xx_sta_rc_update(wl, wlvif);
 	}
 
@@ -1368,78 +1299,6 @@ static void irq_wrapper(struct platform_device *pdev)
 	wlcore_irq(wl);
 }
 
-int cc33xx_plt_init(struct cc33xx *wl)
-{
-	/* PLT init: Role enable + Role start + plt Init  */
-	int ret=0;
-
-	/* Role enable */
-	u8  returned_role_id = CC33XX_INVALID_ROLE_ID;
-	u8 bcast_addr[ETH_ALEN] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
-	
-	ret = cc33xx_cmd_role_enable(wl, bcast_addr, 
-					ROLE_TRANSCEIVER, &returned_role_id);
-	if(ret < 0) {
-		cc33xx_info("PLT init Role Enable FAILED! , PLT roleID is: %u ", 
-			    returned_role_id);
-		goto out;
-	}
-	
-	ret = cc33xx_cmd_role_start_transceiver(wl, returned_role_id);
-	if(ret < 0) {
-		cc33xx_info("PLT init Role Start FAILED! , PLT roleID is: %u ", 
-			    returned_role_id);
-		cc33xx_cmd_role_disable(wl, &returned_role_id);
-		goto out;
-	}
-
-	wl->plt_role_id = returned_role_id;
-	ret = cc33xx_cmd_plt_enable(wl, returned_role_id);
-	
-	if(ret >= 0) {
-		cc33xx_info("PLT init Role Start succeed!, PLT roleID is: %u ", 
-			    returned_role_id);
-	} else {
-		cc33xx_info("PLT init Role Start FAILED! , PLT roleID is: %u ", 
-			    returned_role_id);
-	}
-	
-out:
-	return ret;
-}
-
-int cc33xx_plt_start(struct cc33xx *wl, const enum plt_mode plt_mode)
-{
-	int ret = -1;
-
-	mutex_lock(&wl->mutex);
-
-	if(plt_mode == PLT_ON && wl->plt_mode == PLT_ON) {
-		cc33xx_error("PLT already on");
-		ret = 0;
-		goto out;
-	}
-
-	cc33xx_notice("PLT start");
-
-	if (plt_mode != PLT_CHIP_AWAKE) {
-		ret = cc33xx_plt_init(wl);
-		if (ret < 0) {
-			cc33xx_error("PLT start failed");
-			goto out;
-		}
-	}
-
-	/* Indicate to lower levels that we are now in PLT mode */
-	wl->plt = true;
-	wl->plt_mode = plt_mode;
-
-out:
-	mutex_unlock(&wl->mutex);
-
-	return ret;
-}
-
 int cc33xx_plt_stop(struct cc33xx *wl)
 {
 	int ret = 0;
@@ -1691,36 +1550,6 @@ int cc33xx_rx_filter_alloc_field(struct cc33xx_rx_filter *filter, u16 offset,
 	memcpy(field->pattern, pattern, len);
 
 	return 0;
-}
-
-int cc33xx_rx_filter_get_fields_size(struct cc33xx_rx_filter *filter)
-{
-	int i, fields_size = 0;
-
-	for (i = 0; i < filter->num_fields; i++) {
-		fields_size += filter->fields[i].len - sizeof(u8*)
-					+ sizeof(struct cc33xx_rx_filter_field);
-	}
-
-	return fields_size;
-}
-
-void cc33xx_rx_filter_flatten_fields(struct cc33xx_rx_filter *filter, u8 *buf)
-{
-	int i;
-	struct cc33xx_rx_filter_field *field;
-
-	for (i = 0; i < filter->num_fields; i++) {
-		field = (struct cc33xx_rx_filter_field *)buf;
-
-		field->offset = filter->fields[i].offset;
-		field->flags = filter->fields[i].flags;
-		field->len = filter->fields[i].len;
-
-		memcpy(&field->pattern, filter->fields[i].pattern, field->len);
-		buf += sizeof(struct cc33xx_rx_filter_field) - sizeof(u8 *);
-		buf += field->len;
-	}
 }
 
 /*
@@ -2003,18 +1832,6 @@ static int __maybe_unused cc33xx_op_suspend(struct ieee80211_hw *hw,
 		}
 	}
 
-	/* disable fast link flow control notifications from FW */
-	ret = cc33xx_acx_interrupt_notify_config(wl, false);
-	if (ret < 0)
-		goto out;
-
-	/* if filtering is enabled, configure the FW to drop all RX BA frames */
-	ret = cc33xx_acx_rx_ba_filter(wl,
-			      !!wl->conf.host_conf.conn.suspend_rx_ba_activity);
-	if (ret < 0)
-		goto out;
-
-out:
 	mutex_unlock(&wl->mutex);
 
 	if (ret < 0) {
@@ -2096,15 +1913,6 @@ static int __maybe_unused cc33xx_op_resume(struct ieee80211_hw *hw)
 
 		cc33xx_configure_resume(wl, wlvif);
 	}
-
-	ret = cc33xx_acx_interrupt_notify_config(wl, true);
-	if (ret < 0)
-		goto out;
-
-	/* if filtering is enabled, configure the FW to drop all RX BA frames */
-	ret = cc33xx_acx_rx_ba_filter(wl, false);
-	if (ret < 0)
-		goto out;
 
 out:
 	wl->keep_device_power = false;
@@ -2425,6 +2233,8 @@ static u8 cc33xx_get_role_type(struct cc33xx *wl, struct cc33xx_vif *wlvif)
 	return CC33XX_INVALID_ROLE_TYPE;
 }
 
+#define CONF_TX_RATE_MASK_BASIC (CONF_HW_BIT_RATE_1MBPS | CONF_HW_BIT_RATE_2MBPS)
+
 static int cc33xx_init_vif_data(struct cc33xx *wl, struct ieee80211_vif *vif)
 {
 	struct cc33xx_vif *wlvif = cc33xx_vif_to_data(vif);
@@ -2502,10 +2312,6 @@ static int cc33xx_init_vif_data(struct cc33xx *wl, struct ieee80211_vif *vif)
 	wlvif->band = wl->band;
 	wlvif->power_level = wl->power_level;
 
-	INIT_WORK(&wlvif->rx_streaming_enable_work,
-		  cc33xx_rx_streaming_enable_work);
-	INIT_WORK(&wlvif->rx_streaming_disable_work,
-		  cc33xx_rx_streaming_disable_work);
 	INIT_WORK(&wlvif->rc_update_work, wlcore_rc_update_work);
 	INIT_DELAYED_WORK(&wlvif->channel_switch_work,
 			  cc33xx_channel_switch_work);
@@ -2517,7 +2323,6 @@ static int cc33xx_init_vif_data(struct cc33xx *wl, struct ieee80211_vif *vif)
 			  cc33xx_roc_timeout_work);
 	INIT_LIST_HEAD(&wlvif->list);
 
-	timer_setup(&wlvif->rx_streaming_timer, cc33xx_rx_streaming_timer, 0);
 	return 0;
 }
 
@@ -2667,11 +2472,6 @@ static int cc33xx_op_add_interface(struct ieee80211_hw *hw,
 	} else {
 		ret = cc33xx_cmd_role_enable(wl, vif->addr, CC33XX_ROLE_DEVICE,
 					     &wlvif->dev_role_id);
-		if (ret < 0)
-			goto out;
-
-		/* needed mainly for configuring rate policies */
-		ret = cc33xx_acx_config_ps(wl, wlvif);
 		if (ret < 0)
 			goto out;
 	}
@@ -2824,9 +2624,6 @@ deinit:
 unlock:
 	mutex_unlock(&wl->mutex);
 
-	del_timer_sync(&wlvif->rx_streaming_timer);
-	cancel_work_sync(&wlvif->rx_streaming_enable_work);
-	cancel_work_sync(&wlvif->rx_streaming_disable_work);
 	cancel_work_sync(&wlvif->rc_update_work);
 	cancel_delayed_work_sync(&wlvif->connection_loss_work);
 	cancel_delayed_work_sync(&wlvif->channel_switch_work);
@@ -3028,11 +2825,6 @@ static int wlcore_unset_assoc(struct cc33xx *wl, struct cc33xx_vif *wlvif)
 		/* free probe-request template */
 		dev_kfree_skb(wlvif->probereq);
 		wlvif->probereq = NULL;
-
-		/* disable connection monitor features */
-		ret = cc33xx_acx_conn_monit_params(wl, wlvif, false);
-		if (ret < 0)
-			return ret;
 
 		/* disable beacon filtering */
 		ret = cc33xx_acx_beacon_filter_opt(wl, wlvif, false);
@@ -3368,9 +3160,11 @@ static int cc33xx_config_key(struct cc33xx *wl, struct cc33xx_vif *wlvif,
 	return 0;
 }
 
+/* numbers of bits the length field takes (add 1 for the actual number) */
+#define CC33XX_HOST_IF_LEN_SIZE_FIELD 15
+
 static int cc33xx_set_host_cfg_bitmap(struct cc33xx *wl, u32 extra_mem_blk)
 {
-	int ret;
 	u32 sdio_align_size = 0;
 	u32 host_cfg_bitmap = HOST_IF_CFG_RX_FIFO_ENABLE | 
 						HOST_IF_CFG_ADD_RX_ALIGNMENT;
@@ -3387,13 +3181,133 @@ static int cc33xx_set_host_cfg_bitmap(struct cc33xx *wl, u32 extra_mem_blk)
 		sdio_align_size = CC33XX_BUS_BLOCK_SIZE;
 	}
 
-	ret = cc33xx_acx_host_if_cfg_bitmap(wl, host_cfg_bitmap,
-					    sdio_align_size, extra_mem_blk,
-					    CC33XX_HOST_IF_LEN_SIZE_FIELD);
-	if (ret < 0)
-		return ret;
-
 	return 0;
+}
+
+int wlcore_set_key(struct cc33xx *wl, enum set_key_cmd cmd,
+		   struct ieee80211_vif *vif, struct ieee80211_sta *sta,
+		   struct ieee80211_key_conf *key_conf)
+{
+	struct cc33xx_vif *wlvif = cc33xx_vif_to_data(vif);
+	int ret;
+	u32 tx_seq_32 = 0;
+	u16 tx_seq_16 = 0;
+	u8 key_type;
+	u8 hlid;
+
+	cc33xx_debug(DEBUG_MAC80211, "mac80211 set key");
+
+	cc33xx_debug(DEBUG_CRYPT, "CMD: 0x%x sta: %p", cmd, sta);
+	cc33xx_debug(DEBUG_CRYPT, "Key: algo:0x%x, id:%d, len:%d flags 0x%x",
+		     key_conf->cipher, key_conf->keyidx,
+		     key_conf->keylen, key_conf->flags);
+	cc33xx_dump(DEBUG_CRYPT, "KEY: ", key_conf->key, key_conf->keylen);
+
+	if (wlvif->bss_type == BSS_TYPE_AP_BSS)
+		if (sta) {
+			struct cc33xx_station *wl_sta = (void *)sta->drv_priv;
+			hlid = wl_sta->hlid;
+		} else {
+			hlid = wlvif->ap.bcast_hlid;
+		}
+	else
+		hlid = wlvif->sta.hlid;
+
+	if (hlid != CC33XX_INVALID_LINK_ID) {
+		u64 tx_seq = wl->links[hlid].total_freed_pkts;
+		tx_seq_32 = CC33XX_TX_SECURITY_HI32(tx_seq);
+		tx_seq_16 = CC33XX_TX_SECURITY_LO16(tx_seq);
+	}
+
+	switch (key_conf->cipher) {
+	case WLAN_CIPHER_SUITE_WEP40:
+	case WLAN_CIPHER_SUITE_WEP104:
+		key_type = KEY_WEP;
+		key_conf->hw_key_idx = key_conf->keyidx;
+		break;
+	case WLAN_CIPHER_SUITE_TKIP:
+		key_type = KEY_TKIP;
+		key_conf->hw_key_idx = key_conf->keyidx;
+        key_conf->flags |= IEEE80211_KEY_FLAG_PUT_IV_SPACE;
+        break;
+	case WLAN_CIPHER_SUITE_CCMP:
+		key_type = KEY_AES;
+		key_conf->flags |= IEEE80211_KEY_FLAG_PUT_IV_SPACE;
+		break;
+	case WLAN_CIPHER_SUITE_GCMP:
+		key_type = KEY_GCMP128;
+		key_conf->flags |= IEEE80211_KEY_FLAG_PUT_IV_SPACE;
+		break;		
+	case WLAN_CIPHER_SUITE_CCMP_256:
+		key_type = KEY_CCMP256;
+		key_conf->flags |= IEEE80211_KEY_FLAG_PUT_IV_SPACE;
+		break;
+	case WLAN_CIPHER_SUITE_GCMP_256:
+		key_type = KEY_GCMP_256;
+		key_conf->flags |= IEEE80211_KEY_FLAG_PUT_IV_SPACE;
+		break;		
+	case WLAN_CIPHER_SUITE_AES_CMAC:
+		key_type = KEY_IGTK;
+		break;
+	case WLAN_CIPHER_SUITE_BIP_CMAC_256:
+		key_type = KEY_CMAC_256;
+		break;
+	case WLAN_CIPHER_SUITE_BIP_GMAC_128:
+		key_type =  KEY_GMAC_128;
+		break;
+	case WLAN_CIPHER_SUITE_BIP_GMAC_256:
+		key_type =  KEY_GMAC_256;
+		break;
+	case CC33XX_CIPHER_SUITE_GEM:
+		key_type = KEY_GEM;
+		break;
+	default:
+		cc33xx_error("Unknown key algo 0x%x", key_conf->cipher);
+
+		return -EOPNOTSUPP;
+	}
+
+	switch (cmd) {
+	case SET_KEY:
+		ret = cc33xx_config_key(wl, wlvif, KEY_ADD_OR_REPLACE,
+				 key_conf->keyidx, key_type, key_conf->keylen,
+				 key_conf->key, tx_seq_32, tx_seq_16, sta);
+		if (ret < 0) {
+			cc33xx_error("Could not add or replace key");
+			return ret;
+		}
+
+		/*
+		 * reconfiguring arp response if the unicast (or common)
+		 * encryption key type was changed
+		 */
+		if (wlvif->bss_type == BSS_TYPE_STA_BSS &&
+		    (sta || key_type == KEY_WEP) &&
+		    wlvif->encryption_type != key_type) {
+			wlvif->encryption_type = key_type;
+			if (ret < 0) {
+				cc33xx_warning("build arp rsp failed: %d", ret);
+				return ret;
+			}
+		}
+		break;
+
+	case DISABLE_KEY:
+		ret = cc33xx_config_key(wl, wlvif, KEY_REMOVE, key_conf->keyidx,
+					key_type, key_conf->keylen,
+					key_conf->key, 0, 0, sta);
+		if (ret < 0) {
+			cc33xx_error("Could not remove key");
+			return ret;
+		}
+		break;
+
+	default:
+		cc33xx_error("Unsupported key cmd 0x%x", cmd);
+		return -EOPNOTSUPP;
+	}
+
+	return ret;
 }
 
 static int cc33xx_set_key(struct cc33xx *wl, enum set_key_cmd cmd,
@@ -3483,131 +3397,6 @@ out_wake_queues:
 	return ret;
 }
 
-int wlcore_set_key(struct cc33xx *wl, enum set_key_cmd cmd,
-		   struct ieee80211_vif *vif, struct ieee80211_sta *sta,
-		   struct ieee80211_key_conf *key_conf)
-{
-	struct cc33xx_vif *wlvif = cc33xx_vif_to_data(vif);
-	int ret;
-	u32 tx_seq_32 = 0;
-	u16 tx_seq_16 = 0;
-	u8 key_type;
-	u8 hlid;
-
-	cc33xx_debug(DEBUG_MAC80211, "mac80211 set key");
-
-	cc33xx_debug(DEBUG_CRYPT, "CMD: 0x%x sta: %p", cmd, sta);
-	cc33xx_debug(DEBUG_CRYPT, "Key: algo:0x%x, id:%d, len:%d flags 0x%x",
-		     key_conf->cipher, key_conf->keyidx,
-		     key_conf->keylen, key_conf->flags);
-	cc33xx_dump(DEBUG_CRYPT, "KEY: ", key_conf->key, key_conf->keylen);
-
-	if (wlvif->bss_type == BSS_TYPE_AP_BSS)
-		if (sta) {
-			struct cc33xx_station *wl_sta = (void *)sta->drv_priv;
-			hlid = wl_sta->hlid;
-		} else {
-			hlid = wlvif->ap.bcast_hlid;
-		}
-	else
-		hlid = wlvif->sta.hlid;
-
-	if (hlid != CC33XX_INVALID_LINK_ID) {
-		u64 tx_seq = wl->links[hlid].total_freed_pkts;
-		tx_seq_32 = CC33XX_TX_SECURITY_HI32(tx_seq);
-		tx_seq_16 = CC33XX_TX_SECURITY_LO16(tx_seq);
-	}
-
-	switch (key_conf->cipher) {
-	case WLAN_CIPHER_SUITE_WEP40:
-	case WLAN_CIPHER_SUITE_WEP104:
-		key_type = KEY_WEP;
-		key_conf->hw_key_idx = key_conf->keyidx;
-		break;
-	case WLAN_CIPHER_SUITE_TKIP:
-		key_type = KEY_TKIP;
-		key_conf->hw_key_idx = key_conf->keyidx;
-		break;
-	case WLAN_CIPHER_SUITE_CCMP:
-		key_type = KEY_AES;
-		key_conf->flags |= IEEE80211_KEY_FLAG_PUT_IV_SPACE;
-		break;
-	case WLAN_CIPHER_SUITE_GCMP:
-		key_type = KEY_GCMP128;
-		key_conf->flags |= IEEE80211_KEY_FLAG_PUT_IV_SPACE;
-		break;		
-	case WLAN_CIPHER_SUITE_CCMP_256:
-		key_type = KEY_CCMP256;
-		key_conf->flags |= IEEE80211_KEY_FLAG_PUT_IV_SPACE;
-		break;
-	case WLAN_CIPHER_SUITE_GCMP_256:
-		key_type = KEY_GCMP_256;
-		key_conf->flags |= IEEE80211_KEY_FLAG_PUT_IV_SPACE;
-		break;		
-	case WLAN_CIPHER_SUITE_AES_CMAC:
-		key_type = KEY_IGTK;
-		break;
-	case WLAN_CIPHER_SUITE_BIP_CMAC_256:
-		key_type = KEY_CMAC_256;
-		break;
-	case WLAN_CIPHER_SUITE_BIP_GMAC_128:
-		key_type =  KEY_GMAC_128;
-		break;
-	case WLAN_CIPHER_SUITE_BIP_GMAC_256:
-		key_type =  KEY_GMAC_256;
-		break;
-	case CC33XX_CIPHER_SUITE_GEM:
-		key_type = KEY_GEM;
-		break;
-	default:
-		cc33xx_error("Unknown key algo 0x%x", key_conf->cipher);
-
-		return -EOPNOTSUPP;
-	}
-
-	switch (cmd) {
-	case SET_KEY:
-		ret = cc33xx_config_key(wl, wlvif, KEY_ADD_OR_REPLACE,
-				 key_conf->keyidx, key_type, key_conf->keylen,
-				 key_conf->key, tx_seq_32, tx_seq_16, sta);
-		if (ret < 0) {
-			cc33xx_error("Could not add or replace key");
-			return ret;
-		}
-
-		/*
-		 * reconfiguring arp response if the unicast (or common)
-		 * encryption key type was changed
-		 */
-		if (wlvif->bss_type == BSS_TYPE_STA_BSS &&
-		    (sta || key_type == KEY_WEP) &&
-		    wlvif->encryption_type != key_type) {
-			wlvif->encryption_type = key_type;
-			if (ret < 0) {
-				cc33xx_warning("build arp rsp failed: %d", ret);
-				return ret;
-			}
-		}
-		break;
-
-	case DISABLE_KEY:
-		ret = cc33xx_config_key(wl, wlvif, KEY_REMOVE, key_conf->keyidx,
-					key_type, key_conf->keylen,
-					key_conf->key, 0, 0, sta);
-		if (ret < 0) {
-			cc33xx_error("Could not remove key");
-			return ret;
-		}
-		break;
-
-	default:
-		cc33xx_error("Unsupported key cmd 0x%x", cmd);
-		return -EOPNOTSUPP;
-	}
-
-	return ret;
-}
-
 static void cc33xx_op_set_default_key_idx(struct ieee80211_hw *hw,
 					  struct ieee80211_vif *vif,
 					  int key_idx)
@@ -3634,28 +3423,6 @@ static void cc33xx_op_set_default_key_idx(struct ieee80211_hw *hw,
 		cc33xx_cmd_set_default_wep_key(wl, key_idx, wlvif->sta.hlid);
 
 out_unlock:
-	mutex_unlock(&wl->mutex);
-}
-
-void wlcore_regdomain_config(struct cc33xx *wl)
-{
-//	int ret;
-
-	if (!(wl->quirks & WLCORE_QUIRK_REGDOMAIN_CONF))
-		return;
-
-	mutex_lock(&wl->mutex);
-
-	if (unlikely(wl->state != WLCORE_STATE_ON))
-		goto out;
-/*
-	ret = wlcore_cmd_regdomain_config_locked(wl);
-	if (ret < 0) {
-		cc33xx_queue_recovery_work(wl);
-		goto out;
-	}
-*/
-out:
 	mutex_unlock(&wl->mutex);
 }
 
@@ -3802,49 +3569,12 @@ out:
 
 static int cc33xx_op_set_frag_threshold(struct ieee80211_hw *hw, u32 value)
 {
-	struct cc33xx *wl = hw->priv;
-	int ret = 0;
-
-	mutex_lock(&wl->mutex);
-
-	if (unlikely(wl->state != WLCORE_STATE_ON)) {
-		ret = -EAGAIN;
-		goto out;
-	}
-
-	ret = cc33xx_acx_frag_threshold(wl, value);
-	if (ret < 0)
-		cc33xx_warning("cc33xx_op_set_frag_threshold failed: %d", ret);
-
-out:
-	mutex_unlock(&wl->mutex);
-
-	return ret;
+	return 0;
 }
 
 static int cc33xx_op_set_rts_threshold(struct ieee80211_hw *hw, u32 value)
 {
-	struct cc33xx *wl = hw->priv;
-	struct cc33xx_vif *wlvif;
-	int ret = 0;
-
-	mutex_lock(&wl->mutex);
-
-	if (unlikely(wl->state != WLCORE_STATE_ON)) {
-		ret = -EAGAIN;
-		goto out;
-	}
-
-	cc33xx_for_each_wlvif(wl, wlvif) {
-		ret = cc33xx_acx_rts_threshold(wl, wlvif, value);
-		if (ret < 0)
-			cc33xx_warning("set rts threshold failed: %d", ret);
-	}
-
-out:
-	mutex_unlock(&wl->mutex);
-
-	return ret;
+	return 0;
 }
 
 static int cc33xx_bss_erp_info_changed(struct cc33xx *wl,
@@ -4165,16 +3895,8 @@ static void cc33xx_bss_info_changed_sta(struct cc33xx *wl,
 	if (changed & BSS_CHANGED_IDLE && !is_ibss)
 		cc33xx_sta_handle_idle(wl, wlvif, vif->cfg.idle);
 
-	if (changed & BSS_CHANGED_CQM) {
-		bool enable = bss_conf->cqm_rssi_thold;
-		ret = cc33xx_acx_rssi_snr_trigger(wl, wlvif, enable,
-						  bss_conf->cqm_rssi_thold,
-						  bss_conf->cqm_rssi_hyst);
-		if (ret < 0)
-			goto out;
-
+	if (changed & BSS_CHANGED_CQM)
 		wlvif->rssi_thold = bss_conf->cqm_rssi_thold;
-	}
 
 	if (changed & (BSS_CHANGED_BSSID | BSS_CHANGED_HT | BSS_CHANGED_ASSOC)){
 		rcu_read_lock();
@@ -4369,13 +4091,8 @@ static void cc33xx_bss_info_changed_sta(struct cc33xx *wl,
 				cc33xx_warning("build arp rsp failed: %d", ret);
 				goto out;
 			}
-
-			ret = cc33xx_acx_arp_ip_filter(wl, wlvif,
-				(ACX_ARP_FILTER_ARP_FILTERING |
-				ACX_ARP_FILTER_AUTO_ARP), addr);
 		} else {
 			wlvif->ip_addr = 0;
-			ret = cc33xx_acx_arp_ip_filter(wl, wlvif, 0, addr);
 		}
 
 		if (ret < 0)
@@ -4637,6 +4354,13 @@ out:
 	return 0;
 }
 
+enum {
+	CONF_PS_SCHEME_LEGACY = 0,
+	CONF_PS_SCHEME_UPSD_TRIGGER = 1,
+	CONF_PS_SCHEME_LEGACY_PSPOLL = 2,
+	CONF_PS_SCHEME_SAPSD = 3,
+};
+
 static int cc33xx_op_conf_tx(struct ieee80211_hw *hw,
 			     struct ieee80211_vif *vif, 
 			     unsigned int link_id, u16 queue,
@@ -4681,24 +4405,7 @@ out:
 
 static u64 cc33xx_op_get_tsf(struct ieee80211_hw *hw, struct ieee80211_vif *vif)
 {
-
-	struct cc33xx *wl = hw->priv;
-	struct cc33xx_vif *wlvif = cc33xx_vif_to_data(vif);
-	u64 mactime = ULLONG_MAX;
-
-	cc33xx_debug(DEBUG_MAC80211, "mac80211 get tsf");
-
-	mutex_lock(&wl->mutex);
-
-	if (unlikely(wl->state != WLCORE_STATE_ON))
-		goto out;
-
-	cc33xx_acx_tsf_info(wl, wlvif, &mactime);
-
-out:
-	mutex_unlock(&wl->mutex);
-
-	return mactime;
+	return ULLONG_MAX;
 }
 
 static int cc33xx_op_get_survey(struct ieee80211_hw *hw, int idx,

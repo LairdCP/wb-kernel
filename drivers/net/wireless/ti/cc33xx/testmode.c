@@ -215,6 +215,78 @@ static int cc33xx_tm_cmd_configure(struct cc33xx *wl, struct nlattr *tb[])
 	return 0;
 }
 
+int cc33xx_plt_init(struct cc33xx *wl)
+{
+	/* PLT init: Role enable + Role start + plt Init  */
+	int ret=0;
+
+	/* Role enable */
+	u8  returned_role_id = CC33XX_INVALID_ROLE_ID;
+	u8 bcast_addr[ETH_ALEN] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
+	
+	ret = cc33xx_cmd_role_enable(wl, bcast_addr, 
+					ROLE_TRANSCEIVER, &returned_role_id);
+	if(ret < 0) {
+		cc33xx_info("PLT init Role Enable FAILED! , PLT roleID is: %u ", 
+			    returned_role_id);
+		goto out;
+	}
+	
+	ret = cc33xx_cmd_role_start_transceiver(wl, returned_role_id);
+	if(ret < 0) {
+		cc33xx_info("PLT init Role Start FAILED! , PLT roleID is: %u ", 
+			    returned_role_id);
+		cc33xx_cmd_role_disable(wl, &returned_role_id);
+		goto out;
+	}
+
+	wl->plt_role_id = returned_role_id;
+	ret = cc33xx_cmd_plt_enable(wl, returned_role_id);
+	
+	if(ret >= 0) {
+		cc33xx_info("PLT init Role Start succeed!, PLT roleID is: %u ", 
+			    returned_role_id);
+	} else {
+		cc33xx_info("PLT init Role Start FAILED! , PLT roleID is: %u ", 
+			    returned_role_id);
+	}
+	
+out:
+	return ret;
+}
+
+int cc33xx_plt_start(struct cc33xx *wl, const enum plt_mode plt_mode)
+{
+	int ret = 0;
+
+	mutex_lock(&wl->mutex);
+
+	if(plt_mode == PLT_ON && wl->plt_mode == PLT_ON) {
+		cc33xx_error("PLT already on");
+		ret = 0;
+		goto out;
+	}
+
+	cc33xx_notice("PLT start");
+
+	if (plt_mode != PLT_CHIP_AWAKE) {
+		ret = cc33xx_plt_init(wl);
+		if (ret < 0) {
+			cc33xx_error("PLT start failed");
+			goto out;
+		}
+	}
+
+	/* Indicate to lower levels that we are now in PLT mode */
+	wl->plt = true;
+	wl->plt_mode = plt_mode;
+
+out:
+	mutex_unlock(&wl->mutex);
+
+	return ret;
+}
+
 static int cc33xx_tm_detect_fem(struct cc33xx *wl, struct nlattr *tb[])
 {
 	/* return FEM type */

@@ -387,6 +387,94 @@ void cc33xx_clear_link(struct cc33xx *wl, struct cc33xx_vif *wlvif, u8 *hlid)
 	WARN_ON_ONCE(wl->active_link_count < 0);
 }
 
+static u8 check_is_dfs_channel(struct cc33xx *wl, 
+						enum nl80211_band rate_band, u8 channel)
+{
+	struct ieee80211_supported_band *band;
+	u8 is_dfs = 0;
+
+	if (rate_band != NL80211_BAND_5GHZ)
+	{
+		return is_dfs;
+	}
+
+	band = wl->hw->wiphy->bands[NL80211_BAND_5GHZ];
+
+	for (int i = 0; i < band->n_channels; i++)
+	{
+		if (band->channels[i].hw_value == channel)
+		{
+			is_dfs = !!(band->channels[i].flags & IEEE80211_CHAN_RADAR);
+			break;
+		}
+	}
+
+	return is_dfs;
+}
+
+static u8 wlcore_get_sub_channel_type(u8 band, u8 channel, u8 band_width)
+{
+	if (band == NL80211_BAND_5GHZ)
+	{
+		switch (channel) {
+		case 36:
+		case 52:
+		case 100:
+		case 116:
+		case 132:
+		case 149:
+		case 165:
+			return 0;
+		case 40:
+		case 56:
+		case 104:
+		case 120:
+		case 136:
+		case 153:
+		case 169:
+			return 1;
+		case 44:
+		case 60:
+		case 108:
+		case 124:
+		case 140:
+		case 157:
+		case 173:
+			return 2;
+		case 48:
+		case 64:
+		case 112:
+		case 128:
+		case 144:
+		case 161:
+		case 177:
+			return 3;
+		default:
+			return 0xff;
+		}
+	}
+
+	if (band == NL80211_BAND_2GHZ)
+	{
+		// if (band_width == NL80211_CHAN_WIDTH_20)
+		// 	return 0;
+		
+		switch (channel) {
+		case 9:
+		case 5:
+			return 0; 
+		case 1:
+			return 0;
+		case 13:
+			return 1;
+		default:
+			return 0;
+		}
+	}
+
+	return 0xff;
+}
+
 static u8 wlcore_get_native_channel_type(u8 nl_channel_type)
 {
 	switch (nl_channel_type) {
@@ -426,6 +514,7 @@ int cc33xx_cmd_role_start_dev(struct cc33xx *wl, struct cc33xx_vif *wlvif,
 	if (band == NL80211_BAND_5GHZ)
 		cmd->band = WLCORE_BAND_5GHZ;
 	cmd->channel = channel;
+	cmd->is_dfs_channel = check_is_dfs_channel(wl, band, cmd->channel);
 	cmd->channel_type = wlcore_get_native_channel_type(wlvif->channel_type);
 	
 	ret = cc33xx_cmd_send(wl, CMD_ROLE_START, cmd, sizeof(*cmd), 0);
@@ -594,6 +683,7 @@ int cc33xx_cmd_role_start_transceiver(struct cc33xx *wl, u8 role_id)
 	cmd->role_type = role_type;
 	cmd->role_id = role_id;
 	cmd->channel = channel;
+	cmd->is_dfs_channel = check_is_dfs_channel(wl, band, cmd->channel);
 	cmd->band = band;
 
 	ret = cc33xx_cmd_send(wl, CMD_ROLE_START, cmd, sizeof(*cmd), 0);
@@ -633,6 +723,7 @@ int cc33xx_cmd_role_start_sta(struct cc33xx *wl, struct cc33xx_vif *wlvif)
 	cmd->role_id = wlvif->role_id;
 	cmd->role_type = CC33XX_ROLE_STA;
 	cmd->channel = wlvif->channel;
+	cmd->is_dfs_channel = check_is_dfs_channel(wl, wlvif->band, cmd->channel);
 	if (wlvif->band == NL80211_BAND_5GHZ) {
 		cmd->band = WLCORE_BAND_5GHZ;
 		cmd->sta.basic_rate_set = cpu_to_le32(wlvif->basic_rate_set
@@ -654,8 +745,7 @@ int cc33xx_cmd_role_start_sta(struct cc33xx *wl, struct cc33xx_vif *wlvif)
 		supported_rates &= ~CONF_TX_CCK_RATES;
 
 	cmd->sta.local_rates = cpu_to_le32(supported_rates);
-
-	cmd->channel_type = wlcore_get_native_channel_type(wlvif->channel_type);
+	cmd->channel_type = wlcore_get_sub_channel_type(cmd->band, cmd->channel, 0);
 
 	/*
 	 * We don't have the correct remote rates in this stage.  The
@@ -766,6 +856,7 @@ int cc33xx_cmd_role_start_ap(struct cc33xx *wl, struct cc33xx_vif *wlvif)
 	cmd->ap.dtim_interval = bss_conf->dtim_period;
 	cmd->ap.wmm = wlvif->wmm_enabled;
 	cmd->channel = wlvif->channel;
+	cmd->is_dfs_channel = check_is_dfs_channel(wl, wlvif->band, cmd->channel);
 	cmd->channel_type = wlcore_get_native_channel_type(wlvif->channel_type);
 
 	supported_rates = CONF_TX_ENABLED_RATES | CONF_TX_MCS_RATES ;
@@ -879,6 +970,7 @@ int cc33xx_cmd_role_start_ibss(struct cc33xx *wl, struct cc33xx_vif *wlvif)
 	if (wlvif->band == NL80211_BAND_5GHZ)
 		cmd->band = WLCORE_BAND_5GHZ;
 	cmd->channel = wlvif->channel;
+	cmd->is_dfs_channel = check_is_dfs_channel(wl, wlvif->band, cmd->channel);
 	cmd->ibss.basic_rate_set = cpu_to_le32(wlvif->basic_rate_set);
 	cmd->ibss.beacon_interval = cpu_to_le16(wlvif->beacon_int);
 	cmd->ibss.dtim_interval = bss_conf->dtim_period;
@@ -1483,12 +1575,12 @@ static int wlcore_get_reg_conf_ch_idx(enum nl80211_band band, u16 ch)
 		case 52 ... 64:
 			/* channels 52,56..64 are mapped to 29..32 */
 			return 29 + (ch-52)/4;
-		case 100 ... 140:
-			/* channels 100,104..140 are mapped to 33..43 */
+		case 100 ... 144:
+			/* channels 100,104..144 are mapped to 33..44 */
 			return 33 + (ch-100)/4;
-		case 149 ... 165:
-			/* channels 149,153..165 are mapped to 44..48 */
-			return 44 + (ch-149)/4;
+		case 149 ... 169:
+			/* channels 149,153..169 are mapped to 45..50 */
+			return 45 + (ch-149)/4;
 		default:
 			break;
 		}
@@ -1919,6 +2011,7 @@ int cmd_channel_switch(struct cc33xx *wl, struct cc33xx_vif *wlvif,
 		supported_rates &= ~CONF_TX_CCK_RATES;
 	cmd->local_supported_rates = cpu_to_le32(supported_rates);
 	cmd->channel_type = wlvif->channel_type;
+	cmd->is_dfs_channel = check_is_dfs_channel(wl, ch_switch->chandef.chan->band, cmd->channel);
 
 	ret = cc33xx_cmd_send(wl, CMD_CHANNEL_SWITCH, cmd, sizeof(*cmd), 0);
 	if (ret < 0) {

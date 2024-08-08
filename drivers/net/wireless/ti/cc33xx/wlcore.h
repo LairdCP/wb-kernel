@@ -16,7 +16,7 @@
 #define MAJOR_VERSION 	1
 #define MINOR_VERSION 	7
 #define API_VERSION 	0
-#define BUILD_VERSION	114
+#define BUILD_VERSION	126
 
 
 /* The maximum number of Tx descriptors in all chip families */
@@ -66,13 +66,6 @@ struct cc33xx_stats {
 	unsigned long fw_stats_update;
 	unsigned int retry_count;
 	unsigned int excessive_retries;
-};
-
-struct cc33xx_ant_diversity {
-	u8 diversity_enable;
-	s8 rssi_threshold;
-	u8 default_antenna;
-	u8 padding[1];
 };
 
 struct cc33xx {
@@ -125,7 +118,7 @@ struct cc33xx {
 	u8 sta_count;
 	u8 ap_count;
 
-	struct cc33xx_acx_mem_map_t *target_mem_map;
+	struct cc33xx_acx_mem_map *target_mem_map;
 
 	/* Accounting for allocated / available TX blocks on HW */
 	
@@ -325,20 +318,7 @@ struct cc33xx {
 
 	/* burst mode cfg */
 	u8 burst_disable;
-
-	struct cc33xx_ant_diversity diversity;
 };
-
-int wlcore_probe(struct cc33xx *wl, struct platform_device *pdev);
-int wlcore_remove(struct platform_device *pdev);
-struct ieee80211_hw *wlcore_alloc_hw(u32 aggr_buf_size);
-int wlcore_free_hw(struct cc33xx *wl);
-int wlcore_set_key(struct cc33xx *wl, enum set_key_cmd cmd,
-		   struct ieee80211_vif *vif, struct ieee80211_sta *sta,
-		   struct ieee80211_key_conf *key_conf);
-void wlcore_regdomain_config(struct cc33xx *wl);
-void wlcore_update_inconn_sta(struct cc33xx *wl, struct cc33xx_vif *wlvif,
-			      struct cc33xx_station *wl_sta, bool in_conn);
 
 /* Quirks */
 

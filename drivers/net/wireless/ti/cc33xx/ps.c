@@ -30,28 +30,10 @@ int cc33xx_ps_set_mode(struct cc33xx *wl, struct cc33xx_vif *wlvif,
 
 		set_bit(WLVIF_FLAG_IN_PS, &wlvif->flags);
 
-		/*
-		 * enable beacon early termination.
-		 * Not relevant for 5GHz and for high rates.
-		 */
-		if ((wlvif->band == NL80211_BAND_2GHZ) &&
-		    (wlvif->basic_rate < CONF_HW_BIT_RATE_9MBPS)) {
-			ret = cc33xx_acx_bet_enable(wl, wlvif, true);
-			if (ret < 0)
-				return ret;
-		}
 		break;
 
 	case STATION_ACTIVE_MODE:
 		cc33xx_debug(DEBUG_PSM, "leaving psm");
-
-		/* disable beacon early termination */
-		if ((wlvif->band == NL80211_BAND_2GHZ) &&
-		    (wlvif->basic_rate < CONF_HW_BIT_RATE_9MBPS)) {
-			ret = cc33xx_acx_bet_enable(wl, wlvif, false);
-			if (ret < 0)
-				return ret;
-		}
 
 		ret = cc33xx_cmd_ps_mode(wl, wlvif, mode, 0);
 		if (ret < 0)

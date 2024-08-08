@@ -145,7 +145,6 @@ enum cc33xx_vif_flags {
 	WLVIF_FLAG_AP_STARTED,
 	WLVIF_FLAG_IN_PS,
 	WLVIF_FLAG_STA_STATE_SENT,
-	WLVIF_FLAG_RX_STREAMING_STARTED,
 	WLVIF_FLAG_PSPOLL_FAILURE,
 	WLVIF_FLAG_CS_PROGRESS,
 	WLVIF_FLAG_AP_PROBE_RESP_SET,
@@ -340,11 +339,6 @@ struct cc33xx_vif {
 
 	bool radar_enabled;
 
-	/* Rx Streaming */
-	struct work_struct rx_streaming_enable_work;
-	struct work_struct rx_streaming_disable_work;
-	struct timer_list rx_streaming_timer;
-
 	struct delayed_work channel_switch_work;
 	struct delayed_work connection_loss_work;
 
@@ -410,6 +404,8 @@ struct cc33xx_vif {
 	};
 };
 
+void wlcore_irq(void *cookie);
+
 static inline struct cc33xx_vif *cc33xx_vif_to_data(struct ieee80211_vif *vif)
 {
 	WARN_ON(!vif);
@@ -442,20 +438,6 @@ static inline bool wlcore_is_p2p_mgmt(struct cc33xx_vif *wlvif)
 
 #define cc33xx_for_each_wlvif_ap(wl, wlvif)	\
 		cc33xx_for_each_wlvif_bss_type(wl, wlvif, BSS_TYPE_AP_BSS)
-
-int cc33xx_plt_start(struct cc33xx *wl, const enum plt_mode plt_mode);
-int cc33xx_plt_stop(struct cc33xx *wl);
-int cc33xx_recalc_rx_streaming(struct cc33xx *wl, struct cc33xx_vif *wlvif);
-void cc33xx_queue_recovery_work(struct cc33xx *wl);
-int cc33xx_rx_filter_alloc_field(struct cc33xx_rx_filter *filter,
-				 u16 offset, u8 flags,
-				 const u8 *pattern, u8 len);
-void cc33xx_rx_filter_free(struct cc33xx_rx_filter *filter);
-struct cc33xx_rx_filter *cc33xx_rx_filter_alloc(void);
-int cc33xx_rx_filter_get_fields_size(struct cc33xx_rx_filter *filter);
-void cc33xx_rx_filter_flatten_fields(struct cc33xx_rx_filter *filter,
-				     u8 *buf);
-void cc33xx_flush_deferred_work(struct cc33xx *wl);
 
 #define SESSION_COUNTER_INVALID 7 /* used with dummy_packet */
 

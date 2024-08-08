@@ -11,6 +11,7 @@
 #define __TESTMODE_H__
 
 
+int cc33xx_plt_stop(struct cc33xx *wl);
 int cc33xx_tm_cmd(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 		  void *data, int len);
 

@@ -215,6 +215,39 @@ enum {
 	MAX_BSS_TYPE = 0xFF
 };
 
+/*
+ * Rates supported for data packets when operating as STA/AP. Note the absence
+ * of the 22Mbps rate. There is a FW limitation on 12 rates so we must drop
+ * one. The rate dropped is not mandatory under any operating mode.
+ */
+#define CONF_TX_ENABLED_RATES       (CONF_HW_BIT_RATE_1MBPS |    \
+	CONF_HW_BIT_RATE_2MBPS | CONF_HW_BIT_RATE_5_5MBPS |      \
+	CONF_HW_BIT_RATE_6MBPS | CONF_HW_BIT_RATE_9MBPS |        \
+	CONF_HW_BIT_RATE_11MBPS | CONF_HW_BIT_RATE_12MBPS |      \
+	CONF_HW_BIT_RATE_18MBPS | CONF_HW_BIT_RATE_24MBPS |      \
+	CONF_HW_BIT_RATE_36MBPS | CONF_HW_BIT_RATE_48MBPS |      \
+	CONF_HW_BIT_RATE_54MBPS)
+
+#define CONF_TX_CCK_RATES  (CONF_HW_BIT_RATE_1MBPS |		\
+	CONF_HW_BIT_RATE_2MBPS | CONF_HW_BIT_RATE_5_5MBPS |	\
+	CONF_HW_BIT_RATE_11MBPS)
+
+#define CONF_TX_OFDM_RATES (CONF_HW_BIT_RATE_6MBPS |             \
+	CONF_HW_BIT_RATE_12MBPS | CONF_HW_BIT_RATE_24MBPS |      \
+	CONF_HW_BIT_RATE_36MBPS | CONF_HW_BIT_RATE_48MBPS |      \
+	CONF_HW_BIT_RATE_54MBPS)
+
+#define CONF_TX_MCS_RATES (CONF_HW_BIT_RATE_MCS_0 |              \
+	CONF_HW_BIT_RATE_MCS_1 | CONF_HW_BIT_RATE_MCS_2 |        \
+	CONF_HW_BIT_RATE_MCS_3 | CONF_HW_BIT_RATE_MCS_4 |        \
+	CONF_HW_BIT_RATE_MCS_5 | CONF_HW_BIT_RATE_MCS_6 |        \
+	CONF_HW_BIT_RATE_MCS_7)
+
+/* default rates for working as IBSS (11b and OFDM) */
+#define CONF_TX_IBSS_DEFAULT_RATES  (CONF_HW_BIT_RATE_1MBPS |       \
+		CONF_HW_BIT_RATE_2MBPS | CONF_HW_BIT_RATE_5_5MBPS | \
+		CONF_HW_BIT_RATE_11MBPS | CONF_TX_OFDM_RATES);
+
 struct cc33xx_cmd_role_enable {
 	struct cc33xx_cmd_header header;
 
@@ -266,6 +299,7 @@ struct cc33xx_cmd_role_start {
 	u8 role_type;
 	u8 band;
 	u8 channel;
+	u8 is_dfs_channel;
 
 	/* enum wlcore_channel_type */
 	u8 channel_type;
@@ -327,7 +361,7 @@ struct cc33xx_cmd_role_start {
 			u8 padding_1[42];
 		} __packed ap;
 	};
-	u8 padding;
+	u8 padding[4];
 } __packed;
 
 struct cc33xx_cmd_complete_role_start {
@@ -656,8 +690,9 @@ struct cmd_channel_switch {
 
 	u8 channel_type;
 	u8 band;
+	u8 is_dfs_channel;
 
-	u8 padding[2];
+	u8 padding[1];
 } __packed;
 
 struct cmd_set_bd_addr {

@@ -27,14 +27,6 @@ static int cc33xx_init_phy_vif_config(struct cc33xx *wl,
 	if (ret < 0)
 		return ret;
 
-	ret = cc33xx_acx_service_period_timeout(wl, wlvif);
-	if (ret < 0)
-		return ret;
-
-	ret = cc33xx_acx_rts_threshold(wl, wlvif, wl->hw->wiphy->rts_threshold);
-	if (ret < 0)
-		return ret;
-
 	return 0;
 }
 
@@ -49,43 +41,6 @@ static int cc33xx_init_sta_beacon_filter(struct cc33xx *wl,
 
 	/* disable beacon filtering until we get the first beacon */
 	ret = cc33xx_acx_beacon_filter_opt(wl, wlvif, false);
-	if (ret < 0)
-		return ret;
-
-	return 0;
-}
-
-static int cc33xx_init_beacon_broadcast(struct cc33xx *wl,
-					struct cc33xx_vif *wlvif)
-{
-	int ret;
-
-	ret = cc33xx_acx_bcn_dtim_options(wl, wlvif);
-	if (ret < 0)
-		return ret;
-
-	return 0;
-}
-
-/* generic sta initialization (non vif-specific) */
-static int cc33xx_sta_hw_init(struct cc33xx *wl, struct cc33xx_vif *wlvif)
-{
-	int ret;
-
-	/* PS config */
-	ret = cc33xx_acx_config_ps(wl, wlvif);
-	if (ret < 0)
-		return ret;
-
-	return 0;
-}
-
-/* generic ap initialization (non vif-specific) */
-static int cc33xx_ap_hw_init(struct cc33xx *wl)
-{
-	int ret;
-	/* configure AP sleep, if enabled */
-	ret = cc33xx_acx_ap_sleep(wl);
 	if (ret < 0)
 		return ret;
 
@@ -109,23 +64,15 @@ static int cc33xx_ap_init_templates(struct cc33xx *wl,
 	return 0;
 }
 
-static int cc33xx_set_ba_policies(struct cc33xx *wl, struct cc33xx_vif *wlvif)
+static void cc33xx_set_ba_policies(struct cc33xx *wl, struct cc33xx_vif *wlvif)
 {
 	/* Reset the BA RX indicators */
 	wlvif->ba_allowed = true;
 	wl->ba_rx_session_count = 0;
 
 	/* BA is supported in STA/AP modes */
-	if (wlvif->bss_type != BSS_TYPE_AP_BSS &&
-	    wlvif->bss_type != BSS_TYPE_STA_BSS) {
-		wlvif->ba_support = false;
-		return 0;
-	}
-
-	wlvif->ba_support = true;
-
-	/* 802.11n initiator BA session setting */
-	return cc33xx_acx_set_ba_initiator_policy(wl, wlvif);
+	wlvif->ba_support = (wlvif->bss_type == BSS_TYPE_AP_BSS ||
+			     wlvif->bss_type == BSS_TYPE_STA_BSS);
 }
 
 /* Applies when MAC address is other than 0x0.
@@ -265,23 +212,8 @@ static int cc33xx_init_sta_role(struct cc33xx *wl, struct cc33xx_vif *wlvif)
 	if (ret < 0)
 		return ret;
 
-	/* Initialize connection monitoring thresholds */
-	ret = cc33xx_acx_conn_monit_params(wl, wlvif, false);
-	if (ret < 0)
-		return ret;
-
 	/* Beacon filtering */
 	ret = cc33xx_init_sta_beacon_filter(wl, wlvif);
-	if (ret < 0)
-		return ret;
-
-	/* Beacons and broadcast settings */
-	ret = cc33xx_init_beacon_broadcast(wl, wlvif);
-	if (ret < 0)
-		return ret;
-
-	/* Configure rssi/snr averaging weights */
-	ret = cc33xx_acx_rssi_snr_avg_weights(wl, wlvif);
 	if (ret < 0)
 		return ret;
 
@@ -293,10 +225,6 @@ static int cc33xx_init_sta_role(struct cc33xx *wl, struct cc33xx_vif *wlvif)
 static int cc33xx_init_ap_role(struct cc33xx *wl, struct cc33xx_vif *wlvif)
 {
 	int ret;
-
-	ret = cc33xx_acx_ap_max_tx_retry(wl, wlvif);
-	if (ret < 0)
-		return ret;
 
 	/* initialize Tx power */
 	ret = cc33xx_acx_tx_power(wl, wlvif, wlvif->power_level);
@@ -351,18 +279,10 @@ int cc33xx_init_vif_specific(struct cc33xx *wl, struct ieee80211_vif *vif)
 
 	/* Mode specific init */
 	if (is_ap) {
-		ret = cc33xx_ap_hw_init(wl);
-		if (ret < 0)
-			return ret;
-
 		ret = cc33xx_init_ap_role(wl, wlvif);
 		if (ret < 0)
 			return ret;
 	} else {
-		ret = cc33xx_sta_hw_init(wl, wlvif);
-		if (ret < 0)
-			return ret;
-
 		ret = cc33xx_init_sta_role(wl, wlvif);
 		if (ret < 0)
 			return ret;
@@ -396,11 +316,6 @@ int cc33xx_init_vif_specific(struct cc33xx *wl, struct ieee80211_vif *vif)
 			return ret;
 	}
 
-	/* Configure HW encryption */
-	ret = cc33xx_acx_feature_cfg(wl, wlvif);
-	if (ret < 0)
-		return ret;
-
 	/* Mode specific init - post mem init */
 	if (is_ap)
 		ret = cc33xx_ap_init_templates(wl, vif);
@@ -409,9 +324,7 @@ int cc33xx_init_vif_specific(struct cc33xx *wl, struct ieee80211_vif *vif)
 		return ret;
 
 	/* Configure initiator BA sessions policies */
-	ret = cc33xx_set_ba_policies(wl, wlvif);
-	if (ret < 0)
-		return ret;
+	cc33xx_set_ba_policies(wl, wlvif);
 
 	return 0;
 }

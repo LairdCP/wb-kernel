@@ -151,6 +151,18 @@ static int wait_for_boot_irq(struct cc33xx *wl, u32 boot_irq_mask,
 
 	fw_download = wl->fw_download;
 
+	/*
+	 * Hosts using edge IRQs will miss the boot-done signal after:
+	 *	1. Powerup (IRQ is enabled after the device was powered-up
+	 *	and the edge has occured).
+	 *
+	 *	2. Internal reset (transition from ROM code to 2nd stage loader
+	 *	and later to FW).
+	 * Work around this by explicitly triggering the IRQ handler which will
+	 * check the current device status after a safe delay. */
+	msleep(10);
+	wlcore_irq(wl);	
+
 	ret = wait_for_completion_interruptible_timeout(
 			&fw_download->wait_on_irq, msecs_to_jiffies(timeout));
 

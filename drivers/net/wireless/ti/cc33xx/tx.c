@@ -77,13 +77,6 @@ static void cc33xx_tx_ap_update_inconnection_sta(struct cc33xx *wl,
 		return;
 
 	/*
-	 * add the station to the known list before transmitting the
-	 * authentication response. this way it won't get de-authed by FW
-	 * when transmitting too soon.
-	 */
-	cc33xx_acx_set_inconnection_sta(wl, wlvif, hdr->addr1);
-
-	/*
 	 * ROC for 1 second on the AP channel for completing the connection.
 	 * Note the ROC will be continued by the update_sta_state callbacks
 	 * once the station reaches the associated state.
@@ -224,6 +217,15 @@ static int cc33xx_get_spare_blocks(struct cc33xx *wl, bool is_gem)
 
 	return CC33XX_TX_HW_BLOCK_SPARE;
 }
+
+enum conf_tx_ac {
+	CONF_TX_AC_BE = 0,         /* best effort / legacy */
+	CONF_TX_AC_BK = 1,         /* background */
+	CONF_TX_AC_VI = 2,         /* video */
+	CONF_TX_AC_VO = 3,         /* voice */
+	CONF_TX_AC_CTS2SELF = 4,   /* fictitious AC, follows AC_VO */
+	CONF_TX_AC_ANY_TID = 0xff
+};
 
 int cc33xx_tx_get_queue(int queue)
 {
@@ -887,44 +889,6 @@ static inline bool cc33xx_tx_is_data_present(struct sk_buff *skb)
 	return ieee80211_is_data_present(hdr->frame_control);
 }
 
-static void cc33xx_rearm_rx_streaming(struct cc33xx *wl,
-				      unsigned long *active_hlids)
-{
-	struct cc33xx_vif *wlvif;
-	u32 timeout;
-	u8 hlid;
-
-	if (!wl->conf.host_conf.rx_streaming.interval)
-		return;
-
-	if (!wl->conf.host_conf.rx_streaming.always &&
-	    !test_bit(CC33XX_FLAG_SOFT_GEMINI, &wl->flags))
-		return;
-
-	timeout = wl->conf.host_conf.rx_streaming.duration;
-	cc33xx_for_each_wlvif_sta(wl, wlvif) {
-		bool found = false;
-		for_each_set_bit(hlid, active_hlids, CC33XX_MAX_LINKS) {
-			if (test_bit(hlid, wlvif->links_map)) {
-				found  = true;
-				break;
-			}
-		}
-
-		if (!found)
-			continue;
-
-		/* enable rx streaming */
-		if (!test_bit(WLVIF_FLAG_RX_STREAMING_STARTED, &wlvif->flags)) {
-			ieee80211_queue_work(wl->hw,
-					     &wlvif->rx_streaming_enable_work);
-		}
-
-		mod_timer(&wlvif->rx_streaming_timer,
-			  jiffies + msecs_to_jiffies(timeout));
-	}
-}
-
 /*
  * Returns failure values only in case of failed bus ops within this function.
  * cc33xx_prepare_tx_frame retvals won't be returned in order to avoid
@@ -1049,8 +1013,6 @@ out_ack:
 	if (sent_packets) 
 		cc33xx_handle_tx_low_watermark(wl);
 	
-	cc33xx_rearm_rx_streaming(wl, active_hlids);
-
 out:  
 	return bus_ret;
 }

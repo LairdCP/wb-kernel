@@ -32,14 +32,9 @@ void wlcore_disable_interrupts_nosync(struct cc33xx *wl)
 	wl->if_ops->disable_irq(wl->dev);
 }
 
-void wlcore_irq(void *cookie);
 void wlcore_enable_interrupts(struct cc33xx *wl)
 {
 	wl->if_ops->enable_irq(wl->dev);
-
-	printk(KERN_DEBUG "IBI_WA: Read core status");
-	wlcore_irq(wl);
-	printk(KERN_DEBUG "IBI_WA: Core status processed");
 }
 
 void cc33xx_io_reset(struct cc33xx *wl)

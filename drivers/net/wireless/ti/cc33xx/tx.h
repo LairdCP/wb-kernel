@@ -165,6 +165,8 @@ bool wlcore_is_queue_stopped_locked(struct cc33xx *wl, struct cc33xx_vif *wlvif,
 /* from main.c */
 void cc33xx_free_sta(struct cc33xx *wl, struct cc33xx_vif *wlvif, u8 hlid);
 void cc33xx_rearm_tx_watchdog_locked(struct cc33xx *wl);
-
+void wlcore_update_inconn_sta(struct cc33xx *wl, struct cc33xx_vif *wlvif,
+			      struct cc33xx_station *wl_sta, bool in_conn);
+void cc33xx_queue_recovery_work(struct cc33xx *wl);
 
 #endif /* __TX_H__ */

@@ -34,13 +34,15 @@
  *
  * Bits 0-2 - error code
  * Bits 3-5 - process_id tag (AP mode FW)
- * Bits 6-7 - reserved
+ * Bit 6	- is new key
+ * Bit 7	- reserved
  */
 enum {
 	CC33XX_RX_DESC_SUCCESS		= 0x00,
 	CC33XX_RX_DESC_DECRYPT_FAIL	= 0x01,
 	CC33XX_RX_DESC_MIC_FAIL		= 0x02,
-	CC33XX_RX_DESC_STATUS_MASK	= 0x07
+	CC33XX_RX_DESC_STATUS_MASK	= 0x07,
+	CC33XX_RX_DESC_NEW_KEY		= 0x40
 };
 
 /*
@@ -94,6 +96,7 @@ int wlcore_rx(struct cc33xx *wl, u8 *rx_buf_ptr, u16 rx_buf_len);
 int cc33xx_rx_filter_enable(struct cc33xx *wl, int index, bool enable,
 			    struct cc33xx_rx_filter *filter);
 int cc33xx_rx_filter_clear_all(struct cc33xx *wl);
+void cc33xx_flush_deferred_work(struct cc33xx *wl);
 
 
 #endif /* __RX_H__ */
