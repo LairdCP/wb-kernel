@@ -392,6 +392,7 @@ static u8 check_is_dfs_channel(struct cc33xx *wl,
 {
 	struct ieee80211_supported_band *band;
 	u8 is_dfs = 0;
+	int i;
 
 	if (rate_band != NL80211_BAND_5GHZ)
 	{
@@ -400,7 +401,7 @@ static u8 check_is_dfs_channel(struct cc33xx *wl,
 
 	band = wl->hw->wiphy->bands[NL80211_BAND_5GHZ];
 
-	for (int i = 0; i < band->n_channels; i++)
+	for (i = 0; i < band->n_channels; i++)
 	{
 		if (band->channels[i].hw_value == channel)
 		{
