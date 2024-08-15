@@ -14,7 +14,8 @@
 static void brcmf_bca_feat_attach(struct brcmf_if *ifp)
 {
 	/* SAE support not confirmed so disabling for now */
-	ifp->drvr->feat_flags &= ~BIT(BRCMF_FEAT_SAE);
+	ifp->drvr->feat_flags[BRCMF_FEAT_SAE / 8] |=
+		BIT(BRCMF_FEAT_SAE % 8);
 }
 
 const struct brcmf_fwvid_ops brcmf_bca_ops = {
