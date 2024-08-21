@@ -1,9 +1,8 @@
-// SPDX-License-Identifier: GPL-2.0
+// SPDX-License-Identifier: LicenseRef-Ezurio-Clause
 /*
  * at91-wb45n.dtsi - Device Tree include file for WB45NBT CPU module
  *
- *  Copyright (C) 2018-2020 Ezurio
- *
+ * Copyright (C) 2018 Ezurio
  */
 
 #include "at91sam9g25.dtsi"

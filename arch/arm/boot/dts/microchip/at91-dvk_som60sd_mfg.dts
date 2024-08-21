@@ -1,11 +1,8 @@
+// SPDX-License-Identifier: LicenseRef-Ezurio-Clause
 /*
- * at91-dvk_som60sd_mfg.dts - Device Tree file for the Manufacturing SOM60 board
+ * at91-dvk_som60_rdvk.dts - Device Tree file for the DVK SOM60 board
  *
- *  Copyright (C) 2018 Ezurio,
- *		  2018 Ben Whitten <ben.whitten@ezurio.com>
- *		  2018 Boris Krasnovskiy <boris.krasnovskiy@ezurio.com>
- *
- * Licensed under GPLv2 or later.
+ * Copyright (C) 2018 Ezurio
  */
 
 /dts-v1/;

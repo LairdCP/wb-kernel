@@ -1,165 +1,57 @@
+// SPDX-License-Identifier: LicenseRef-Ezurio-Clause
 /*
  * at91-dvk_su60_somc_mfg.dtsi - Device Tree file for the Manufacturing SOM60 board
  *
- *  Copyright (C) 2018 Ezurio,
- *		  2018 Ben Whitten <ben.whitten@ezurio.com>
- *		  2018 Boris Krasnovskiy <boris.krasnovskiy@ezurio.com>
- *
- * Licensed under GPLv2 or later.
+ * Copyright (C) 2018 Ezurio
  */
 
-/ {
-	reg_mmc0_en: reg_mmc0_en_grp {
-		pinctrl-names = "default";
-		pinctrl-0 = <&pinctrl_mmc0_en>;
+#include "at91-dvk_su60_somc.dtsi"
 
-		compatible = "regulator-fixed";
-		regulator-name = "VDD MMC0";
-		regulator-min-microvolt = <3300000>;
-		regulator-max-microvolt = <3300000>;
-
-		gpio = <&pioE 30 GPIO_ACTIVE_HIGH>;
-		startup-delay-us = <110>;
-		enable-active-high;
-	};
-
-	wakeup_button {
-		pinctrl-names = "default";
-		pinctrl-0 = <&pinctrl_pb_wake>;
-
-		compatible = "gpio-wakeup";
-
-		interrupts-extended = <&pioE 15 IRQ_TYPE_EDGE_FALLING>;
-	};
+&sound {
+	status = "disabled";
 };
 
-&pinctrl {
-	board {
-		pinctrl_mmc0_cd: mmc0_cd {
-			atmel,pins =
-				<AT91_PIOE 31 AT91_PERIPH_GPIO AT91_PINCTRL_DEGLITCH>;
-		};
-
-		pinctrl_mmc0_en: mmc0_en {
-			atmel,pins =
-				<AT91_PIOE 30 AT91_PERIPH_GPIO AT91_PINCTRL_MULTI_DRIVE>;
-		};
-
-		pinctrl_gpiom_int: gpiom_int {
-			atmel,pins =
-				<AT91_PIOE 20 AT91_PERIPH_GPIO AT91_PINCTRL_DEGLITCH>;
-		};
-
-		pinctrl_usba_vbus: usba_vbus {
-		   atmel,pins =
-				<AT91_PIOC 14 AT91_PERIPH_GPIO AT91_PINCTRL_DEGLITCH>;
-		};
-
-		pinctrl_geth_int: geth_int {
-			atmel,pins =
-				<AT91_PIOB 25 AT91_PERIPH_GPIO AT91_PINCTRL_DEGLITCH>;
-		};
-
-		pinctrl_eth_int: eth_int {
-			atmel,pins =
-				<AT91_PIOC 10 AT91_PERIPH_GPIO AT91_PINCTRL_DEGLITCH>;
-		};
-
-		pinctrl_pb_wake: pb_wake {
-			atmel,pins =
-				<AT91_PIOE 15 AT91_PERIPH_GPIO AT91_PINCTRL_PULL_UP_DEGLITCH>;
-		};
-	};
+&spi0 {
+	status = "disabled";
 };
 
-&mmc0 {
-	pinctrl-names = "default";
-	pinctrl-0 = <&pinctrl_mmc0_clk_cmd_dat0 &pinctrl_mmc0_dat1_3 &pinctrl_mmc0_cd>;
-	pinctrl-1 = <&pinctrl_mmc0_clk_cmd_dat0_sleep &pinctrl_mmc0_dat1_3_sleep &pinctrl_mmc0_cd>;
-
-	vmmc-supply = <&reg_mmc0_en>;
-	status = "okay";
-
-	slot@0 {
-		reg = <0>;
-		bus-width = <4>;
-		cd-gpios = <&pioE 31 GPIO_ACTIVE_HIGH>;
-	};
+&ssc0 {
+	status = "disabled";
 };
 
 &i2c0 {
-	status = "okay";
-	clock-frequency = <400000>;
-
-	gpiom1: gpio@27 {
-		pinctrl-names = "default";
-		pinctrl-0 = <&pinctrl_gpiom_int>;
-
-		compatible = "microchip,mcp23008";
-		reg = <0x27>;
-
-		gpio-controller;
-		#gpio-cells = <2>;
-
-		interrupt-parent = <&pioE>;
-		interrupts = <20 IRQ_TYPE_LEVEL_LOW>;
-		interrupt-controller;
-		#interrupt-cells = <2>;
-	};
+	dmas = <&dma0 2 AT91_DMA_CFG_PER_ID(7)>,
+	       <&dma0 2 AT91_DMA_CFG_PER_ID(8)>;
 };
 
-&macb0 {
-	status = "okay";
-
-	ethernet-phy@7 {
-		pinctrl-names = "default";
-		pinctrl-0 = <&pinctrl_geth_int>;
-
-		reg = <7>;
-		interrupt-parent = <&pioB>;
-		interrupts = <25 IRQ_TYPE_EDGE_FALLING>;
-
-		vsc8531,vddmac = /bits/ 16 <3300>;
-		vsc8531,edge-slowdown = /bits/ 8 <7>;
-	};
+&wm8904 {
+	status = "disabled";
 };
 
-&macb1 {
-	status = "okay";
+&usart1 {
+	status = "disabled";
+};
 
-	ethernet-phy@1 {
-		pinctrl-names = "default";
-		pinctrl-0 = <&pinctrl_eth_int>;
+&usart2 {
+	status = "disabled";
+};
 
-		reg = <1>;
-		interrupt-parent = <&pioC>;
-		interrupts = <10 IRQ_TYPE_EDGE_FALLING>;
-	};
+&usart3 {
+	status = "disabled";
+};
+
+&uart0 {
+	status = "disabled";
 };
 
 &dbgu {
-	atmel,use-dma-tx;
 	atmel,use-dma-rx;
-	status = "okay";
 };
 
-&usb0 {
-	pinctrl-names = "default";
-	pinctrl-0 = <&pinctrl_usba_vbus>;
-
-	atmel,vbus-gpio = <&pioC 14 GPIO_ACTIVE_HIGH>;
-
-	status = "okay";
+&adc0 {
+	status = "disabled";
 };
 
-&usb1 {
-	num-ports = <3>;
-	atmel,vbus-gpio = <0>, <&gpiom1 6 GPIO_ACTIVE_HIGH>, <&gpiom1 7 GPIO_ACTIVE_HIGH>;
-	atmel,oc-gpio = <0>, <&gpiom1 0 GPIO_ACTIVE_HIGH>, <&gpiom1 1 GPIO_ACTIVE_HIGH>;
-
-	status = "okay";
-};
-
-&usb2 {
-	status = "okay";
+&can1 {
+	status = "disabled";
 };

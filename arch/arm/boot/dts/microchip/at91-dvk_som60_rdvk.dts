@@ -1,12 +1,8 @@
-// SPDX-License-Identifier: GPL-2.0
+// SPDX-License-Identifier: LicenseRef-Ezurio-Clause
 /*
  * at91-dvk_som60_rdvk.dts - Device Tree file for the DVK SOM60 board
  *
- *  Copyright (C) 2018 Ezurio,
- *		  2018 Ben Whitten <ben.whitten@ezurio.com>
- *		  2018 Boris Krasnovskiy <boris.krasnovskiy@ezurio.com>
- *
- * Licensed under GPLv2 or later.
+ * Copyright (C) 2018 Ezurio
  */
 
 /dts-v1/;
@@ -14,15 +10,22 @@
 /* SOM60 module definition */
 #include "at91-som60.dtsi"
 
-/* DVK board definition */
-#include "at91-dvk_su60_somc.dtsi"
+/* DVK MFG board definition */
+#include "at91-dvk_su60_somc_mfg.dtsi"
 
-/* Display & touchscreen definition */
-#include "at91-dvk_su60_somc_lcm.dtsi"
+/ {
+	model = "Summit SOM60 RDVK";
+	compatible = "summit,dvk-som60", "summit,som60", "atmel,sama5d36", "atmel,sama5d3", "atmel,sama5";
+};
 
-/* On-board radio disabled */
+/* For Bluetooth */
+&usart2 {
+	status = "okay";
+};
+
+/* On-board 60 series radio disabled */
 &mmc1 {
-    status = "disabled";
+	status = "disabled";
 };
 
 /*
@@ -30,18 +33,9 @@
  * Testing shows this isn't always sufficient
  */
 &reg_mmc0_en {
-    startup-delay-us = <250000>;
+	startup-delay-us = <250000>;
 };
 
 &mmc0 {
 	keep-power-in-suspend;
-};
-
-&spi0 {
-    status = "disabled";
-};
-
-/ {
-    model = "Summit SOM60 RDVK";
-    compatible = "summit,dvk-som60", "summit,som60", "atmel,sama5d36", "atmel,sama5d3", "atmel,sama5";
 };

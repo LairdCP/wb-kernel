@@ -1,9 +1,8 @@
-// SPDX-License-Identifier: GPL-2.0
+// SPDX-License-Identifier: LicenseRef-Ezurio-Clause
 /*
- *  at91-wb45n.dts - Device Tree file for BB45NBT board
+ * at91-wb45n.dts - Device Tree file for BB45NBT board
  *
- *  Copyright (C) 2018 Ezurio
- *
+ * Copyright (C) 2018 Ezurio
  */
 
 /dts-v1/;

@@ -1,15 +1,14 @@
+// SPDX-License-Identifier: LicenseRef-Ezurio-Clause
 /*
  * at91-ig60ll.dts - Device Tree file for IG60 LL, based on SOM60x2 module
  *
- *  Copyright (C) 2019 Ezurio,
- *		  2019 Vishal Verma <vishal.verma@ezurio.com>
- *
- * Licensed under GPLv2 or later.
+ * Copyright (C) 2019 Ezurio
  */
 
 /dts-v1/;
 
 #include "at91-som60.dtsi"
+
 #include "at91-ig60.dtsi"
 
 / {

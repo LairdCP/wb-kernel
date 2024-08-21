@@ -1,9 +1,8 @@
-// SPDX-License-Identifier: GPL-2.0
+// SPDX-License-Identifier: LicenseRef-Ezurio-Clause
 /*
  * at91-wb50n_rdvk.dts - Device Tree file for WB50N RDVK Board
  *
- *  Copyright (C) 2018-2020 Ezurio
- *
+ * Copyright (C) 2018 Ezurio
  */
 
 /dts-v1/;

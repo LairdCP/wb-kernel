@@ -1,10 +1,8 @@
-// SPDX-License-Identifier: GPL-2.0
+// SPDX-License-Identifier: LicenseRef-Ezurio-Clause
 /*
  * at91-dvk_su60_somc_lcm.dtsi - Device Tree file for the LCD for the DVK SOM60 board
  *
- *  Copyright (C) 2018 Ezurio,
- *		  2018 Ben Whitten <ben.whitten@ezurio.com>
- *
+ * Copyright (C) 2018 Ezurio
  */
 
 / {
