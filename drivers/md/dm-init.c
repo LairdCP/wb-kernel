@@ -296,7 +296,7 @@ static int __init dm_init_init(void)
 			dev_t dev;
 
 			DMINFO("waiting for device %s ...", waitfor[i]);
-			while (early_lookup_bdev(waitfor[i], &dev))
+			while (early_lookup_bdev(waitfor[i], &dev) || !driver_probe_done())
 				fsleep(5000);
 		}
 	}
