@@ -45,6 +45,10 @@
 
 #define secs_to_jiffies(_secs) msecs_to_jiffies((_secs) * 1000)
 
+#ifndef _REMOVE_SUMMIT_MODS_
+static unsigned int disable_le_features = 0;
+#endif
+
 /* Handle HCI Event packets */
 
 static void *hci_ev_skb_pull(struct hci_dev *hdev, struct sk_buff *skb,
@@ -1226,6 +1230,13 @@ static u8 hci_cc_le_read_local_features(struct hci_dev *hdev, void *data,
 		return rp->status;
 
 	memcpy(hdev->le_features, rp->features, 8);
+
+#ifndef _REMOVE_SUMMIT_MODS_
+	hdev->le_features[0] &= ~((disable_le_features >> 0) & 0xFF);
+	hdev->le_features[1] &= ~((disable_le_features >> 8) & 0xFF);
+	hdev->le_features[2] &= ~((disable_le_features >> 16) & 0xFF);
+	hdev->le_features[3] &= ~((disable_le_features >> 24) & 0xFF);
+#endif
 
 	return rp->status;
 }
@@ -7523,3 +7534,8 @@ done:
 	kfree_skb(skb);
 	hdev->stat.evt_rx++;
 }
+
+#ifndef _REMOVE_SUMMIT_MODS_
+module_param(disable_le_features, uint, 0644);
+MODULE_PARM_DESC(disable_le_features, "Disable LE features bitmask");
+#endif
