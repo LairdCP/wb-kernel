@@ -27,6 +27,7 @@
 
 #include <asm/unaligned.h>
 #include <linux/crypto.h>
+#include <linux/moduleparam.h>
 #include <crypto/algapi.h>
 
 #include <net/bluetooth/bluetooth.h>
