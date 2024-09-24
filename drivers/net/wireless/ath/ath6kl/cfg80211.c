@@ -2917,12 +2917,6 @@ static int ath6kl_start_ap(struct wiphy *wiphy, struct net_device *dev,
 			break;
 		}
 	}
-	if (p.prwise_crypto_type == 0) {
-		p.prwise_crypto_type = NONE_CRYPT;
-		ath6kl_set_cipher(vif, 0, true);
-	} else if (info->crypto.n_ciphers_pairwise == 1) {
-		ath6kl_set_cipher(vif, info->crypto.ciphers_pairwise[0], true);
-	}
 
 	switch (info->crypto.cipher_group) {
 	case WLAN_CIPHER_SUITE_WEP40:
@@ -2941,6 +2935,18 @@ static int ath6kl_start_ap(struct wiphy *wiphy, struct net_device *dev,
 	default:
 		p.grp_crypto_type = NONE_CRYPT;
 		break;
+	}
+	if (p.prwise_crypto_type == 0) {
+		if (p.grp_crypto_type == WEP_CRYPT && info->privacy) {
+			/* non-wpa wep only AP, set unicast cipher so capability:privacy is set */
+			p.prwise_crypto_type = WEP_CRYPT;
+			ath6kl_set_cipher(vif, info->crypto.cipher_group, true);
+		} else {
+			p.prwise_crypto_type = NONE_CRYPT;
+			ath6kl_set_cipher(vif, 0, true);
+		}
+	} else if (info->crypto.n_ciphers_pairwise == 1) {
+		ath6kl_set_cipher(vif, info->crypto.ciphers_pairwise[0], true);
 	}
 	ath6kl_set_cipher(vif, info->crypto.cipher_group, false);
 
