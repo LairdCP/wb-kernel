@@ -38,7 +38,6 @@
 #include "core.h"
 #include "common.h"
 #include "bcdc.h"
-#include "fwil.h"
 #include "bt_shared_sdio.h"
 #include "bt_shared_sdio_ifx.h"
 #include "trxhdr.h"
@@ -131,6 +130,7 @@ struct rte_console {
 #include "bus.h"
 #include "debug.h"
 #include "tracepoint.h"
+#include "fwil.h"
 
 #define TXQLEN		2048	/* bulk tx queue length */
 #define TXHI		(TXQLEN - 256)	/* turn on flow control above TXHI */
