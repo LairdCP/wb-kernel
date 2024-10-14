@@ -1337,7 +1337,7 @@ static void cc33xx_op_tx(struct ieee80211_hw *hw,
 	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
 	struct ieee80211_vif *vif = info->control.vif;
 	struct cc33xx_vif *wlvif = NULL;
-	enum queue_stop_reason stop_reason = WLCORE_QUEUE_STOP_REASON_WATERMARK;
+	enum wlcore_queue_stop_reason stop_reason = WLCORE_QUEUE_STOP_REASON_WATERMARK;
 	unsigned long flags;
 	int q, mapping;
 	u8 hlid;
@@ -5700,8 +5700,10 @@ struct ieee80211_hw *wlcore_alloc_hw(u32 aggr_buf_size)
 	}
 
 	wl->core_status = kzalloc(sizeof(*wl->core_status), GFP_KERNEL);
-	if (!wl->core_status)
+	if (!wl->core_status) {
+		ret = -ENOMEM;
 		goto err_buf32;
+	}
 
 	return hw;
 
