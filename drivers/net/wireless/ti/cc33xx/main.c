@@ -68,8 +68,8 @@ static struct ieee80211_sta_ht_cap cc33xx_siso40_ht_cap_5ghz = {
 
 /* HT cap appropriate for SISO 20 */
 static struct ieee80211_sta_ht_cap cc33xx_siso20_ht_cap = {
-	.cap = IEEE80211_HT_CAP_SGI_20 |
-	       IEEE80211_HT_CAP_MAX_AMSDU,
+	.cap = IEEE80211_HT_CAP_SGI_20 |     
+	       IEEE80211_HT_CAP_MAX_AMSDU, 
 	.ht_supported = true,
 	.ampdu_factor = IEEE80211_HT_MAX_AMPDU_8K,
 	.ampdu_density = IEEE80211_HT_MPDU_DENSITY_16,
@@ -188,7 +188,7 @@ static const u8 cc33xx_rate_to_idx_5ghz[] = {
 	7               /* RATE_INDEX_MCS7 */
 };
 
-static const u8 *cc33xx_band_rate_to_idx[] = {
+static const u8 *cc33xx_band_rate_to_idx[] = {	
 	[NL80211_BAND_2GHZ] = cc33xx_rate_to_idx_2ghz,
 	[NL80211_BAND_5GHZ] = cc33xx_rate_to_idx_5ghz
 };
@@ -205,7 +205,7 @@ enum {
 	CLOCK_CONFIG_52_M,
 
 	NUM_CLOCK_CONFIGS,
-};
+}; 
 
 static const struct cc33xx_clk_cfg cc33xx_clk_table_coex[NUM_CLOCK_CONFIGS] = {
 	[CLOCK_CONFIG_16_2_M]	= { 8,  121, 0, 0, false },
@@ -333,7 +333,7 @@ static struct ieee80211_sband_iftype_data iftype_data_2ghz[] = {{
 			IEEE80211_HE_PHY_CAP4_BEAMFORMEE_MAX_STS_UNDER_80MHZ_4 ,
 		.phy_cap_info[5] =
 			IEEE80211_HE_PHY_CAP5_NG16_SU_FEEDBACK |
-			IEEE80211_HE_PHY_CAP5_NG16_MU_FEEDBACK,
+			IEEE80211_HE_PHY_CAP5_NG16_MU_FEEDBACK, 
 		.phy_cap_info[6] =
 			IEEE80211_HE_PHY_CAP6_CODEBOOK_SIZE_42_SU  |
 			IEEE80211_HE_PHY_CAP6_CODEBOOK_SIZE_75_MU  |
@@ -350,8 +350,8 @@ static struct ieee80211_sband_iftype_data iftype_data_2ghz[] = {{
 		.phy_cap_info[9] =
 			IEEE80211_HE_PHY_CAP9_NON_TRIGGERED_CQI_FEEDBACK |
 			IEEE80211_HE_PHY_CAP9_RX_FULL_BW_SU_USING_MU_WITH_COMP_SIGB |
-			IEEE80211_HE_PHY_CAP9_RX_FULL_BW_SU_USING_MU_WITH_NON_COMP_SIGB |
-			(IEEE80211_HE_PHY_CAP9_NOMINAL_PKT_PADDING_16US <<
+			IEEE80211_HE_PHY_CAP9_RX_FULL_BW_SU_USING_MU_WITH_NON_COMP_SIGB |				
+			(IEEE80211_HE_PHY_CAP9_NOMINAL_PKT_PADDING_16US << 
 			 IEEE80211_HE_PHY_CAP9_NOMINAL_PKT_PADDING_POS),
 		},
 		/*
@@ -501,7 +501,7 @@ static struct ieee80211_sband_iftype_data iftype_data_5ghz[] = {{
 			IEEE80211_HE_PHY_CAP4_BEAMFORMEE_MAX_STS_UNDER_80MHZ_4 ,
 		.phy_cap_info[5] =
 			IEEE80211_HE_PHY_CAP5_NG16_SU_FEEDBACK |
-			IEEE80211_HE_PHY_CAP5_NG16_MU_FEEDBACK,
+			IEEE80211_HE_PHY_CAP5_NG16_MU_FEEDBACK, 
 		.phy_cap_info[6] =
 			IEEE80211_HE_PHY_CAP6_CODEBOOK_SIZE_42_SU  |
 			IEEE80211_HE_PHY_CAP6_CODEBOOK_SIZE_75_MU  |
@@ -518,7 +518,7 @@ static struct ieee80211_sband_iftype_data iftype_data_5ghz[] = {{
 		.phy_cap_info[9] =
 			IEEE80211_HE_PHY_CAP9_NON_TRIGGERED_CQI_FEEDBACK |
 			IEEE80211_HE_PHY_CAP9_RX_FULL_BW_SU_USING_MU_WITH_COMP_SIGB |
-			IEEE80211_HE_PHY_CAP9_RX_FULL_BW_SU_USING_MU_WITH_NON_COMP_SIGB |
+			IEEE80211_HE_PHY_CAP9_RX_FULL_BW_SU_USING_MU_WITH_NON_COMP_SIGB |			
 			(IEEE80211_HE_PHY_CAP9_NOMINAL_PKT_PADDING_16US <<
 			 IEEE80211_HE_PHY_CAP9_NOMINAL_PKT_PADDING_POS),
 		},
@@ -547,21 +547,21 @@ static struct ieee80211_supported_band cc33xx_band_5ghz = {
 	.channels = cc33xx_channels_5ghz,
 	.n_channels = ARRAY_SIZE(cc33xx_channels_5ghz),
 	.bitrates = cc33xx_rates_5ghz,
-	.n_bitrates = ARRAY_SIZE(cc33xx_rates_5ghz),
+	.n_bitrates = ARRAY_SIZE(cc33xx_rates_5ghz),	
 	.vht_cap = {
 		.vht_supported = true,
-		.cap = (IEEE80211_VHT_CAP_MAX_MPDU_LENGTH_7991 | (1 <<
+		.cap = (IEEE80211_VHT_CAP_MAX_MPDU_LENGTH_7991 | (1 << 
 			IEEE80211_VHT_CAP_MAX_A_MPDU_LENGTH_EXPONENT_SHIFT)),
 		.vht_mcs = {
 			.rx_mcs_map = cpu_to_le16(0xfffc),
 			.rx_highest = 7,
 			.tx_mcs_map = cpu_to_le16(0xfffc),
 			.tx_highest = 7,
-		},
+		},		
 	},
 	.iftype_data = iftype_data_5ghz,
 	.n_iftype_data = ARRAY_SIZE(iftype_data_5ghz),
-
+	
 };
 
 static void __cc33xx_op_remove_interface(struct cc33xx *wl,
@@ -759,11 +759,11 @@ static int wlcore_irq_locked(struct cc33xx *wl)
 	rx_byte_count = (wl->core_status->rx_status & RX_BYTE_COUNT_MASK);
 	if (rx_byte_count != 0)
 	{
-		const int read_headers_len = sizeof(struct core_status)
+		const int read_headers_len = sizeof(struct core_status) 
 			+ sizeof(struct NAB_rx_header);
 
 		/* Read aggressively as more data might be coming in */
-		rx_byte_count *= 2;
+		rx_byte_count *= 2; 
 
 		read_data_len = rx_byte_count + read_headers_len;
 
@@ -772,7 +772,7 @@ static int wlcore_irq_locked(struct cc33xx *wl)
 			read_data_len = __ALIGN_MASK(read_data_len,
 						     spi_alignment);
 			read_data_len = min(read_data_len,
-					    wl->max_transaction_len);
+					    wl->max_transaction_len);		
 		} else { /* SDIO */
 			const int sdio_alignment = CC33XX_BUS_BLOCK_SIZE-1;
 			read_data_len = __ALIGN_MASK(read_data_len,
@@ -790,10 +790,10 @@ static int wlcore_irq_locked(struct cc33xx *wl)
 			return ret;
 		}
 
-		core_status_ptr = (struct core_status *)((u8 *)wl->aggr_buf +
+		core_status_ptr = (struct core_status *)((u8 *)wl->aggr_buf + 
 				    read_data_len - sizeof(struct core_status));
 
-		memcpy(wl->core_status,
+		memcpy(wl->core_status, 
 			core_status_ptr, sizeof(struct core_status));
 
 		cc33xx_debug(DEBUG_IRQ,
@@ -808,7 +808,7 @@ static int wlcore_irq_locked(struct cc33xx *wl)
 		NAB_rx_header = (struct NAB_rx_header *)wl->aggr_buf;
 		rx_buf_len = NAB_rx_header->len - 8; // michal fix
 		if (rx_buf_len != 0) {
-			rx_buf_ptr = (u8 *)wl->aggr_buf +
+			rx_buf_ptr = (u8 *)wl->aggr_buf + 
 						sizeof(struct NAB_rx_header);
 			cc33xx_debug(DEBUG_IRQ,"calling rx code!");
 			wlcore_rx(wl, rx_buf_ptr, rx_buf_len);
@@ -832,11 +832,11 @@ static int read_core_status(struct cc33xx *wl, struct core_status *core_status)
 {
 	cc33xx_debug(DEBUG_CORE_STATUS, "Reading core status");
 
-	return wlcore_raw_read(wl, NAB_STATUS_ADDR, core_status,
+	return wlcore_raw_read(wl, NAB_STATUS_ADDR, core_status, 
 			       sizeof *core_status, false);
 }
 
-static int parse_control_message(struct cc33xx *wl,
+static int parse_control_message(struct cc33xx *wl, 
 				 const u8 *buffer, size_t buffer_length)
 {
 	u8 *const end_of_payload = (u8 *const) buffer + buffer_length;
@@ -846,20 +846,20 @@ static int parse_control_message(struct cc33xx *wl,
 	int ctrl_info_type, ctrl_info_length;
 
 	while(buffer < end_of_payload){
-		control_info_descriptor =
+		control_info_descriptor = 
 				(struct control_info_descriptor *) buffer;
 
 		ctrl_info_type = le16_to_cpu(control_info_descriptor->type);
 		ctrl_info_length = le16_to_cpu(control_info_descriptor->length);
 
-		cc33xx_debug(DEBUG_CMD, "Processing message type %d, len %d",
+		cc33xx_debug(DEBUG_CMD, "Processing message type %d, len %d", 
 			ctrl_info_type, ctrl_info_length);
 
 		switch (ctrl_info_type){
 
 		case CTRL_MSG_EVENT:
-			event_data = buffer + sizeof *control_info_descriptor;
-
+			event_data = buffer + sizeof *control_info_descriptor; 
+			
 			deffer_event(wl, event_data, ctrl_info_length);
 			break;
 
@@ -868,7 +868,7 @@ static int parse_control_message(struct cc33xx *wl,
 			cmd_result_data += sizeof *control_info_descriptor;
 
 			if (ctrl_info_length > sizeof wl->command_result){
-
+											
 				print_hex_dump(KERN_DEBUG, "message dump:",
 					       DUMP_PREFIX_OFFSET, 16, 1,
 					       cmd_result_data,
@@ -882,7 +882,7 @@ static int parse_control_message(struct cc33xx *wl,
 
 			memcpy(wl->command_result,
 			       cmd_result_data, ctrl_info_length);
-
+				
 			wl->result_length = ctrl_info_length;
 
 			complete(&wl->command_complete);
@@ -909,7 +909,7 @@ message_parse_error:
 	return -EIO;
 }
 
-static int read_control_message(struct cc33xx *wl, u8 *read_buffer,
+static int read_control_message(struct cc33xx *wl, u8 *read_buffer, 
 				size_t buffer_size)
 {
 	int ret;
@@ -918,7 +918,7 @@ static int read_control_message(struct cc33xx *wl, u8 *read_buffer,
 
 	cc33xx_debug(DEBUG_CMD, "Reading control info");
 
-	ret = wlcore_raw_read(wl, NAB_CONTROL_ADDR, read_buffer,
+	ret = wlcore_raw_read(wl, NAB_CONTROL_ADDR, read_buffer, 
 			      buffer_size, false);
 
 	if (ret < 0){
@@ -946,10 +946,10 @@ static int read_control_message(struct cc33xx *wl, u8 *read_buffer,
 	return nab_header->len;
 }
 
-static int process_event_and_cmd_result(struct cc33xx *wl,
+static int process_event_and_cmd_result(struct cc33xx *wl, 
 					struct core_status *core_status)
 {
-	int ret;
+	int ret; 
 	u8 *read_buffer, *message;
 	const size_t buffer_size = CC33XX_CMD_MAX_SIZE;
 	size_t message_length;
@@ -958,7 +958,7 @@ static int process_event_and_cmd_result(struct cc33xx *wl,
 
 	read_buffer = kmalloc(buffer_size, GFP_KERNEL);
 	if (!read_buffer)
-		return -ENOMEM;
+		return -ENOMEM;	
 
 	ret = read_control_message(wl, read_buffer, buffer_size);
 	if (ret < 0)
@@ -972,7 +972,7 @@ static int process_event_and_cmd_result(struct cc33xx *wl,
 
 	/* Each read transaction always carries an updated core status */
 	previous_hint = core_status->host_interrupt_status;
-	new_core_status = (struct core_status*)
+	new_core_status = (struct core_status*) 
 		(read_buffer + buffer_size - sizeof (struct core_status));
 	memcpy(core_status, new_core_status, sizeof *core_status);
 	/* Host interrupt filed is clear-on-read and we do not want
@@ -981,7 +981,7 @@ static int process_event_and_cmd_result(struct cc33xx *wl,
 
 out:
 	kfree(read_buffer);
-	return ret;
+	return ret; 
 }
 
 static int verify_padding(struct core_status *core_status)
@@ -998,7 +998,7 @@ static int verify_padding(struct core_status *core_status)
 			return -1;
 		}
 	}
-
+	
 	return 0;
 }
 
@@ -1006,7 +1006,7 @@ static int process_core_status(struct cc33xx *wl,
 			       struct core_status *core_status)
 {
 	bool 	core_status_idle;
-	u32	shadow_host_interrupt_status;
+	u32	shadow_host_interrupt_status; 
 	int 	ret;
 
 	do{
@@ -1035,17 +1035,17 @@ static int process_core_status(struct cc33xx *wl,
 
 		if ((core_status->rx_status & RX_BYTE_COUNT_MASK) != 0){
 			cc33xx_debug(DEBUG_RX, "Rx data pending, "
-				     "triggering deferred work");
+				     "triggering deferred work"); 
 			queue_work(wl->freezable_wq, &wl->irq_deferred_work);
 		}
 
-		if (core_status->fwInfo.txResultQueueIndex
+		if (core_status->fwInfo.txResultQueueIndex 
 						!= wl->last_fw_rls_idx){
 			cc33xx_debug(DEBUG_TX, "Tx new result, "
 				     "triggering deferred work");
 			queue_work(wl->freezable_wq, &wl->irq_deferred_work);
 		}
-
+		
 		if (shadow_host_interrupt_status &  HINT_NEW_TX_RESULT){
 			cc33xx_debug(DEBUG_TX, "Tx complete, "
 				     "triggering deferred work");
@@ -1099,7 +1099,7 @@ void wlcore_irq(void *cookie)
 		goto out;
 	}
 
-	process_core_status(wl, wl->core_status);
+	process_core_status(wl, wl->core_status);	
 
 out:
 	cc33xx_debug(DEBUG_IRQ, "wlcore_irq: Releasing core-status");
@@ -1316,7 +1316,7 @@ int cc33xx_plt_stop(struct cc33xx *wl)
 		cc33xx_cmd_plt_disable(wl);
 
 	cc33xx_flush_deferred_work(wl);
-
+	
 	flush_deferred_event_list(wl);
 
 	mutex_lock(&wl->mutex);
@@ -1337,7 +1337,7 @@ static void cc33xx_op_tx(struct ieee80211_hw *hw,
 	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
 	struct ieee80211_vif *vif = info->control.vif;
 	struct cc33xx_vif *wlvif = NULL;
-	enum wlcore_queue_stop_reason stop_reason = WLCORE_QUEUE_STOP_REASON_WATERMARK;
+	enum queue_stop_reason stop_reason = WLCORE_QUEUE_STOP_REASON_WATERMARK;
 	unsigned long flags;
 	int q, mapping;
 	u8 hlid;
@@ -1362,7 +1362,7 @@ static void cc33xx_op_tx(struct ieee80211_hw *hw,
 	 * allow these packets through.
 	 */
 
-	if ((hlid == CC33XX_INVALID_LINK_ID) ||
+	if ((hlid == CC33XX_INVALID_LINK_ID) || 
 	    (!test_bit(hlid, wlvif->links_map)) ||
 	    (wlcore_is_queue_stopped_locked(wl, wlvif, q) &&
 	    !wlcore_is_queue_stopped_by_reason_locked(wl, wlvif, q,
@@ -1758,7 +1758,7 @@ static int cc33xx_configure_suspend(struct cc33xx *wl, struct cc33xx_vif *wlvif,
 
 	if (wlvif->bss_type == BSS_TYPE_AP_BSS)
 		return cc33xx_configure_suspend_ap(wl, wlvif, wow);
-
+		
 	return 0;
 }
 
@@ -1779,9 +1779,9 @@ static void cc33xx_configure_resume(struct cc33xx *wl, struct cc33xx_vif *wlvif)
 	cc33xx_configure_wowlan(wl, NULL);
 
 	if (is_sta) {
-		if ((core_conf->suspend_wake_up_event ==
+		if ((core_conf->suspend_wake_up_event == 
 		    core_conf->wake_up_event) &&
-		    (core_conf->suspend_listen_interval ==
+		    (core_conf->suspend_listen_interval == 
 		    core_conf->listen_interval))
 			return;
 
@@ -1998,7 +1998,7 @@ static void cc33xx_turn_off(struct cc33xx *wl)
 	wl->power_level = CC33XX_MAX_TXPWR;
 	wl->tx_blocks_available = 0;
 	wl->tx_allocated_blocks = 0;
-
+	
 	wl->ap_fw_ps_map = 0;
 	wl->ap_ps_map = 0;
 	wl->sleep_auth = CC33XX_PSM_ILLEGAL;
@@ -2791,7 +2791,7 @@ static int wlcore_set_assoc(struct cc33xx *wl, struct cc33xx_vif *wlvif,
 	memcpy(wlvif->transmitter_bssid, bss_conf->transmitter_bssid, ETH_ALEN);
 
 	set_bit(WLVIF_FLAG_STA_ASSOCIATED, &wlvif->flags);
-
+	
 	ret = cc33xx_assoc_info_cfg(wl, wlvif, sta,wlvif->aid);
 	if (ret < 0)
 		return ret;
@@ -3166,7 +3166,7 @@ static int cc33xx_config_key(struct cc33xx *wl, struct cc33xx_vif *wlvif,
 static int cc33xx_set_host_cfg_bitmap(struct cc33xx *wl, u32 extra_mem_blk)
 {
 	u32 sdio_align_size = 0;
-	u32 host_cfg_bitmap = HOST_IF_CFG_RX_FIFO_ENABLE |
+	u32 host_cfg_bitmap = HOST_IF_CFG_RX_FIFO_ENABLE | 
 						HOST_IF_CFG_ADD_RX_ALIGNMENT;
 
 	/* Enable Tx SDIO padding */
@@ -3237,7 +3237,7 @@ int wlcore_set_key(struct cc33xx *wl, enum set_key_cmd cmd,
 	case WLAN_CIPHER_SUITE_GCMP:
 		key_type = KEY_GCMP128;
 		key_conf->flags |= IEEE80211_KEY_FLAG_PUT_IV_SPACE;
-		break;
+		break;		
 	case WLAN_CIPHER_SUITE_CCMP_256:
 		key_type = KEY_CCMP256;
 		key_conf->flags |= IEEE80211_KEY_FLAG_PUT_IV_SPACE;
@@ -3245,7 +3245,7 @@ int wlcore_set_key(struct cc33xx *wl, enum set_key_cmd cmd,
 	case WLAN_CIPHER_SUITE_GCMP_256:
 		key_type = KEY_GCMP_256;
 		key_conf->flags |= IEEE80211_KEY_FLAG_PUT_IV_SPACE;
-		break;
+		break;		
 	case WLAN_CIPHER_SUITE_AES_CMAC:
 		key_type = KEY_IGTK;
 		break;
@@ -3696,7 +3696,7 @@ static int cc33xx_bss_beacon_info_changed(struct cc33xx *wl,
 out:
 	if (ret != 0)
 		cc33xx_error("beacon info change failed: %d", ret);
-
+		
 	return ret;
 }
 
@@ -3716,21 +3716,21 @@ static void cc33xx_bss_info_changed_ap(struct cc33xx *wl,
 								 wlvif->band);
 		wlvif->basic_rate = cc33xx_tx_min_rate_get(wl,
 							 wlvif->basic_rate_set);
-
+		
 		supported_rates = CONF_TX_ENABLED_RATES | CONF_TX_MCS_RATES ;
 		ret = cc33xx_update_ap_rates(wl, wlvif->role_id,
 					     wlvif->basic_rate_set,
 					     supported_rates);
-
+		
 		ret = wlcore_set_beacon_template(wl, vif, true);
 		if (ret < 0)
-			goto out;
+			goto out;	
 	}
 
 	ret = cc33xx_bss_beacon_info_changed(wl, vif, bss_conf, changed);
 	if (ret < 0)
 		goto out;
-
+		
 	if (changed & BSS_CHANGED_BEACON_ENABLED) {
 		if (bss_conf->enable_beacon) {
 			if (!test_bit(WLVIF_FLAG_AP_STARTED, &wlvif->flags)) {
@@ -3809,8 +3809,8 @@ static int wlcore_set_bssid(struct cc33xx *wl, struct cc33xx_vif *wlvif,
 	{
 		wlvif->bssid_index = bss_conf->bssid_index;
 		wlvif->bssid_indicator = bss_conf->bssid_indicator;
-		memcpy(wlvif->transmitter_bssid,
-			bss_conf->transmitter_bssid,
+		memcpy(wlvif->transmitter_bssid, 
+			bss_conf->transmitter_bssid, 
 			ETH_ALEN);
 	}
 
@@ -3860,7 +3860,7 @@ static void cc33xx_bss_info_changed_sta(struct cc33xx *wl,
 	bool sta_exists = false;
 	struct ieee80211_sta_ht_cap sta_ht_cap;
 	struct ieee80211_sta_he_cap sta_he_cap;
-
+	
 	if (is_ibss) {
 		ret = cc33xx_bss_beacon_info_changed(wl, vif,
 						     bss_conf, changed);
@@ -3989,7 +3989,7 @@ static void cc33xx_bss_info_changed_sta(struct cc33xx *wl,
 				wlvif->sta_has_he = sta->deflink.he_cap.has_he;
 
 				if (sta->deflink.he_cap.has_he)
-					cc33xx_info("HE Enabled");
+					cc33xx_info("HE Enabled");		
 				else
 					cc33xx_info("HE Disabled");
 
@@ -4001,7 +4001,7 @@ static void cc33xx_bss_info_changed_sta(struct cc33xx *wl,
 					}
 				}
 
-				/* There can't be two stations connected
+				/* There can't be two stations connected 
 				   with HE supported links */
 				if (he_count > 1) {
 					cc33xx_error("WARNING: Both station "
@@ -4047,7 +4047,7 @@ static void cc33xx_bss_info_changed_sta(struct cc33xx *wl,
 
 	/* Handle new association with HT. Do this after join. */
 	if (sta_exists) {
-		bool enabled = bss_conf->chandef.width !=
+		bool enabled = bss_conf->chandef.width != 
 						NL80211_CHAN_WIDTH_20_NOHT;
 		cc33xx_debug(DEBUG_CMD, "+++Debug wlcore_hw_set_peer_cap %x",
 					wlvif->rate_set);
@@ -4062,10 +4062,10 @@ static void cc33xx_bss_info_changed_sta(struct cc33xx *wl,
 		if (enabled) {
 			ret = cc33xx_acx_set_ht_information(wl, wlvif,
 						bss_conf->ht_operation_mode,
-						bss_conf->he_oper.params,
+						bss_conf->he_oper.params, 
 						bss_conf->he_oper.nss_set);
 			if (ret < 0) {
-				cc33xx_warning("Set ht information failed %d",
+				cc33xx_warning("Set ht information failed %d",	
 					       ret);
 				goto out;
 			}
@@ -4140,10 +4140,10 @@ static void cc33xx_op_bss_info_changed(struct ieee80211_hw *hw,
 		/* bss_conf->txpower is initialized with a default value,
 	   	meaning the power has not been set and should be ignored, use
 		max value instead */
-		set_power = (bss_conf->txpower == INT_MIN) ?
+		set_power = (bss_conf->txpower == INT_MIN) ? 
 					   CC33XX_MAX_TXPWR : bss_conf->txpower;
 		ret = cc33xx_acx_tx_power(wl, wlvif, set_power);
-
+		
 		if (ret < 0)
 			goto out;
 	}
@@ -4241,7 +4241,7 @@ static int cc33xx_op_assign_vif_chanctx(struct ieee80211_hw *hw,
 	/* update default rates according to the band */
 	cc33xx_set_band_rate(wl, wlvif);
 
-	if (ctx->radar_enabled &&
+	if (ctx->radar_enabled && 
 	    (ctx->def.chan->dfs_state == NL80211_DFS_USABLE)) {
 		cc33xx_debug(DEBUG_MAC80211, "Start radar detection");
 		cmd_set_cac(wl, wlvif, true);
@@ -4298,7 +4298,7 @@ static int cc33xx_switch_vif_chan(struct cc33xx *wl, struct cc33xx_vif *wlvif,
 		     "switch vif (role %d) %d -> %d chan_type: %d",
 		     wlvif->role_id, wlvif->channel, channel,
 		     cfg80211_get_chandef_type(&new_ctx->def));
-
+	
 	cc33xx_debug(DEBUG_MAC80211, "switch vif bss_type: %d", wlvif->bss_type);
 
 	wlvif->band = new_ctx->def.chan->band;
@@ -4362,7 +4362,7 @@ enum {
 };
 
 static int cc33xx_op_conf_tx(struct ieee80211_hw *hw,
-			     struct ieee80211_vif *vif,
+			     struct ieee80211_vif *vif, 
 			     unsigned int link_id, u16 queue,
 			     const struct ieee80211_tx_queue_params *params)
 {
@@ -4393,8 +4393,8 @@ static int cc33xx_op_conf_tx(struct ieee80211_hw *hw,
     ret = cc33xx_tx_param_cfg(wl, wlvif, cc33xx_tx_get_queue(queue),
 			      params->cw_min, params->cw_max, params->aifs,
 			      params->txop << 5, params->acm, ps_scheme,
-			      params->mu_edca, params->mu_edca_param_rec.aifsn,
-			      params->mu_edca_param_rec.ecw_min_max,
+			      params->mu_edca, params->mu_edca_param_rec.aifsn, 
+			      params->mu_edca_param_rec.ecw_min_max, 
 			      params->mu_edca_param_rec.mu_edca_timer);
 
 out:
@@ -4494,7 +4494,7 @@ static int cc33xx_sta_add(struct cc33xx *wl,
 
 	wl_sta->hlid = hlid;
 	ret = cc33xx_allocate_sta(wl, wlvif, sta);
-
+	
 	return ret;
 }
 
@@ -4857,7 +4857,7 @@ static int cc33xx_set_bitrate_mask(struct ieee80211_hw *hw,
 		mask->control[NL80211_BAND_5GHZ].legacy);
 
 	mutex_lock(&wl->mutex);
-
+		
 	wlvif->bitrate_masks[0] = cc33xx_tx_enabled_rates_get(wl,
 						mask->control[0].legacy, 0);
 
@@ -4911,7 +4911,7 @@ static void cc33xx_op_channel_switch(struct ieee80211_hw *hw,
 		set_bit(WLVIF_FLAG_CS_PROGRESS, &wlvif->flags);
 
 		/* indicate failure 5 seconds after channel switch time */
-		delay_usec = ieee80211_tu_to_usec(wlvif->beacon_int) *
+		delay_usec = ieee80211_tu_to_usec(wlvif->beacon_int) * 
 							       ch_switch->count;
 		ieee80211_queue_delayed_work(hw, &wlvif->channel_switch_work,
 					     usecs_to_jiffies(delay_usec) +
@@ -5099,7 +5099,7 @@ static void cc33xx_op_sta_statistics(struct ieee80211_hw *hw,
 
 	sinfo->filled |= BIT_ULL(NL80211_STA_INFO_SIGNAL);
 	sinfo->signal = rssi_dbm;
-
+	
 	ret = wlcore_acx_get_tx_rate(wl, wlvif, sinfo);
 	if (ret < 0)
 		goto out;
@@ -5215,7 +5215,7 @@ static void setup_wake_irq(struct cc33xx *wl)
 	} else {
 		wl->wakeirq = -ENODEV;
 	}
-
+	
 	wl->keep_device_power = true;
 }
 #else
@@ -5294,7 +5294,7 @@ static void cc33xx_derive_mac_addresses(struct cc33xx *wl)
 	u8 base_addr[ETH_ALEN];
 	u8 bd_addr[ETH_ALEN];
 	bool use_nvs=false;
-	bool use_efuse=false;
+	bool use_efuse=false; 
 	bool use_random=false;
 
 	if (wl->nvs_mac_addr_len != ETH_ALEN){
@@ -5311,13 +5311,13 @@ static void cc33xx_derive_mac_addresses(struct cc33xx *wl)
 			use_random = true;
 			eth_random_addr(base_addr);
 			cc33xx_warning("No EFUSE / NVS data, "
-				"using random locally administered address.");
+				"using random locally administered address."); 
 		}
 	} else {
 		u8 *nvs_addr = wl->nvs_mac_addr;
-		const u8 efuse_magic_addr[ETH_ALEN] =
+		const u8 efuse_magic_addr[ETH_ALEN] = 
 					{0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-		const u8 random_magic_addr[ETH_ALEN] =
+		const u8 random_magic_addr[ETH_ALEN] = 
 					{0x00, 0x00, 0x00, 0x00, 0x00, 0x01};
 
 		/* In NVS, addresses 00-00-00-00-00-00 and 00-00-00-00-00-01
@@ -5354,7 +5354,7 @@ static void cc33xx_derive_mac_addresses(struct cc33xx *wl)
 
 		wl->addresses[1].addr[0] |= oui_laa_bit;
 		wl->addresses[2].addr[0] |= oui_laa_bit;
-
+		
 		eth_addr_inc(wl->addresses[2].addr);
 		eth_addr_inc(bd_addr);
 	} else if (use_random) {
@@ -5383,7 +5383,7 @@ static void cc33xx_derive_mac_addresses(struct cc33xx *wl)
 }
 
 static int cc33xx_register_hw(struct cc33xx *wl)
-{
+{	
 	int ret;
 
 	if (wl->mac80211_registered)
@@ -5409,7 +5409,7 @@ static void cc33xx_unregister_hw(struct cc33xx *wl)
 {
 	if (wl->plt)
 		cc33xx_plt_stop(wl);
-
+		
 	ieee80211_unregister_hw(wl->hw);
 	wl->mac80211_registered = false;
 }
@@ -5452,7 +5452,7 @@ static int cc33xx_init_ieee80211(struct cc33xx *wl)
 
 	/* unit us */
 	/* FIXME: find a proper value */
-	wl->hw->max_listen_interval =
+	wl->hw->max_listen_interval = 
 				wl->conf.host_conf.conn.max_listen_interval;
 
 	ieee80211_hw_set(wl->hw, SUPPORT_FAST_XMIT);
@@ -5469,7 +5469,7 @@ static int cc33xx_init_ieee80211(struct cc33xx *wl)
 	ieee80211_hw_set(wl->hw, SIGNAL_DBM);
 	ieee80211_hw_set(wl->hw, SUPPORTS_PS);
 	ieee80211_hw_set(wl->hw, SUPPORTS_TX_FRAG);
-	ieee80211_hw_set(wl->hw, SUPPORTS_MULTI_BSSID);
+	ieee80211_hw_set(wl->hw, SUPPORTS_MULTI_BSSID); 
 	ieee80211_hw_set(wl->hw, SUPPORTS_AMSDU_IN_AMPDU);
 
 	wl->hw->wiphy->interface_modes = cc33xx_wiphy_interface_modes();
@@ -5571,9 +5571,9 @@ static int cc33xx_init_ieee80211(struct cc33xx *wl)
 
 	wl->hw->max_rx_aggregation_subframes = wl->conf.host_conf.ht.rx_ba_win_size;
 
-	/* For all ps schemes don't use UAPSD, except for UAPSD scheme
+	/* For all ps schemes don't use UAPSD, except for UAPSD scheme 
 	   As these are the currently supportedd PS schemes, use the default
-	   legacy otherwise */
+	   legacy otherwise */ 
 	if (wl->conf.mac.ps_scheme == PS_SCHEME_UPSD_TRIGGER) {
 		wl->hw->uapsd_queues = IEEE80211_WMM_IE_STA_QOSINFO_AC_MASK;
 	} else if ((wl->conf.mac.ps_scheme != PS_SCHEME_LEGACY) &&
@@ -5583,7 +5583,7 @@ static int cc33xx_init_ieee80211(struct cc33xx *wl)
 	} else {
 		wl->hw->uapsd_queues = 0;
 	}
-
+		
 	return 0;
 }
 
@@ -5635,11 +5635,11 @@ struct ieee80211_hw *wlcore_alloc_hw(u32 aggr_buf_size)
 	INIT_DELAYED_WORK(&wl->roc_complete_work, wlcore_roc_complete_work);
 	INIT_DELAYED_WORK(&wl->tx_watchdog_work, cc33xx_tx_watchdog_work);
 
-	wl->freezable_netstack_wq =
+	wl->freezable_netstack_wq = 
 			create_freezable_workqueue("cc33xx_netstack_wq");
 
 	wl->freezable_wq = create_high_prio_freezable_workqueue("cc33xx_wq");
-
+													
 	if (!wl->freezable_wq || !wl->freezable_netstack_wq) {
 		ret = -ENOMEM;
 		goto err_hw;
@@ -5650,7 +5650,7 @@ struct ieee80211_hw *wlcore_alloc_hw(u32 aggr_buf_size)
 	wl->band = NL80211_BAND_2GHZ;
 	wl->flags = 0;
 	wl->sleep_auth = CC33XX_PSM_ILLEGAL;
-
+	
 	wl->ap_ps_map = 0;
 	wl->ap_fw_ps_map = 0;
 	wl->quirks = 0;
@@ -5700,10 +5700,8 @@ struct ieee80211_hw *wlcore_alloc_hw(u32 aggr_buf_size)
 	}
 
 	wl->core_status = kzalloc(sizeof(*wl->core_status), GFP_KERNEL);
-	if (!wl->core_status) {
-		ret = -ENOMEM;
+	if (!wl->core_status)
 		goto err_buf32;
-	}
 
 	return hw;
 
@@ -5771,7 +5769,7 @@ static int cc33xx_identify_chip(struct cc33xx *wl)
 		      WLCORE_QUIRK_DUAL_PROBE_TMPL;
 
 	if (wl->if_ops->get_max_transaction_len)
-		wl->max_transaction_len =
+		wl->max_transaction_len = 
 			wl->if_ops->get_max_transaction_len(wl->dev);
 	else
 		wl->max_transaction_len = 0;
@@ -5796,17 +5794,17 @@ static int read_version_info(struct cc33xx *wl)
 	}
 
 	cc33xx_info("Wireless firmware version %u.%u.%u.%u",
-		    wl->all_versions.fw_ver->major_version,
-		    wl->all_versions.fw_ver->minor_version,
-		    wl->all_versions.fw_ver->api_version,
+		    wl->all_versions.fw_ver->major_version, 
+		    wl->all_versions.fw_ver->minor_version, 
+		    wl->all_versions.fw_ver->api_version, 
 		    wl->all_versions.fw_ver->build_version);
 
-	cc33xx_info("Wireless PHY version %u.%u.%u.%u.%u.%u",
-		    wl->all_versions.fw_ver->phy_version[5],
+	cc33xx_info("Wireless PHY version %u.%u.%u.%u.%u.%u", 
+		    wl->all_versions.fw_ver->phy_version[5], 
 		    wl->all_versions.fw_ver->phy_version[4],
-		    wl->all_versions.fw_ver->phy_version[3],
-		    wl->all_versions.fw_ver->phy_version[2],
-		    wl->all_versions.fw_ver->phy_version[1],
+		    wl->all_versions.fw_ver->phy_version[3], 
+		    wl->all_versions.fw_ver->phy_version[2], 
+		    wl->all_versions.fw_ver->phy_version[1], 
 		    wl->all_versions.fw_ver->phy_version[0]);
 
 	wl->all_versions.driver_ver.major_version = MAJOR_VERSION;
@@ -5841,7 +5839,7 @@ static void wlcore_nvs_cb(const struct firmware *fw, void *context)
 		wl->nvs_mac_addr = NULL;
 		wl->nvs_mac_addr_len = 0;
 	}
-
+	
 	ret = cc33xx_setup(wl);
 	if (ret < 0)
 		goto out_free_nvs;
@@ -5903,7 +5901,7 @@ out_free_nvs:
 out:
 	release_firmware(fw);
 	complete_all(&wl->nvs_loading_complete);
-	cc33xx_debug(DEBUG_CC33xx, "wlcore_nvs_cb Complete");
+	cc33xx_debug(DEBUG_CC33xx, "wlcore_nvs_cb Complete");	
 }
 
 int wlcore_probe(struct cc33xx *wl, struct platform_device *pdev)
@@ -5950,7 +5948,7 @@ int wlcore_remove(struct platform_device *pdev)
 
 	if (pdev_data->family && pdev_data->family->nvs_name)
 		wait_for_completion(&wl->nvs_loading_complete);
-
+		
 	if (!wl->initialized)
 		goto out;
 
@@ -6016,7 +6014,7 @@ static int cc33xx_ini_bin_init(struct cc33xx *wl, struct device *dev)
 	if (cc33xx_load_ini_bin_file(dev, &wl->conf,
 				     pdata->family->cfg_name) < 0)
 		cc33xx_warning("falling back to default config");
-
+	
 	return 0;
 }
 
@@ -6091,7 +6089,7 @@ static int cc33xx_probe(struct platform_device *pdev)
 	int ret;
 
 	cc33xx_debug(DEBUG_CC33xx, "cc33xx_probe :: Start");
-
+	
 	hw = wlcore_alloc_hw(CC33XX_AGGR_BUFFER_SIZE);
 	if (IS_ERR(hw)) {
 		cc33xx_error("can't allocate hw");
@@ -6103,7 +6101,7 @@ static int cc33xx_probe(struct platform_device *pdev)
 	ret = wlcore_probe(wl, pdev);
 	if (ret)
 		goto out_free;
-
+		
 	cc33xx_debug(DEBUG_CC33xx, "WLAN CC33xx platform device probe done");
 	return ret;
 
