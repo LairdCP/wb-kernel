@@ -1830,6 +1830,9 @@ static void handle_channel_single_rule(struct wiphy *wiphy,
 				chan->dfs_cac_ms = reg_rule->dfs_cac_ms;
 		}
 
+#ifndef _REMOVE_SUMMIT_MODS_
+		chan->beacon_found = false;
+#endif
 		return;
 	}
 
@@ -1919,6 +1922,9 @@ static void handle_channel_adjacent_rules(struct wiphy *wiphy,
 							 rrule2->dfs_cac_ms);
 		}
 
+#ifndef _REMOVE_SUMMIT_MODS_
+		chan->beacon_found = false;
+#endif
 		return;
 	}
 
