@@ -257,7 +257,7 @@ static int wlcore_scan_get_channels(struct cc33xx *wl,
 			ch->min_duration = cpu_to_le16(min_dwell_time_active);
 			ch->max_duration = cpu_to_le16(max_dwell_time_active);
 
-			ch->tx_power_att = req_ch->max_power;
+			ch->tx_power_att = min(req_ch->max_power, CC33XX_MAX_TXPWR);
 			ch->channel = req_ch->hw_value;
 
 			if (n_pactive_ch && (band == NL80211_BAND_2GHZ) &&
