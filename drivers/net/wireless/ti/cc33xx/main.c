@@ -456,7 +456,7 @@ static struct ieee80211_channel cc33xx_channels_5ghz[] = {
 	{ .hw_value = 157, .center_freq = 5785, .max_power = CC33XX_MAX_TXPWR },
 	{ .hw_value = 161, .center_freq = 5805, .max_power = CC33XX_MAX_TXPWR },
 	{ .hw_value = 165, .center_freq = 5825, .max_power = CC33XX_MAX_TXPWR },
-	{ .hw_value = 169, .center_freq = 5845, .max_power = CC33XX_MAX_TXPWR },
+	//{ .hw_value = 169, .center_freq = 5845, .max_power = CC33XX_MAX_TXPWR },
 };
 
 static struct ieee80211_sband_iftype_data iftype_data_5ghz[] = {{
