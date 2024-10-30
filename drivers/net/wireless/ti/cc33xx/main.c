@@ -29,6 +29,9 @@
 #include "event.h"
 
 
+#define REGDOMAIN_LEN 4
+static char regdomain[REGDOMAIN_LEN];
+
 #define CC33XX_WAKEUP_TIMEOUT 500
 #define CC33XX_FW_RX_PACKET_RAM (9 * 1024)
 static char *fwlog_param;
@@ -5560,6 +5563,8 @@ static int cc33xx_init_ieee80211(struct cc33xx *wl)
 
 	wl->hw->wiphy->reg_notifier = cc33xx_reg_notify;
 
+	wl->hw->wiphy->regulatory_flags |= REGULATORY_STRICT_REG;
+
 	/* allowed interface combinations */
 	wl->hw->wiphy->iface_combinations = cc33xx_iface_combinations;
 	wl->hw->wiphy->n_iface_combinations = ARRAY_SIZE(cc33xx_iface_combinations);
@@ -5817,6 +5822,23 @@ static int read_version_info(struct cc33xx *wl)
 	return 0;
 }
 
+static int cc33xx_init_regdb(struct cc33xx *wl)
+{
+	char alpha2[2];
+
+	if (regdomain[0] && regdomain[1]) {
+		alpha2[0] = regdomain[0];
+		alpha2[1] = regdomain[1];
+		cc33xx_debug(DEBUG_BOOT, "Using regulatory domain %c%c", alpha2[0], alpha2[1]);
+		regulatory_hint(wl->hw->wiphy, alpha2);
+	}
+	else {
+		cc33xx_debug(DEBUG_BOOT, "No regulatory domain set");
+	}
+
+	return 0;
+}
+
 static void wlcore_nvs_cb(const struct firmware *fw, void *context)
 {
 	struct cc33xx *wl = context;
@@ -5878,6 +5900,10 @@ static void wlcore_nvs_cb(const struct firmware *fw, void *context)
 		goto out_irq;
 
 	ret = cc33xx_register_hw(wl);
+	if (ret)
+		goto out_irq;
+
+	ret = cc33xx_init_regdb(wl);
 	if (ret)
 		goto out_irq;
 
@@ -6145,6 +6171,9 @@ MODULE_PARM_DESC(no_recovery, "Prevent HW recovery. FW will remain stuck.");
 
 module_param_named(ht_mode, ht_mode_param, charp, 0400);
 MODULE_PARM_DESC(ht_mode, "Force HT mode: wide or siso20");
+
+module_param_string(regdomain, regdomain, REGDOMAIN_LEN, 0400);
+MODULE_PARM_DESC(regdomain, "Regulatory domain/country code");
 
 MODULE_LICENSE("GPL v2");
 MODULE_AUTHOR("Luciano Coelho <coelho@ti.com>");
