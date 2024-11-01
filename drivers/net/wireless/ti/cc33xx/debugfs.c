@@ -603,8 +603,7 @@ static ssize_t dynamic_ps_timeout_write(struct file *file,
 	 */
 
 	cc33xx_for_each_wlvif_sta(wl, wlvif) {
-		if (test_bit(WLVIF_FLAG_IN_PS, &wlvif->flags))
-			cc33xx_ps_set_mode(wl, wlvif, STATION_AUTO_PS_MODE);
+		cc33xx_ps_set_mode(wl, wlvif, STATION_AUTO_PS_MODE);
 	}
 
 out:
@@ -619,39 +618,39 @@ static const struct file_operations dynamic_ps_timeout_ops = {
 	.llseek = default_llseek,
 };
 
-static ssize_t forced_ps_read(struct file *file, char __user *user_buf,
+static ssize_t ps_mode_read(struct file *file, char __user *user_buf,
 				     size_t count, loff_t *ppos)
 {
 	struct cc33xx *wl = file->private_data;
 	return cc33xx_format_buffer(user_buf, count, ppos, "%d\n",
-				    wl->conf.host_conf.conn.forced_ps);
+				    wl->conf.mac.ps_mode);
 }
 
-static ssize_t forced_ps_write(struct file *file, const char __user *user_buf,
+static ssize_t ps_mode_write(struct file *file, const char __user *user_buf,
 			       size_t count, loff_t *ppos)
 {
 	struct cc33xx *wl = file->private_data;
 	struct cc33xx_vif *wlvif;
 	unsigned long value;
-	int ret, ps_mode;
+	int ret;
 
 	ret = kstrtoul_from_user(user_buf, count, 10, &value);
 	if (ret < 0) {
-		cc33xx_warning("illegal value in forced_ps");
+		cc33xx_warning("illegal value in ps_mode");
 		return -EINVAL;
 	}
 
-	if (value != 1 && value != 0) {
-		cc33xx_warning("forced_ps should be either 0 or 1");
+	if (value < 0 || value > 2) {
+		cc33xx_warning("ps_mode should be either 0 or 1 or 2");
 		return -ERANGE;
 	}
 
 	mutex_lock(&wl->mutex);
 
-	if (wl->conf.host_conf.conn.forced_ps == value)
+	if (wl->conf.mac.ps_mode == value)
 		goto out;
 
-	wl->conf.host_conf.conn.forced_ps = value;
+	wl->conf.mac.ps_mode = value;
 
 	if (unlikely(wl->state != WLCORE_STATE_ON))
 		goto out;
@@ -660,11 +659,8 @@ static ssize_t forced_ps_write(struct file *file, const char __user *user_buf,
 	 * immediately without waiting for re-association
 	 */
 
-	ps_mode = value ? STATION_POWER_SAVE_MODE : STATION_AUTO_PS_MODE;
-
 	cc33xx_for_each_wlvif_sta(wl, wlvif) {
-		if (test_bit(WLVIF_FLAG_IN_PS, &wlvif->flags))
-			cc33xx_ps_set_mode(wl, wlvif, ps_mode);
+		cc33xx_ps_set_mode(wl, wlvif, value);
 	}
 
 out:
@@ -672,9 +668,9 @@ out:
 	return count;
 }
 
-static const struct file_operations forced_ps_ops = {
-	.read = forced_ps_read,
-	.write = forced_ps_write,
+static const struct file_operations ps_mode_ops = {
+	.read = ps_mode_read,
+	.write = ps_mode_write,
 	.open = simple_open,
 	.llseek = default_llseek,
 };
@@ -2069,7 +2065,7 @@ int cc33xx_debugfs_add_files(struct cc33xx *wl,
 	DEBUGFS_ADD(beacon_interval, rootdir);
 	DEBUGFS_ADD(beacon_filtering, rootdir);
 	DEBUGFS_ADD(dynamic_ps_timeout, rootdir);
-	DEBUGFS_ADD(forced_ps, rootdir);
+	DEBUGFS_ADD(ps_mode, rootdir);
 	DEBUGFS_ADD(split_scan_timeout, rootdir);
 	DEBUGFS_ADD(fw_stats_raw, rootdir);
 	DEBUGFS_ADD(sleep_auth, rootdir);

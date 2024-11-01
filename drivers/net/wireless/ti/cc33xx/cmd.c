@@ -13,7 +13,7 @@
 #include "io.h"
 #include "tx.h"
 
-#define CC33XX_REBOOT_TIMEOUT_MSEC		100
+#define CC33XX_REBOOT_TIMEOUT_MSEC		250
 
 static void init_cmd_header(struct cc33xx_cmd_header* header,
 			    size_t cmd_len, u16 id)

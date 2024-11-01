@@ -18,7 +18,7 @@ struct cc33xx_conf_header {
 } __attribute__((__packed__));
 
 #define CC33XX_CONF_MAGIC	0x10e100ca
-#define CC33XX_CONF_VERSION	0x010700aa
+#define CC33XX_CONF_VERSION	0x010700bc
 #define CC33XX_CONF_MASK	0x0000ffff
 #define CC33X_CONF_SIZE	(sizeof(struct cc33xx_conf_file))
 
@@ -292,12 +292,6 @@ struct conf_conn_settings {
 	 * by the FW when in AUTO_PS mode
 	 */
 	uint16_t dynamic_ps_timeout;
-
-	/*
-	 * Specifies whether dynamic PS should be disabled and PSM forced.
-	 * This is required for certain WiFi certification tests.
-	 */
-	uint8_t forced_ps;
 
 	/*
 	 * Maximum listen interval supported by the driver in units of beacons.
@@ -628,6 +622,7 @@ struct cc33xx_core_conf {
 } __attribute__((__packed__));
 
 struct cc33xx_mac_conf {
+	uint8_t ps_mode;
 	uint8_t ps_scheme;
 	uint8_t he_enable;
 	uint8_t ApMaxNumStations;

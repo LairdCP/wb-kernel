@@ -4017,35 +4017,22 @@ static void cc33xx_bss_info_changed_sta(struct cc33xx *wl,
 	}
 
 	if (changed & BSS_CHANGED_PS) {
-		if ((vif->cfg.ps) &&
-		    test_bit(WLVIF_FLAG_STA_ASSOCIATED, &wlvif->flags) &&
-		    !test_bit(WLVIF_FLAG_IN_PS, &wlvif->flags)) {
-			int ps_mode;
-			char *ps_mode_str;
 
-			if (wl->conf.host_conf.conn.forced_ps) {
-				ps_mode = STATION_POWER_SAVE_MODE;
-				ps_mode_str = "forced";
-			} else {
-				ps_mode = STATION_AUTO_PS_MODE;
-				ps_mode_str = "auto";
+		ret=0;
+
+		if (wl->conf.mac.ps_mode == STATION_AUTO_PS_MODE){
+			if ((vif->cfg.ps) && test_bit(WLVIF_FLAG_STA_ASSOCIATED, &wlvif->flags)) {
+				ret = cc33xx_ps_set_mode(wl, wlvif, STATION_AUTO_PS_MODE);
+			} else if (!vif->cfg.ps) {
+				ret = cc33xx_ps_set_mode(wl, wlvif, STATION_ACTIVE_MODE);
 			}
-
-			cc33xx_debug(DEBUG_PSM, "%s ps enabled", ps_mode_str);
-
-			ret = cc33xx_ps_set_mode(wl, wlvif, ps_mode);
-			if (ret < 0)
-				cc33xx_warning("enter %s ps failed %d",
-					       ps_mode_str, ret);
-		} else if (!vif->cfg.ps && test_bit(WLVIF_FLAG_IN_PS,
-						     &wlvif->flags)) {
-			cc33xx_debug(DEBUG_PSM, "auto ps disabled");
-
-			ret = cc33xx_ps_set_mode(wl, wlvif,
-						 STATION_ACTIVE_MODE);
-			if (ret < 0)
-				cc33xx_warning("exit auto ps failed %d", ret);
+		} else {
+			ret = cc33xx_ps_set_mode(wl, wlvif, wl->conf.mac.ps_mode);
 		}
+
+		if (ret < 0)
+			cc33xx_warning("exit auto ps failed %d", ret);
+
 	}
 
 	/* Handle new association with HT. Do this after join. */
