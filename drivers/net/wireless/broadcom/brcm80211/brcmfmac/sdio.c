@@ -1081,13 +1081,13 @@ int brcmf_sdio_clkctl(struct brcmf_sdio *bus, uint target, bool pendok)
 			break;
 		}
 #endif /* CONFIG_BRCMFMAC_BT_SHARED_SDIO */
-#ifdef CONFIG_IFX_BT_SHARED_SDIO
-		if (ifx_btsdio_is_active(bus->sdiodev->bus_if)) {
+#ifdef CONFIG_INFMAC_BT_SHARED_SDIO
+		if (inf_btsdio_is_active(bus->sdiodev->bus_if)) {
 			brcmf_dbg(SDIO, "BT is active, not switching to CLK_SDONLY\n");
 			brcmf_sdio_wd_timer(bus, true);
 			break;
 		}
-#endif /* CONFIG_IFX_BT_SHARED_SDIO */
+#endif /* CONFIG_INFMAC_BT_SHARED_SDIO */
 		/* Remove HT request, or bring up SD clock */
 		if (bus->clkstate == CLK_NONE)
 			brcmf_sdio_sdclk(bus, true);
@@ -1111,12 +1111,12 @@ int brcmf_sdio_clkctl(struct brcmf_sdio *bus, uint target, bool pendok)
 			break;
 		}
 #endif /* CONFIG_BRCMFMAC_BT_SHARED_SDIO */
-#ifdef CONFIG_IFX_BT_SHARED_SDIO
-		if (ifx_btsdio_is_active(bus->sdiodev->bus_if)) {
+#ifdef CONFIG_INFMAC_BT_SHARED_SDIO
+		if (inf_btsdio_is_active(bus->sdiodev->bus_if)) {
 			brcmf_dbg(SDIO, "BT is active, not switching to CLK_NONE\n");
 			break;
 		}
-#endif /* CONFIG_IFX_BT_SHARED_SDIO */
+#endif /* CONFIG_INFMAC_BT_SHARED_SDIO */
 
 		/* Make sure to remove HT request */
 		if (bus->clkstate == CLK_AVAIL)
@@ -1159,12 +1159,12 @@ brcmf_sdio_bus_sleep(struct brcmf_sdio *bus, bool sleep, bool pendok)
 		return -EBUSY;
 	}
 #endif /* CONFIG_BRCMFMAC_BT_SHARED_SDIO */
-#ifdef CONFIG_IFX_BT_SHARED_SDIO
-	if (sleep && ifx_btsdio_is_active(bus->sdiodev->bus_if)) {
+#ifdef CONFIG_INFMAC_BT_SHARED_SDIO
+	if (sleep && inf_btsdio_is_active(bus->sdiodev->bus_if)) {
 		brcmf_dbg(SDIO, "Bus cannot sleep when BT is active\n");
 		return -EBUSY;
 	}
-#endif /* CONFIG_IFX_BT_SHARED_SDIO */
+#endif /* CONFIG_INFMAC_BT_SHARED_SDIO */
 
 	brcmf_dbg(SDIO, "Enter: request %s currently %s\n",
 		  (sleep ? "SLEEP" : "WAKE"),
@@ -2104,7 +2104,7 @@ static bool brcmf_sdio_rx_pkt_is_avail(struct brcmf_sdio *bus)
 	int err = 0;
 	bool ret = true;
 
-	if (!ifx_btsdio_is_active(bus->sdiodev->bus_if))
+	if (!inf_btsdio_is_active(bus->sdiodev->bus_if))
 		return true;
 
 	/* read interrupt to get fifo status*/
@@ -4431,7 +4431,7 @@ static void brcmf_sdio_bus_watchdog(struct brcmf_sdio *bus)
 #endif				/* DEBUG */
 
 	/* On idle timeout clear activity flag and/or turn off clock */
-	if (!bus->dpc_triggered && !ifx_btsdio_is_active(bus->sdiodev->bus_if) &&
+	if (!bus->dpc_triggered && !inf_btsdio_is_active(bus->sdiodev->bus_if) &&
 	    brcmf_btsdio_bus_count(bus->sdiodev->bus_if) == 0) {
 		rmb();
 		if ((!bus->dpc_running) && (bus->idletime > 0) &&
@@ -5325,7 +5325,7 @@ static void brcmf_sdio_firmware_callback(struct device *dev, int err,
 			goto free;
 		}
 
-		ifx_btsdio_init(bus_if);
+		inf_btsdio_init(bus_if);
 
 		/* Register for ULP events */
 		if (sdiod->func1->device == SDIO_DEVICE_ID_BROADCOM_CYPRESS_43012 ||
@@ -5545,7 +5545,7 @@ fail:
 /* Detach and free everything */
 void brcmf_sdio_remove(struct brcmf_sdio *bus)
 {
-#ifdef CONFIG_IFX_BT_SHARED_SDIO
+#ifdef CONFIG_INFMAC_BT_SHARED_SDIO
 	struct brcmf_bus *bus_if = bus->sdiodev->bus_if;
 #endif
 	u32 reg_val, read_reg;
@@ -5602,7 +5602,7 @@ void brcmf_sdio_remove(struct brcmf_sdio *bus)
 						 * to be set for SDIO reset
 						 */
 						reg_val |= SDIO_CCCR_BRCM_CARDCTRL_WLANRESET;
-						if (ifx_btsdio_set_bt_reset(bus_if))
+						if (inf_btsdio_set_bt_reset(bus_if))
 							reg_val |= SDIO_CCCR_BRCM_CARDCTRL_BTRESET;
 						brcmf_sdiod_func0_wb(bus->sdiodev,
 								     SDIO_CCCR_BRCM_CARDCTRL,
@@ -5660,7 +5660,7 @@ void brcmf_sdio_remove(struct brcmf_sdio *bus)
 									       SDIO_CCCR_BRCM_CARDCTRL,
 									       &err);
 						reg_val |= SDIO_CCCR_BRCM_CARDCTRL_WLANRESET;
-                                                if (ifx_btsdio_set_bt_reset(bus_if))
+                                                if (inf_btsdio_set_bt_reset(bus_if))
                                                         reg_val |= SDIO_CCCR_BRCM_CARDCTRL_BTRESET;
 						brcmf_sdiod_func0_wb(sdiodev,
 								     SDIO_CCCR_BRCM_CARDCTRL,
@@ -5696,7 +5696,7 @@ void brcmf_sdio_remove(struct brcmf_sdio *bus)
 
 		release_firmware(bus->sdiodev->clm_fw);
 		bus->sdiodev->clm_fw = NULL;
-		ifx_btsdio_deinit(bus_if);
+		inf_btsdio_deinit(bus_if);
 
 		kfree(bus->rxbuf);
 		kfree(bus->hdrbuf);
