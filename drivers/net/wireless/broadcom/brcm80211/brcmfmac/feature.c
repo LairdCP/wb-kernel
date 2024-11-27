@@ -338,7 +338,7 @@ void brcmf_feat_attach(struct brcmf_pub *drvr)
 		}
 	}
 
-	// brcmf_feat_wlc_version_overrides(drvr);
+	brcmf_feat_wlc_version_overrides(drvr);
 
 	/* set chip related quirks */
 	switch (drvr->bus_if->chip) {
