@@ -18,7 +18,7 @@ struct cc33xx_conf_header {
 } __attribute__((__packed__));
 
 #define CC33XX_CONF_MAGIC	0x10e100ca
-#define CC33XX_CONF_VERSION	0x010700bc
+#define CC33XX_CONF_VERSION	0x010700e1
 #define CC33XX_CONF_MASK	0x0000ffff
 #define CC33X_CONF_SIZE	(sizeof(struct cc33xx_conf_file))
 
@@ -617,6 +617,7 @@ struct cc33xx_core_conf {
 	uint8_t mixed_mode_support;
 	uint8_t sramLdo_voltageTrimming;
 	uint32_t xtal_SettlingTime_usec;
+	uint8_t max_rx_ampdu_len;
 	struct conf_ant_diversity ant_diversity;
 	struct conf_iomux_configuration iomux_configuration;
 } __attribute__((__packed__));
@@ -626,6 +627,8 @@ struct cc33xx_mac_conf {
 	uint8_t ps_scheme;
 	uint8_t he_enable;
 	uint8_t ApMaxNumStations;
+	uint8_t fw_defrag;
+	uint16_t rx_memblks_override;
 } __attribute__((__packed__));
 
 struct cc33xx_phy_conf {
@@ -642,6 +645,9 @@ struct cc33xx_phy_conf {
 	uint8_t num_of_antennas;
 	uint8_t reg_domain;
 	uint16_t calib_period;
+	int8_t tx_psat_compensation_2_4GHz;
+	int8_t tx_psat_compensation_5GHz;
+	int8_t reserved_2;
 } __attribute__((__packed__));
 
 struct cc33xx_host_conf {

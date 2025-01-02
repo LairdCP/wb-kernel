@@ -65,6 +65,7 @@ enum wlcore_state {
 	WLCORE_STATE_OFF,
 	WLCORE_STATE_RESTARTING,
 	WLCORE_STATE_ON,
+	WLCORE_STATE_FAILED,
 };
 
 struct cc33xx;

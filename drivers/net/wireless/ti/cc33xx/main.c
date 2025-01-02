@@ -278,20 +278,20 @@ static struct ieee80211_rate cc33xx_rates[] = {
 };
 
 /* can't be const, mac80211 writes to this */
-static struct ieee80211_channel cc33xx_channels[] = {
-	{ .hw_value = 1, .center_freq = 2412, .max_power = CC33XX_MAX_TXPWR },
-	{ .hw_value = 2, .center_freq = 2417, .max_power = CC33XX_MAX_TXPWR },
-	{ .hw_value = 3, .center_freq = 2422, .max_power = CC33XX_MAX_TXPWR },
-	{ .hw_value = 4, .center_freq = 2427, .max_power = CC33XX_MAX_TXPWR },
-	{ .hw_value = 5, .center_freq = 2432, .max_power = CC33XX_MAX_TXPWR },
+static struct ieee80211_channel cc33xx_channels_2ghz[] = {
 	{ .hw_value = 6, .center_freq = 2437, .max_power = CC33XX_MAX_TXPWR },
-	{ .hw_value = 7, .center_freq = 2442, .max_power = CC33XX_MAX_TXPWR },
-	{ .hw_value = 8, .center_freq = 2447, .max_power = CC33XX_MAX_TXPWR },
-	{ .hw_value = 9, .center_freq = 2452, .max_power = CC33XX_MAX_TXPWR },
-	{ .hw_value = 10, .center_freq = 2457, .max_power = CC33XX_MAX_TXPWR },
+	{ .hw_value = 1, .center_freq = 2412, .max_power = CC33XX_MAX_TXPWR },
 	{ .hw_value = 11, .center_freq = 2462, .max_power = CC33XX_MAX_TXPWR },
-	{ .hw_value = 12, .center_freq = 2467, .max_power = CC33XX_MAX_TXPWR },
+	{ .hw_value = 3, .center_freq = 2422, .max_power = CC33XX_MAX_TXPWR },
+	{ .hw_value = 5, .center_freq = 2432, .max_power = CC33XX_MAX_TXPWR },
+	{ .hw_value = 7, .center_freq = 2442, .max_power = CC33XX_MAX_TXPWR },
+	{ .hw_value = 9, .center_freq = 2452, .max_power = CC33XX_MAX_TXPWR },
 	{ .hw_value = 13, .center_freq = 2472, .max_power = CC33XX_MAX_TXPWR },
+	{ .hw_value = 2, .center_freq = 2417, .max_power = CC33XX_MAX_TXPWR },
+	{ .hw_value = 4, .center_freq = 2427, .max_power = CC33XX_MAX_TXPWR },
+	{ .hw_value = 8, .center_freq = 2447, .max_power = CC33XX_MAX_TXPWR },
+	{ .hw_value = 10, .center_freq = 2457, .max_power = CC33XX_MAX_TXPWR },
+	{ .hw_value = 12, .center_freq = 2467, .max_power = CC33XX_MAX_TXPWR },
 };
 
 static struct ieee80211_sband_iftype_data iftype_data_2ghz[] = {{
@@ -380,8 +380,8 @@ static struct ieee80211_sband_iftype_data iftype_data_2ghz[] = {{
 
 /* can't be const, mac80211 writes to this */
 static struct ieee80211_supported_band cc33xx_band_2ghz = {
-	.channels = cc33xx_channels,
-	.n_channels = ARRAY_SIZE(cc33xx_channels),
+	.channels = cc33xx_channels_2ghz,
+	.n_channels = ARRAY_SIZE(cc33xx_channels_2ghz),
 	.bitrates = cc33xx_rates,
 	.n_bitrates = ARRAY_SIZE(cc33xx_rates),
 	.iftype_data = iftype_data_2ghz,
@@ -1140,11 +1140,16 @@ static void cc33xx_get_vif_count(struct ieee80211_hw *hw,
 
 void cc33xx_queue_recovery_work(struct cc33xx *wl)
 {
-	/* Avoid a recursive recovery */
-	if (wl->state == WLCORE_STATE_ON) {
+	if (wl->state == WLCORE_STATE_ON && wl->mac80211_registered) {
 		wl->state = WLCORE_STATE_RESTARTING;
 		set_bit(CC33XX_FLAG_RECOVERY_IN_PROGRESS, &wl->flags);
+		wlcore_disable_interrupts_nosync(wl);
 		ieee80211_queue_work(wl->hw, &wl->recovery_work);
+
+	} else if (wl->state == WLCORE_STATE_OFF || wl->state == WLCORE_STATE_ON) {
+		cc33xx_error("Fatal error during driver init, cannot recover");
+		wl->state = WLCORE_STATE_FAILED;
+		wlcore_disable_interrupts_nosync(wl);
 	}
 }
 
@@ -1971,12 +1976,6 @@ static void cc33xx_turn_off(struct cc33xx *wl)
 	 */
 	if (wl->state == WLCORE_STATE_ON)
 		wl->state = WLCORE_STATE_OFF;
-
-	/*
-	 * Use the nosync variant to disable interrupts, so the mutex could be
-	 * held while doing so without deadlocking.
-	 */
-	wlcore_disable_interrupts_nosync(wl);
 
 	mutex_unlock(&wl->mutex);
 
@@ -5487,7 +5486,7 @@ static int cc33xx_init_ieee80211(struct cc33xx *wl)
 	 * clear channel flags from the previous usage
 	 * and restore max_power & max_antenna_gain values.
 	 */
-	for (i = 0; i < ARRAY_SIZE(cc33xx_channels); i++) {
+	for (i = 0; i < ARRAY_SIZE(cc33xx_channels_2ghz); i++) {
 		cc33xx_band_2ghz.channels[i].flags = 0;
 		cc33xx_band_2ghz.channels[i].max_power = CC33XX_MAX_TXPWR;
 		cc33xx_band_2ghz.channels[i].max_antenna_gain = 0;
@@ -5974,6 +5973,7 @@ int wlcore_remove(struct platform_device *pdev)
 
 	device_init_wakeup(wl->dev, false);
 	cc33xx_unregister_hw(wl);
+	wlcore_disable_interrupts_nosync(wl);
 	cc33xx_turn_off(wl);
 
 out:
@@ -6048,6 +6048,16 @@ static int cc33xx_setup(struct cc33xx *wl)
 	ret = cc33xx_ini_bin_init(wl, wl->dev);
 	if (ret < 0)
 		return ret;
+
+	if (wl->conf.core.max_rx_ampdu_len == 0) {
+		cc33xx_siso40_ht_cap_2ghz.ampdu_factor = IEEE80211_HT_MAX_AMPDU_8K;
+		cc33xx_siso40_ht_cap_5ghz.ampdu_factor = IEEE80211_HT_MAX_AMPDU_8K;
+		cc33xx_siso20_ht_cap.ampdu_factor = IEEE80211_HT_MAX_AMPDU_8K;
+	} else if (wl->conf.core.max_rx_ampdu_len == 1) {
+		cc33xx_siso40_ht_cap_2ghz.ampdu_factor = IEEE80211_HT_MAX_AMPDU_16K;
+		cc33xx_siso40_ht_cap_5ghz.ampdu_factor = IEEE80211_HT_MAX_AMPDU_16K;
+		cc33xx_siso20_ht_cap.ampdu_factor = IEEE80211_HT_MAX_AMPDU_16K;
+	}
 
 	if (ht_mode_param) {
 		if (!strcmp(ht_mode_param, "default")) {
