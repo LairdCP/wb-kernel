@@ -4472,7 +4472,7 @@ static void brcmf_sdio_bus_watchdog(struct brcmf_sdio *bus)
 				if (!bus->dpc_triggered && !bus->dpc_running)
 					brcmf_sdio_bus_sleep(bus, true, false);
 				else
-					brcmf_err("DPC active Skip sleep");
+					brcmf_dbg(INFO, "DPC active Skip sleep");
 
 				sdio_release_host(bus->sdiodev->func1);
 			}
