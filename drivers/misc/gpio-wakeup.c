@@ -24,7 +24,7 @@ struct wkup_priv {
 
 struct gpio_wakeup_priv {
 	int count;
-	struct wkup_priv wkup[0];
+	struct wkup_priv wkup[];
 };
 
 static irqreturn_t gpio_wakeup_isr(int irq, void *dev_id)
