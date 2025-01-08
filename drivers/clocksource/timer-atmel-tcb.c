@@ -285,7 +285,8 @@ static int __init setup_clkevents(struct atmel_tc *tc, int divisor_idx)
 		return ret;
 	}
 
-	clockevents_config_and_register(&clkevt.clkevt, clkevt.rate, 1, BIT(bits) - 1);
+	clockevents_config_and_register(&clkevt.clkevt, clkevt.rate, 1,
+		GENMASK(bits - 1, 0));
 
 	return ret;
 }
